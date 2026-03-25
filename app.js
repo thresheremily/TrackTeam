@@ -389,9 +389,10 @@ const exTotals = (exercises) => {
 };
 const makeStyles = (C) => ({
   app: { fontFamily:"'Rubik','Inter',system-ui,-apple-system,sans-serif", background:C.bg, minHeight:'100vh', color:C.text, letterSpacing:'-0.01em' },
-  container: { maxWidth:900, margin:'0 auto', padding:'12px 10px' },
-  card: { background:C.surface, borderRadius:8, padding:'10px 14px', marginBottom:8, border:`1px solid ${C.border}` },
-  btn: { padding:'6px 14px', borderRadius:6, border:'none', cursor:'pointer', fontWeight:600, fontSize:11, transition:'opacity 0.15s', lineHeight:'18px', textTransform:'uppercase', letterSpacing:'0.04em' },
+  container: { maxWidth:1100, margin:'0 auto', padding:'16px 20px' },
+  containerDesktop: { marginLeft:250, maxWidth:'none', padding:'16px 28px' },
+  card: { background:C.surface, borderRadius:8, padding:'14px 18px', marginBottom:10, border:`1px solid ${C.border}` },
+  btn: { padding:'8px 16px', borderRadius:6, border:'none', cursor:'pointer', fontWeight:600, fontSize:12, transition:'opacity 0.15s', lineHeight:'18px', textTransform:'uppercase', letterSpacing:'0.04em' },
   btnPrimary: { background:C.accent, color:C.white },
   btnSecondary: { background:C.surface2, color:C.textSecondary, border:`1px solid ${C.border}` },
   btnDanger: { background:C.dangerMuted, color:C.danger },
@@ -402,6 +403,11 @@ const makeStyles = (C) => ({
   td: { padding:'8px 12px', borderBottom:`1px solid ${C.border}`, fontSize:13, color:C.text },
   pill: (active) => ({ display:'inline-block', padding:'3px 10px', borderRadius:16, fontSize:11, fontWeight:500, margin:'2px 3px', cursor:'pointer', background:active ? C.accentMuted : C.surface2, color:active ? C.accent : C.textSecondary, border:`1px solid ${active ? C.accent : C.border}`, transition:'all 0.15s' }),
   bigBtn: { display:'block', width:'100%', padding:'16px 20px', borderRadius:8, border:`1px solid ${C.border}`, cursor:'pointer', fontWeight:600, fontSize:14, marginBottom:8, transition:'opacity 0.15s', textAlign:'left', color:C.text, textTransform:'uppercase', letterSpacing:'0.04em' },
+  sidebarFixed: {
+    position:'fixed', top:0, left:0, bottom:0, width:240, background:C.surface,
+    borderRight:`1px solid ${C.border}`, zIndex:1001, padding:'20px 0',
+    overflowY:'auto', transform:'translateX(0)',
+  },
   sidebar: (open) => ({
     position:'fixed', top:0, left:0, bottom:0, width:240, background:C.surface,
     borderRight:`1px solid ${C.border}`, zIndex:1001, padding:'20px 0',
@@ -721,6 +727,12 @@ function App() {
   const [page, setPage] = useState('dashboard');
   const [pageParams, setPageParams] = useState({});
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(typeof window !== 'undefined' && window.innerWidth > 900);
+  useEffect(() => {
+    const onResize = () => setIsDesktop(window.innerWidth > 900);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
   const [, forceUpdate] = useState(0);
   useEffect(() => {
     const link = document.createElement('link');
@@ -840,8 +852,8 @@ function App() {
   const teamSchool = (team||{}).school || 'Hub';
   return (
     <div style={S.app}>
-      <div style={S.sidebarOverlay(sidebarOpen)} onClick={()=>setSidebarOpen(false)} />
-      <div style={S.sidebar(sidebarOpen)}>
+      {!isDesktop && <div style={S.sidebarOverlay(sidebarOpen)} onClick={()=>setSidebarOpen(false)} />}
+      <div style={isDesktop ? S.sidebarFixed : S.sidebar(sidebarOpen)}>
         <div style={{ padding:'0 20px 20px', borderBottom:`1px solid ${C.border}`, marginBottom:8 }}>
           <div style={{display:'flex',alignItems:'center',gap:10}}>
             {(team||{}).logo && <img src={team.logo} style={{width:32,height:32,borderRadius:6,objectFit:'contain'}} />}
@@ -852,20 +864,20 @@ function App() {
           </div>
         </div>
         {menuItems.map(item => (
-          <button key={item.key} style={S.sidebarItem(page===item.key)} onClick={()=>nav(item.key)}>
+          <button key={item.key} style={S.sidebarItem(page===item.key)} onClick={()=>{nav(item.key);if(!isDesktop)setSidebarOpen(false);}}>
             <span style={{fontSize:15,width:20,textAlign:'center',opacity:0.7}}>{item.icon}</span>
             {item.label}
           </button>
         ))}
         <div style={{borderTop:`1px solid ${C.border}`,marginTop:8,paddingTop:8}}>
-          <button style={S.sidebarItem(page==='settings')} onClick={()=>nav('settings')}>
+          <button style={S.sidebarItem(page==='settings')} onClick={()=>{nav('settings');if(!isDesktop)setSidebarOpen(false);}}>
             <span style={{fontSize:15,width:20,textAlign:'center',opacity:0.7}}>⚙️</span>
             Settings
           </button>
         </div>
       </div>
-      <div style={S.container}>
-        <div style={S.topBar}>
+      <div style={isDesktop ? {...S.container,...S.containerDesktop} : S.container}>
+        {!isDesktop && <div style={S.topBar}>
           <div style={{display:'flex',alignItems:'center',gap:12}}>
             <button style={S.hamburger} onClick={()=>setSidebarOpen(true)}>
               <span style={{width:20,height:2,background:C.text,borderRadius:1,display:'block'}} />
@@ -878,7 +890,13 @@ function App() {
             {season && <span style={{fontSize:10,color:C.accent,fontWeight:600,background:C.accentMuted,padding:'2px 8px',borderRadius:10}}>{season.name}</span>}
             {(team||{}).logo && <img src={team.logo} style={{width:24,height:24,borderRadius:4,objectFit:'contain'}} />}
           </div>
-        </div>
+        </div>}
+        {isDesktop && <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
+          <h1 style={{...S.h1,fontSize:20,marginBottom:0}}>{pageLabel}</h1>
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            {season && <span style={{fontSize:11,color:C.accent,fontWeight:600,background:C.accentMuted,padding:'3px 10px',borderRadius:10}}>{season.name}</span>}
+          </div>
+        </div>}
         {(pages[page] || pages.dashboard)()}
       </div>
     </div>
@@ -975,6 +993,39 @@ function Dashboard({ data, save, nav, season, team, events, activeAthletes, feat
               </div>
             )}
             {!taken && activeAthletes.length>0 && <div style={{fontSize:12,color:C.textMuted,marginTop:4}}>No attendance recorded today.</div>}
+          </div>
+        );
+      })()}
+      
+      {(()=>{
+        const followUps = (data.medicalNotes||[]).filter(n=>n.needFollowUp&&!n.followUpResolution);
+        if(followUps.length===0) return null;
+        return (
+          <div style={{...S.card, padding:'12px 14px', borderLeft:`4px solid ${C.accent}`}}>
+            <h2 style={{...S.h2,marginBottom:8,fontSize:14}}>Follow-Ups Needed <span style={{fontSize:12,fontWeight:500,color:C.danger,marginLeft:6}}>{followUps.length}</span></h2>
+            {followUps.sort((a,b)=>(b.entryDate||'').localeCompare(a.entryDate||'')).map(n=>{
+              const ath = data.athletes.find(a=>a.id===n.athleteId);
+              if(!ath) return null;
+              const typeColor = n.type==='Injury'?C.danger:n.type==='Illness'?'#b8860b':C.blue;
+              return (
+                <div key={n.id} style={{padding:'8px 0',borderBottom:`1px solid ${C.borderLight}`,cursor:'pointer'}} onClick={()=>nav('athleteSub',{athleteId:n.athleteId})}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:2}}>
+                        <span style={{fontSize:13,fontWeight:600,color:C.text}}>{athDisplay(ath)}</span>
+                        <span style={{fontSize:10,fontWeight:600,color:typeColor,background:typeColor+'18',padding:'1px 6px',borderRadius:4}}>{n.type}</span>
+                      </div>
+                      <div style={{fontSize:12,color:C.textSecondary}}>{n.details}</div>
+                      {n.followUpName && <div style={{fontSize:11,color:C.accent,marginTop:2}}>Contact: {n.followUpName}{n.followUpContact?` (${n.followUpContact})`:''}</div>}
+                    </div>
+                    <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',flexShrink:0,marginLeft:8,gap:4}}>
+                      <div style={{fontSize:11,color:C.textMuted}}>{n.effectiveDate||n.entryDate}</div>
+                      <button style={{fontSize:10,fontWeight:600,color:C.success,background:C.successMuted||'#e6f4ea',border:'none',borderRadius:4,padding:'3px 8px',cursor:'pointer'}} onClick={e=>{e.stopPropagation();save({...data,medicalNotes:(data.medicalNotes||[]).map(mn=>mn.id===n.id?{...mn,followUpResolution:new Date().toISOString().split('T')[0]}:mn)});}}>Resolve</button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         );
       })()}
@@ -1472,6 +1523,8 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
   const [genderFilter, setGenderFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [showEntryModal, setShowEntryModal] = useState(null);
+  const [dragIdx, setDragIdx] = useState(null);
+  const [dragOverIdx, setDragOverIdx] = useState(null);
   const meet = data.meets.find(m=>m.id===meetId);
   if(!meet) return <div style={S.card}><p>Meet not found</p><button style={S.backLink} onClick={()=>nav('meets')}>{"<- "}Back to Meets</button></div>;
   const meetType = (data.meetTypes||[]).find(mt=>mt.id===meet.meetTypeId);
@@ -1483,17 +1536,33 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
     evt,
     entries: storedEntries[evt.id] || [],
   }));
+  const eventOrder = meet.eventOrder || [];
   const filtered = meetEvents.filter(me => {
     if(genderFilter && me.evt.gender !== genderFilter) return false;
     if(typeFilter && me.evt.eventType !== typeFilter) return false;
     if(filter && !me.evt.name.toLowerCase().includes(filter.toLowerCase())) return false;
     return true;
   }).sort((a,b) => {
+    const idxA = eventOrder.indexOf(a.eventId);
+    const idxB = eventOrder.indexOf(b.eventId);
+    if(idxA >= 0 && idxB >= 0) return idxA - idxB;
+    if(idxA >= 0) return -1;
+    if(idxB >= 0) return 1;
     const dA = TRACK_DISTANCES[a.evt.name]||99999;
     const dB = TRACK_DISTANCES[b.evt.name]||99999;
     if(dA !== dB) return dA - dB;
     return a.evt.name.localeCompare(b.evt.name);
   });
+  const saveEventOrder = (newOrder) => {
+    save({...data, meets:data.meets.map(m=>m.id===meetId?{...m, eventOrder:newOrder}:m)});
+  };
+  const handleDrop = (fromIdx, toIdx) => {
+    if(fromIdx===toIdx) return;
+    const ids = filtered.map(me=>me.eventId);
+    const [moved] = ids.splice(fromIdx, 1);
+    ids.splice(toIdx, 0, moved);
+    saveEventOrder(ids);
+  };
   const saveEntries = (eventId, newEntries) => {
     const updatedMeetEvents = [...(meet.events||[])];
     const idx = updatedMeetEvents.findIndex(me=>me.eventId===eventId);
@@ -1530,14 +1599,16 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
         <select style={S.select} value={typeFilter} onChange={e=>setTypeFilter(e.target.value)}>
           <option value="">All Types</option><option value="Track">Track</option><option value="Field">Field</option>
         </select>
+        {eventOrder.length > 0 && <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'4px 10px'}} onClick={()=>saveEventOrder([])}>Reset Order</button>}
       </div>
-      {filtered.map(me => {
+      {filtered.map((me, meIdx) => {
         const entries = me.entries;
         const hasEntries = entries.length > 0;
         return (
-          <div key={me.eventId} style={{...S.card,padding:'14px 16px',borderLeft:`3px solid ${me.evt.gender==='Boy'?C.blue:me.evt.gender==='Girl'?'#d53f8c':C.accent}`}}>
+          <div key={me.eventId} draggable style={{...S.card,padding:'14px 16px',borderLeft:`3px solid ${me.evt.gender==='Boy'?C.blue:me.evt.gender==='Girl'?'#d53f8c':C.accent}`, opacity:dragIdx===meIdx?0.5:1, border:dragOverIdx===meIdx?`2px dashed ${C.accent}`:`1px solid ${C.border}`}} onDragStart={()=>setDragIdx(meIdx)} onDragOver={e=>{e.preventDefault();setDragOverIdx(meIdx);}} onDragLeave={()=>setDragOverIdx(null)} onDrop={e=>{e.preventDefault();handleDrop(dragIdx,meIdx);setDragIdx(null);setDragOverIdx(null);}} onDragEnd={()=>{setDragIdx(null);setDragOverIdx(null);}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:hasEntries?8:0}}>
               <div style={{display:'flex',alignItems:'center',gap:8}}>
+                <span style={{cursor:'grab',fontSize:16,color:C.textMuted,userSelect:'none',marginRight:4}}>:::</span>
                 <span style={{fontWeight:700,fontSize:15}}>{getEventLabel(me.evt)}</span>
                 <span style={{fontSize:10,color:C.textMuted}}>{me.evt.eventType} - {me.evt.entryType}</span>
               </div>
@@ -1685,7 +1756,9 @@ function AthletesPage({ data, save, nav }) {
   const [genderFilter, setGenderFilter] = useState('');
   const [groupFilter, setGroupFilter] = useState('');
   const [showInactive, setShowInactive] = useState(false);
-  const [sortBy, setSortBy] = useState('gradYear');
+  const [sortCol, setSortCol] = useState('name');
+  const [sortDir, setSortDir] = useState('asc');
+  const toggleSort = (col) => { if(sortCol===col) setSortDir(d=>d==='asc'?'desc':'asc'); else { setSortCol(col); setSortDir('asc'); } };
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ firstName:'', lastName:'', preferredName:'', gradYear:'', gender:'', name:'' });
   const [delId, setDelId] = useState(null);
@@ -1698,10 +1771,18 @@ function AthletesPage({ data, save, nav }) {
     if(groupFilter && !(a.groups||[]).some(g=>g.groupId===groupFilter) && a.trainingGroup !== groupFilter) return false;
     return true;
   }).sort((a,b) => {
-    if(sortBy==='gradYear') return (a.gradYear||'').localeCompare(b.gradYear||'');
-    if(sortBy==='name') return athLast(a).localeCompare(athLast(b));
-    if(sortBy==='group') return (((a.groups||[])[0]||{}).groupId||a.trainingGroup||'z').localeCompare((((b.groups||[])[0]||{}).groupId||b.trainingGroup||'z'));
-    return 0;
+    let av, bv;
+    switch(sortCol) {
+      case 'name': av=athLast(a).toLowerCase(); bv=athLast(b).toLowerCase(); break;
+      case 'gradYear': av=a.gradYear||''; bv=b.gradYear||''; break;
+      case 'gender': av=a.gender||''; bv=b.gender||''; break;
+      case 'group': av=(((a.groups||[])[0]||{}).groupId||a.trainingGroup||'z'); bv=(((b.groups||[])[0]||{}).groupId||b.trainingGroup||'z'); break;
+      case 'status': av=a.active===false?1:0; bv=b.active===false?1:0; break;
+      default: av=''; bv='';
+    }
+    if(av<bv) return sortDir==='asc'?-1:1;
+    if(av>bv) return sortDir==='asc'?1:-1;
+    return athLast(a).localeCompare(athLast(b));
   });
   const addAthlete = () => {
     const name = form.name || `${form.firstName} ${form.lastName}`.trim();
@@ -1732,9 +1813,6 @@ function AthletesPage({ data, save, nav }) {
           <option value="">All Groups</option>
           {groups.map(g=><option key={g.id} value={g.id}>{g.name}</option>)}
         </select>
-        <select style={S.select} value={sortBy} onChange={e=>setSortBy(e.target.value)}>
-          <option value="gradYear">Sort: Grad Year</option><option value="name">Sort: Name</option><option value="group">Sort: Group</option>
-        </select>
         <label style={{display:'flex',alignItems:'center',gap:4,fontSize:12,color:C.textSecondary,cursor:'pointer',marginLeft:'auto'}}>
           <input type="checkbox" checked={showInactive} onChange={e=>setShowInactive(e.target.checked)} /> Show Inactive
         </label>
@@ -1742,7 +1820,7 @@ function AthletesPage({ data, save, nav }) {
       <div style={S.card}>
         <table style={{width:'100%',borderCollapse:'collapse'}}>
           <thead><tr>
-            <th style={S.th}>Name</th><th style={S.th}>Year</th><th style={S.th}>Gender</th><th style={S.th}>Group(s)</th><th style={S.th}>Status</th><th style={S.th}></th>
+            <th style={{...S.th,cursor:'pointer',userSelect:'none'}} onClick={()=>toggleSort('name')}>Name {sortCol==='name'?(sortDir==='asc'?'\u25B2':'\u25BC'):''}</th><th style={{...S.th,cursor:'pointer',userSelect:'none'}} onClick={()=>toggleSort('gradYear')}>Year {sortCol==='gradYear'?(sortDir==='asc'?'\u25B2':'\u25BC'):''}</th><th style={{...S.th,cursor:'pointer',userSelect:'none'}} onClick={()=>toggleSort('gender')}>Gender {sortCol==='gender'?(sortDir==='asc'?'\u25B2':'\u25BC'):''}</th><th style={{...S.th,cursor:'pointer',userSelect:'none'}} onClick={()=>toggleSort('group')}>Group(s) {sortCol==='group'?(sortDir==='asc'?'\u25B2':'\u25BC'):''}</th><th style={{...S.th,cursor:'pointer',userSelect:'none'}} onClick={()=>toggleSort('status')}>Status {sortCol==='status'?(sortDir==='asc'?'\u25B2':'\u25BC'):''}</th><th style={S.th}></th>
           </tr></thead>
           <tbody>
             {athletes.map(a => {

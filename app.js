@@ -757,9 +757,12 @@ function App() {
   const events = data.events || [];
   const getEventById = (id) => events.find(e => e.id === id);
   const getAthletePR = (athleteId, eventId) => {
-    const results = data.results.filter(r => r.athleteId === athleteId && r.eventId === eventId);
-    if(!results.length) return null;
     const evt = getEventById(eventId);
+    const isRelayEvt = isRelay(evt);
+    const results = isRelayEvt
+      ? data.results.filter(r => r.eventId === eventId && r.isRelay && (!athleteId || (r.relayAthletes||[]).includes(athleteId)))
+      : data.results.filter(r => r.athleteId === athleteId && r.eventId === eventId);
+    if(!results.length) return null;
     if(isFieldEvent(evt)) {
       return results.reduce((best,r) => (!best || fieldToInches(r.ft||0,r.inch||0,r.qtr||0) > fieldToInches(best.ft||0,best.inch||0,best.qtr||0)) ? r : best, null);
     }
@@ -973,7 +976,7 @@ function Dashboard({ data, save, nav, season, team, events, activeAthletes, feat
               <h2 style={{...S.h2,margin:0,fontSize:14}}>Attendance</h2>
               <div style={{display:'flex',gap:4}}>
                 <button style={{...S.btn,fontSize:10,padding:'4px 10px',borderRadius:6,...(taken?{background:C.successMuted,color:C.success,border:`1px solid ${C.success}`}:S.btnPrimary)}} onClick={()=>nav('dailyAttendance')}>
-                  {taken?'[ok] Taken':'Take Attendance'}
+                  {taken?'✓ Taken':'Take Attendance'}
                 </button>
                 <button style={{...S.btn,...S.btnSecondary,fontSize:10,padding:'4px 8px'}} onClick={()=>nav('attendance')}>View Week</button>
               </div>
@@ -1026,6 +1029,47 @@ function Dashboard({ data, save, nav, season, team, events, activeAthletes, feat
                 </div>
               );
             })}
+          </div>
+        );
+      })()}
+      
+      {(()=>{
+        const qualEvents = events.filter(e=>(e.qualifyingStandards||[]).length>0);
+        if(!qualEvents.length) return null;
+        let totalQual=0, totalClose=0, totalEvents=0;
+        const rows = [];
+        qualEvents.forEach(evt=>{
+          const stds = evt.qualifyingStandards||[];
+          const matchingAthletes = activeAthletes.filter(a=>evt.gender==='Mixed'||(a.gender==='M'&&evt.gender==='Boy')||(a.gender==='F'&&evt.gender==='Girl'));
+          matchingAthletes.forEach(a=>{
+            const pr = getAthletePR(a.id, evt.id);
+            if(!pr) return;
+            totalEvents++;
+            stds.forEach(std=>{
+              let met=false, pct=0;
+              if(isFieldEvent(evt)){
+                const prIn=fieldToInches(pr.ft||0,pr.inch||0,pr.qtr||0);
+                const stdIn=fieldToInches(std.ft||0,std.inch||0,std.qtr||0);
+                if(stdIn>0){met=prIn>=stdIn;pct=Math.round(prIn/stdIn*100);}
+              } else {
+                const prMs=pr.timeMs||0;
+                const stdMs=std.timeMs||0;
+                if(stdMs>0){met=prMs<=stdMs;pct=Math.round(stdMs/(prMs||1)*100);}
+              }
+              if(met) totalQual++;
+              else if(pct>=90) totalClose++;
+            });
+          });
+        });
+        if(!totalEvents) return null;
+        return (
+          <div style={{...S.card,padding:'12px 14px'}}>
+            <h2 style={{...S.h2,marginBottom:8,fontSize:14}}>Qualifying Progress</h2>
+            <div style={{display:'flex',gap:16,flexWrap:'wrap'}}>
+              <div style={{textAlign:'center'}}><div style={{fontSize:20,fontWeight:700,color:C.success}}>{totalQual}</div><div style={{fontSize:10,color:C.textMuted,textTransform:'uppercase'}}>Qualified</div></div>
+              <div style={{textAlign:'center'}}><div style={{fontSize:20,fontWeight:700,color:'#b8860b'}}>{totalClose}</div><div style={{fontSize:10,color:C.textMuted,textTransform:'uppercase'}}>Close (90%+)</div></div>
+              <div style={{textAlign:'center'}}><div style={{fontSize:20,fontWeight:700,color:C.textSecondary}}>{totalEvents}</div><div style={{fontSize:10,color:C.textMuted,textTransform:'uppercase'}}>With PRs</div></div>
+            </div>
           </div>
         );
       })()}
@@ -1269,7 +1313,6 @@ function AttendancePage({ data, save, nav, season, activeAthletes }) {
   };
   return (
     <div>
-      <h1 style={S.h1}>Attendance</h1>
       <p style={S.h3}>{season ? `${season.name} season` : 'All time'}</p>
       
       <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginBottom:16}}>
@@ -1431,12 +1474,9 @@ function MeetsPage({ data, save, nav, events }) {
   );
   return (
     <div>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-        <h1 style={S.h1}>Meets</h1>
-        <div style={{display:'flex',gap:6}}>
+      <div style={{display:'flex',justifyContent:'flex-end',gap:6,marginBottom:12}}>
           <button style={{...S.btn,...S.btnSecondary}} onClick={()=>setShowImport(true)}>Import</button>
           <button style={{...S.btn,...S.btnPrimary}} onClick={()=>{setEditMeet(null);setOpenCount(c=>c+1);setShowAdd(true);}}>+ New Meet</button>
-        </div>
       </div>
       
       <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
@@ -1478,7 +1518,7 @@ function MeetsPage({ data, save, nav, events }) {
                   <td style={S.td}>{m.city||'-'}</td>
                   <td style={S.td}>{m.state||'-'}</td>
                   <td style={S.td}><span style={{fontSize:11,fontWeight:600,color:m.trackType==='Indoor'?C.blue:C.accent}}>{m.trackType}</span></td>
-                  <td style={S.td}>{mt?<span style={{fontSize:11,fontWeight:600,color:mt.qualifying?C.success:C.textSecondary}}>{mt.name}{mt.qualifying?' [ok]':''}</span>:'-'}</td>
+                  <td style={S.td}>{mt?<span style={{fontSize:11,fontWeight:600,color:mt.qualifying?C.success:C.textSecondary}}>{mt.name}{mt.qualifying?' ✓':''}</span>:'-'}</td>
                   <td style={S.td}>
                     <div style={{display:'flex',gap:4}}>
                       <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'4px 10px'}} onClick={e=>{e.stopPropagation();startEdit(m);}}>Edit</button>
@@ -1797,12 +1837,9 @@ function AthletesPage({ data, save, nav }) {
   };
   return (
     <div>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-        <h1 style={S.h1}>Athletes</h1>
-        <div style={{display:'flex',gap:6}}>
+      <div style={{display:'flex',justifyContent:'flex-end',gap:6,marginBottom:12}}>
           <button style={{...S.btn,...S.btnSecondary}} onClick={()=>setShowImport(true)}>Import CSV</button>
           <button style={{...S.btn,...S.btnPrimary}} onClick={()=>setShowAdd(true)}>+ Add Athlete</button>
-        </div>
       </div>
       <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
         <input style={{...S.input,maxWidth:200}} placeholder="Search by name..." value={search} onChange={e=>setSearch(e.target.value)} />
@@ -2018,6 +2055,33 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
                   {mostRecent && <span style={{color:C.textSecondary}}>Last: {isFieldEvent(evt) ? fieldToStr(mostRecent.ft,mostRecent.inch,mostRecent.qtr) : formatTime(mostRecent.timeMs)}</span>}
                 </div>
               </div>
+              {(()=>{
+                const stds = evt.qualifyingStandards||[];
+                if(!stds.length||!pr) return null;
+                return (<div style={{marginTop:6,display:'flex',flexDirection:'column',gap:4}}>
+                  {stds.map(std=>{
+                    let met=false, diff=0, diffStr='', pct=0;
+                    if(isFieldEvent(evt)){
+                      const prIn=fieldToInches(pr.ft||0,pr.inch||0,pr.qtr||0);
+                      const stdIn=fieldToInches(std.ft||0,std.inch||0,std.qtr||0);
+                      if(stdIn>0){met=prIn>=stdIn;diff=prIn-stdIn;pct=Math.min(100,Math.round(prIn/stdIn*100));diffStr=met?'Qualified':(Math.abs(diff)/12).toFixed(1)+'ft away';}
+                    } else {
+                      const prMs=pr.timeMs||0;
+                      const stdMs=std.timeMs||0;
+                      if(stdMs>0){met=prMs<=stdMs;diff=stdMs-prMs;pct=Math.min(100,Math.round(stdMs/(prMs||1)*100));diffStr=met?'Qualified':formatTime(prMs-stdMs)+' away';}
+                    }
+                    if(!pct) return null;
+                    const barColor=met?C.success:pct>=90?'#b8860b':C.accent;
+                    return (<div key={std.id} style={{display:'flex',alignItems:'center',gap:8,fontSize:11}}>
+                      <span style={{width:70,color:C.textMuted,flexShrink:0}}>{std.name}</span>
+                      <div style={{flex:1,height:6,background:C.surface2,borderRadius:3,overflow:'hidden'}}>
+                        <div style={{width:pct+'%',height:'100%',background:barColor,borderRadius:3,transition:'width 0.3s'}} />
+                      </div>
+                      <span style={{width:80,textAlign:'right',flexShrink:0,fontWeight:600,color:met?C.success:pct>=90?'#b8860b':C.textMuted}}>{diffStr}</span>
+                    </div>);
+                  })}
+                </div>);
+              })()}
             </div>
           );
         })}
@@ -2476,7 +2540,7 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
   const tabStyle = (active) => ({ padding:'8px 16px', fontSize:13, fontWeight:active?600:400, color:active?C.accent:C.textSecondary, borderBottom:active?`2px solid ${C.accent}`:'2px solid transparent', background:'none', border:'none', cursor:'pointer' });
   return (
     <div>
-      <h1 style={S.h1}>Practice Plans</h1>
+      
       <div style={{display:'flex',gap:0,borderBottom:`1px solid ${C.border}`,marginBottom:16}}>
         {[['weekly','Weekly Plans'],['library','Library'],['groups','Groups'],['categories','Categories']].map(([k,l])=>(
           <button key={k} style={tabStyle(tab===k)} onClick={()=>setTab(k)}>{l}</button>
@@ -2573,7 +2637,7 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
               );})()}
               <div style={{display:'flex',gap:10,marginTop:12,marginBottom:16}}>
                 <button style={{...S.btn,fontSize:13,padding:'10px 20px',borderRadius:8,...(rest?{background:C.accent,color:C.white}:S.btnSecondary)}} onClick={()=>setRestDay(editingDay.weekId,editingDay.groupId,editingDay.level,editingDay.day,!rest)}>
-                  {rest?'[ok] Rest Day':'Rest Day'}
+                  {rest?'✓ Rest Day':'Rest Day'}
                 </button>
                 {items.length>0&&<button style={{...S.btn,...S.btnDanger,fontSize:13,padding:'10px 20px',borderRadius:8}} onClick={()=>clearDay(editingDay.weekId,editingDay.groupId,editingDay.level,editingDay.day)}>Clear Day</button>}
               </div>
@@ -3099,8 +3163,7 @@ function EventsPage({ data, save, nav }) {
   );
   return (
     <div>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-        <h1 style={S.h1}>Events</h1>
+      <div style={{display:'flex',justifyContent:'flex-end',gap:6,marginBottom:12}}>
         <button style={{...S.btn,...S.btnPrimary}} onClick={()=>{setForm({name:'',eventType:'Track',entryType:'Individual',gender:'Boy',trackType:'Both',measurableType:'Time'});setEditId(null);setShowAdd(true);}}>+ Add Event</button>
       </div>
       <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
@@ -3238,8 +3301,7 @@ function ToolsPage({ data, save, nav, events, addResult, getAthletePR, checkReco
   ];
   return (
     <div>
-      <h1 style={S.h1}>Tools</h1>
-      <p style={S.h3}>Timing and recording tools</p>
+      
       {tools.map(t => (
         <button key={t.key} style={{...S.bigBtn, borderLeft:`4px solid ${t.color}`, background:C.surface, marginBottom:8}} onClick={()=>nav(t.key)}>
           <div style={{display:'flex',alignItems:'center',gap:12}}>
@@ -3373,11 +3435,19 @@ function MultiSplitTimer({ data, save, nav, events, addResult, getAthletePR, che
   const handleReset = () => { clearInterval(timerRef.current); setRunning(false); setElapsed(0); setFinished(false); setSaved(false); setCollapsed(false); setAthletes(a=>a.map(at=>({...at,laps:[]}))); };
   const handleSave = () => {
     const meet=data.meets.find(m=>m.id===meetId);
+    const raceDate=(meet||{}).startDate||(meet||{}).date||new Date().toISOString().split('T')[0];
+    const relayAthleteIds=[];
     athletes.forEach(at=>{
       if(!at.athleteId||at.laps.length===0) return;
       const finalTime=at.laps[at.laps.length-1].cumulative;
-      addResult({id:uid(),athleteId:at.athleteId,eventId,meetId,date:(meet||{}).startDate||(meet||{}).date||new Date().toISOString().split('T')[0],timeMs:finalTime,splits:at.laps});
+      addResult({id:uid(),athleteId:at.athleteId,eventId,meetId,date:raceDate,timeMs:finalTime,splits:at.laps});
+      relayAthleteIds.push(at.athleteId);
     });
+    if(isRelayEvt&&relayAthleteIds.length>0){
+      const allLaps=athletes.filter(a=>a.athleteId&&a.laps.length>0).flatMap(a=>a.laps);
+      const totalTime=Math.max(...allLaps.map(l=>l.cumulative));
+      addResult({id:uid(),eventId,meetId,date:raceDate,timeMs:totalTime,isRelay:true,relayAthletes:relayAthleteIds,splits:allLaps});
+    }
     setSaved(true);
   };
   const activeAthletes = data.athletes.filter(a=>a.active!==false);
@@ -3595,7 +3665,7 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
   const events = data.events||[];
   return (
     <div>
-      <h1 style={S.h1}>Settings</h1>
+      
       <div style={{display:'flex',gap:4,marginBottom:16,flexWrap:'wrap'}}>
         {[['seasons','Seasons'],['branding','Branding'],['meetTypes','Meet Types'],['qualifying','Qualifying'],['records','Records'],['team','Team'],['data','Data']].map(([k,l])=>(
           <button key={k} style={S.pill(tab===k)} onClick={()=>setTab(k)}>{l}</button>

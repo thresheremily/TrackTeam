@@ -62,11 +62,11 @@ const EXERCISE_COLUMNS = [
   { key:'effort', label:'Effort', width:60, type:'text', placeholder:'80%' },
 ];
 const ATTENDANCE_STATUSES = [
-  { key:'present', label:'Present', color:'#25763b', icon:'[ok]' },
-  { key:'absent', label:'Absent', color:'#c53030', icon:'[x]' },
-  { key:'excused', label:'Excused', color:'#c96a1f', icon:'o' },
-  { key:'late', label:'Late', color:'#2b6cb0', icon:'>' },
-  { key:'signedout', label:'Signed Out', color:'#6b46c1', icon:'>' },
+  { key:'present', label:'Present', color:'#25763b', icon:'✓' },
+  { key:'absent', label:'Absent', color:'#c53030', icon:'✗' },
+  { key:'excused', label:'Excused', color:'#c96a1f', icon:'○' },
+  { key:'late', label:'Late', color:'#2b6cb0', icon:'⌚' },
+  { key:'signedout', label:'Signed Out', color:'#6b46c1', icon:'→' },
 ];
 const uid = () => Math.random().toString(36).substr(2,9);
 const padDate = (d) => { if(!d) return ''; const s=d+''; if(s.includes('/')) { const p=s.split('/'); if(p.length===3) return `${p[2]}-${p[0].padStart(2,'0')}-${p[1].padStart(2,'0')}`; } const p=s.split('-'); if(p.length===3&&p[0].length===4) return `${p[0]}-${p[1].padStart(2,'0')}-${p[2].padStart(2,'0')}`; return s; };
@@ -448,7 +448,7 @@ const Modal = ({ open, onClose, children, width }) => {
     <div style={{ position:'fixed', inset:0, zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center' }}>
       <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.3)' }} onClick={onClose} />
       <div style={{ position:'relative', background:C.surface, borderRadius:10, padding:24, width:width||520, maxWidth:'90vw', maxHeight:'85vh', overflowY:'auto', border:`1px solid ${C.border}`, boxShadow:'0 8px 32px rgba(0,0,0,0.12)' }} onClick={e=>e.stopPropagation()}>
-        <button onClick={onClose} style={{ position:'absolute', top:12, right:12, background:'none', border:'none', color:C.textMuted, cursor:'pointer', fontSize:18 }}>x</button>
+        <button onClick={onClose} style={{ position:'absolute', top:12, right:12, background:'none', border:'none', color:C.textMuted, cursor:'pointer', fontSize:18 }}>✕</button>
         {children}
       </div>
     </div>
@@ -499,7 +499,7 @@ const RecordBadge = ({ status, small }) => {
   if(!c) return null;
   return <span style={{ background:c.bg, color:c.color, padding:small?'1px 5px':'2px 8px', borderRadius:4, fontSize:small?9:11, fontWeight:600, letterSpacing:'0.03em' }}>{c.text}</span>;
 };
-const MEDALS = { 1:{emoji:'1st',color:'#b8860b'}, 2:{emoji:'2nd',color:'#8a8a8a'}, 3:{emoji:'3rd',color:'#cd7f32'} };
+const MEDALS = { 1:{emoji:'🥇',color:'#b8860b'}, 2:{emoji:'🥈',color:'#8a8a8a'}, 3:{emoji:'🥉',color:'#cd7f32'} };
 const MedalBadge = ({ place, small }) => {
   if(!place || !MEDALS[place]) return null;
   const medal = MEDALS[place];
@@ -521,7 +521,7 @@ const QualifyingBadge = ({ status, small }) => {
 };
 const SavedIndicator = ({ saved }) => {
   if(!saved) return null;
-  return <span style={{ color:C.success, fontSize:13, fontWeight:500 }}>[ok] Saved</span>;
+  return <span style={{ color:C.success, fontSize:13, fontWeight:500 }}>✓ Saved</span>;
 };
 function TrendChart({ points, width=320, height=160, color=C.accent, label, invertY=true }) {
   if(!points || points.length < 2) return null;
@@ -613,7 +613,7 @@ function AuthScreen({ authHook }) {
     try {
       if(mode==='signup') await signUp(email,password,name);
       else await signIn(email,password);
-    } catch(e) { setError((e.message||{}).replace('Firebase: ','').replace(/\(auth\/.*\)/,'')||'Something went wrong'); }
+    } catch(e) { setError((e.message||'').replace('Firebase: ','').replace(/\(auth\/.*\)/,'')||'Something went wrong'); }
     setBusy(false);
   };
   return (
@@ -789,10 +789,10 @@ function App() {
       if(isFieldEvent(evt)) {
         if(valueTotalInches == null) continue;
         const stdInches = fieldToInches(std.ft||0, std.inch||0, std.qtr||0);
-        if(stdInches && valueTotalInches >= stdInches) return { status:(std.name||{}).toLowerCase().includes('auto') ? 'automatic' : 'provisional', standard:std };
+        if(stdInches && valueTotalInches >= stdInches) return { status:(std.name||'').toLowerCase().includes('auto') ? 'automatic' : 'provisional', standard:std };
       } else {
         if(valueMs == null) continue;
-        if(std.timeMs && valueMs <= std.timeMs) return { status:(std.name||{}).toLowerCase().includes('auto') ? 'automatic' : 'provisional', standard:std };
+        if(std.timeMs && valueMs <= std.timeMs) return { status:(std.name||'').toLowerCase().includes('auto') ? 'automatic' : 'provisional', standard:std };
       }
     }
     return { status:null, standard:stds[0] };
@@ -827,13 +827,13 @@ function App() {
     settings: () => <SettingsPage data={data} save={save} team={team} updateTeam={teamHook.updateTeam} user={user} signOut={authHook.signOut} nav={nav} />,
   };
   const menuItems = [
-    { key:'dashboard', label:'Dashboard', icon:'#' },
-    { key:'attendance', label:'Attendance', icon:'=' },
-    { key:'practicePlans', label:'Practice Plans', icon:'=' },
-    { key:'meets', label:'Meets', icon:'<>' },
-    { key:'athletes', label:'Athletes', icon:'@' },
-    { key:'eventsPage', label:'Events', icon:'*' },
-    { key:'tools', label:'Tools', icon:'>' },
+    { key:'dashboard', label:'Dashboard', icon:'🏠' },
+    { key:'attendance', label:'Attendance', icon:'📋' },
+    { key:'practicePlans', label:'Practice Plans', icon:'📅' },
+    { key:'meets', label:'Meets', icon:'🏆' },
+    { key:'athletes', label:'Athletes', icon:'🏃' },
+    { key:'eventsPage', label:'Events', icon:'🎯' },
+    { key:'tools', label:'Tools', icon:'⏱️' },
   ];
   const pageLabel = (menuItems.find(m=>m.key===page)||{}).label || (page==='settings'?'Settings':'TrackTeam');
   const teamDisplayName = (team||{}).name || 'TrackTeam';
@@ -859,7 +859,7 @@ function App() {
         ))}
         <div style={{borderTop:`1px solid ${C.border}`,marginTop:8,paddingTop:8}}>
           <button style={S.sidebarItem(page==='settings')} onClick={()=>nav('settings')}>
-            <span style={{fontSize:15,width:20,textAlign:'center',opacity:0.7}}>*</span>
+            <span style={{fontSize:15,width:20,textAlign:'center',opacity:0.7}}>⚙️</span>
             Settings
           </button>
         </div>
@@ -1431,7 +1431,7 @@ function MeetsPage({ data, save, nav, events }) {
                   <td style={S.td}>
                     <div style={{display:'flex',gap:4}}>
                       <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'4px 10px'}} onClick={e=>{e.stopPropagation();startEdit(m);}}>Edit</button>
-                      <button style={{...S.btn,...S.btnDanger,fontSize:11,padding:'4px 10px'}} onClick={e=>{e.stopPropagation();setDelId(m.id);}}>x</button>
+                      <button style={{...S.btn,...S.btnDanger,fontSize:11,padding:'4px 10px'}} onClick={e=>{e.stopPropagation();setDelId(m.id);}}>✕</button>
                     </div>
                   </td>
                 </tr>
@@ -1560,7 +1560,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                             <td style={S.td}>{ai===0 && <span style={{fontSize:10,color:C.accent,fontWeight:700,marginRight:6}}>Relay #{ei+1}</span>}{ath?athDisplay(ath):'-'}</td>
                             <td style={S.td}>{pr ? formatTime(pr.timeMs) : '-'}</td>
                             <td style={S.td}>{a.goalMs ? formatTime(a.goalMs) : '-'}</td>
-                            <td style={S.td}>{ai===0 && <button style={{...S.btn,...S.btnDanger,fontSize:11,padding:'3px 8px'}} onClick={()=>saveEntries(me.eventId,entries.filter((_,i)=>i!==ei))}>x</button>}</td>
+                            <td style={S.td}>{ai===0 && <button style={{...S.btn,...S.btnDanger,fontSize:11,padding:'3px 8px'}} onClick={()=>saveEntries(me.eventId,entries.filter((_,i)=>i!==ei))}>✕</button>}</td>
                           </tr>
                         );
                       });
@@ -1572,7 +1572,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                         <td style={{...S.td,fontWeight:500}}>{ath?athDisplay(ath):'-'}</td>
                         <td style={S.td}>{pr ? (isFieldEvent(me.evt) ? fieldToStr(pr.ft,pr.inch,pr.qtr) : formatTime(pr.timeMs)) : '-'}</td>
                         <td style={S.td}>{en.goalMs ? formatTime(en.goalMs) : '-'}</td>
-                        <td style={S.td}><button style={{...S.btn,...S.btnDanger,fontSize:11,padding:'3px 8px'}} onClick={()=>saveEntries(me.eventId,entries.filter((_,i)=>i!==ei))}>x</button></td>
+                        <td style={S.td}><button style={{...S.btn,...S.btnDanger,fontSize:11,padding:'3px 8px'}} onClick={()=>saveEntries(me.eventId,entries.filter((_,i)=>i!==ei))}>✕</button></td>
                       </tr>
                     );
                   })}
@@ -1644,7 +1644,7 @@ function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, ge
           {row.athleteId && pr && <div style={{fontSize:11,color:C.textMuted,marginTop:2}}>PR: {isFieldEvent(evt)?fieldToStr(pr.ft,pr.inch,pr.qtr):formatTime(pr.timeMs)}</div>}
         </div>
         {isTrackEvent(evt) && <TimeDropdown min={row.goalMin} sec={row.goalSec} onMinChange={v=>{const c=[...rows];c[index]={...c[index],goalMin:v};setRows(c);}} onSecChange={v=>{const c=[...rows];c[index]={...c[index],goalSec:v};setRows(c);}} compact />}
-        {rows.length>1 && <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:16,padding:'8px 4px'}} onClick={()=>{const c=[...rows];c.splice(index,1);setRows(c);}}>x</button>}
+        {rows.length>1 && <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:16,padding:'8px 4px'}} onClick={()=>{const c=[...rows];c.splice(index,1);setRows(c);}}>✕</button>}
       </div>
     );
   };
@@ -1754,7 +1754,7 @@ function AthletesPage({ data, save, nav }) {
                   <td style={S.td}>{a.gender==='M'?'B':a.gender==='F'?'G':'-'}</td>
                   <td style={{...S.td,fontSize:12}}>{athleteGroups}</td>
                   <td style={S.td}><span style={{fontSize:11,fontWeight:600,color:a.active===false?C.danger:C.success}}>{a.active===false?'Inactive':'Active'}</span></td>
-                  <td style={S.td}><button style={{background:'none',border:'none',color:C.danger,cursor:'pointer'}} onClick={e=>{e.stopPropagation();setDelId(a.id);}}>x</button></td>
+                  <td style={S.td}><button style={{background:'none',border:'none',color:C.danger,cursor:'pointer'}} onClick={e=>{e.stopPropagation();setDelId(a.id);}}>✕</button></td>
                 </tr>
               );
             })}
@@ -1980,7 +1980,7 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
                 <select style={S.select} value={ag.level||''} onChange={e=>{const c=[...(editForm.groups||[])];c[i]={...c[i],level:e.target.value};setEditForm({...editForm,groups:c});}}>
                   {((groups.find(g=>g.id===ag.groupId)||{}).levels||['Level 1']).map(l=><option key={l} value={l}>{l}</option>)}
                 </select>
-                <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer'}} onClick={()=>{const c=[...(editForm.groups||[])];c.splice(i,1);setEditForm({...editForm,groups:c});}}>x</button>
+                <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer'}} onClick={()=>{const c=[...(editForm.groups||[])];c.splice(i,1);setEditForm({...editForm,groups:c});}}>✕</button>
               </div>
             ))}
             <button style={{...S.btn,...S.btnSecondary,fontSize:11,marginTop:6}} onClick={()=>setEditForm({...editForm,groups:[...(editForm.groups||[]),{groupId:'',level:'Level 1'}]})}>+ Add Group</button>
@@ -2219,7 +2219,7 @@ function ExerciseTable({ exercises, onChange, readOnly, library }) {
               ))}
               {!readOnly && <td style={{...S.td,padding:'3px 4px',whiteSpace:'nowrap'}}>
                 <button title="Duplicate" style={{background:'none',border:'none',color:C.textSecondary,cursor:'pointer',fontSize:14,padding:4}} onClick={()=>{const c=[...exercises];c.splice(i+1,0,{...row});onChange(c);}}>++</button>
-                <button title="Remove" style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:14,padding:4}} onClick={()=>{const c=[...exercises];c.splice(i,1);onChange(c);}}>x</button>
+                <button title="Remove" style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:14,padding:4}} onClick={()=>{const c=[...exercises];c.splice(i,1);onChange(c);}}>✕</button>
               </td>}
             </tr>
           ))}
@@ -2663,14 +2663,14 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
                     </div>
                     <div style={{marginBottom:12}}>
                       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',marginBottom:4}} onClick={()=>setAddItemForm({...addItemForm,_exOpen:!addItemForm._exOpen})}>
-                        <label style={{fontSize:12,color:C.textSecondary,cursor:'pointer'}}>Exercises <span style={{fontWeight:400,fontSize:11}}>({(addItemForm.newExercises||[]).filter(e=>(e.exercise||{}).trim()).length} added)</span></label>
+                        <label style={{fontSize:12,color:C.textSecondary,cursor:'pointer'}}>Exercises <span style={{fontWeight:400,fontSize:11}}>({(addItemForm.newExercises||[]).filter(e=>(e.exercise||'').trim()).length} added)</span></label>
                         <span style={{fontSize:11,color:C.accent,fontWeight:600}}>{addItemForm._exOpen?'^ Hide':'v Show'}</span>
                       </div>
                       {addItemForm._exOpen&&<ExerciseTable exercises={addItemForm.newExercises||[emptyRow()]} onChange={exs=>setAddItemForm({...addItemForm,newExercises:exs})} library={library} />}
                     </div>
                     <div style={{display:'flex',gap:8}}>
                       <button style={{...S.btn,...S.btnPrimary,fontSize:13,padding:'10px 20px',borderRadius:8}} onClick={()=>{
-                        if(!(addItemForm.newName||{}).trim()) return;
+                        if(!(addItemForm.newName||'').trim()) return;
                         const cat=addItemForm.newCat||addItemForm.category||defaultCat;
                         const desc=addItemForm.newDesc||'';
                         const exercises=(addItemForm.newExercises||[]).filter(e=>e.exercise.trim());
@@ -2785,7 +2785,7 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
                     <div style={{display:'flex',gap:2,alignItems:'center',flexShrink:0,marginLeft:8}}>
                       <button style={{background:'none',border:'none',cursor:'pointer',fontSize:22,color:l.isDefault?C.accent:C.border,padding:'4px 8px'}} onClick={()=>save({...data,workoutLibrary:(data.workoutLibrary||[]).map(li=>li.id===l.id?{...li,isDefault:!li.isDefault}:li)})}>{l.isDefault?'*':'o'}</button>
                       <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'6px 12px'}} onClick={()=>startEditLib(l)}>Edit</button>
-                      <button style={{...S.btn,...S.btnDanger,fontSize:12,padding:'6px 12px'}} onClick={()=>deleteLib(l.id)}>x</button>
+                      <button style={{...S.btn,...S.btnDanger,fontSize:12,padding:'6px 12px'}} onClick={()=>deleteLib(l.id)}>✕</button>
                     </div>
                   </div>
                 </div>))}
@@ -2839,7 +2839,7 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
             </div>
             <div>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',marginBottom:4}} onClick={()=>setLibForm({...libForm,_exOpen:!libForm._exOpen})}>
-                <label style={{fontSize:12,color:C.textSecondary,cursor:'pointer'}}>Exercises <span style={{fontWeight:400,fontSize:11}}>({(libForm.exercises||[]).filter(e=>(e.exercise||{}).trim()).length} added)</span></label>
+                <label style={{fontSize:12,color:C.textSecondary,cursor:'pointer'}}>Exercises <span style={{fontWeight:400,fontSize:11}}>({(libForm.exercises||[]).filter(e=>(e.exercise||'').trim()).length} added)</span></label>
                 <span style={{fontSize:11,color:C.accent,fontWeight:600}}>{libForm._exOpen?'^ Hide':'v Show'}</span>
               </div>
               {libForm._exOpen&&<ExerciseTable exercises={libForm.exercises||[emptyRow()]} onChange={exs=>setLibForm({...libForm,exercises:exs})} library={library} />}
@@ -2875,7 +2875,7 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
           return (<div key={group.id} style={{...S.card,marginBottom:8}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
               <div><div style={{fontWeight:600,fontSize:14}}>{group.name}</div><div style={{fontSize:12,color:C.textSecondary,marginTop:2}}>{group.levels.length>1?`${group.levels.join(' - ')} - `:''}{ac} athlete{ac!==1?'s':''}</div></div>
-              <div style={{display:'flex',gap:6}}><button style={{...S.btn,...S.btnSecondary,padding:'6px 12px',fontSize:12}} onClick={()=>startEditGroup(group)}>Edit</button><button style={{...S.btn,...S.btnDanger,padding:'6px 12px',fontSize:12}} onClick={()=>deleteGroup(group.id)}>x</button></div>
+              <div style={{display:'flex',gap:6}}><button style={{...S.btn,...S.btnSecondary,padding:'6px 12px',fontSize:12}} onClick={()=>startEditGroup(group)}>Edit</button><button style={{...S.btn,...S.btnDanger,padding:'6px 12px',fontSize:12}} onClick={()=>deleteGroup(group.id)}>✕</button></div>
             </div>
           </div>);
         })}
@@ -2887,7 +2887,7 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
               <label style={{fontSize:12,color:C.textSecondary}}>Levels</label>
               {groupForm.levels.map((lvl,i)=>(<div key={i} style={{display:'flex',gap:6,alignItems:'center',marginTop:4}}>
                 <input style={{...S.input,flex:1}} value={lvl} onChange={e=>{const nl=[...groupForm.levels];nl[i]=e.target.value;setGroupForm({...groupForm,levels:nl});}} />
-                {groupForm.levels.length>1&&<button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:16}} onClick={()=>setGroupForm(f=>({...f,levels:f.levels.filter((_,j)=>j!==i)}))}>x</button>}
+                {groupForm.levels.length>1&&<button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:16}} onClick={()=>setGroupForm(f=>({...f,levels:f.levels.filter((_,j)=>j!==i)}))}>✕</button>}
               </div>))}
               <div style={{display:'flex',gap:6,marginTop:8}}>
                 <input style={{...S.input,flex:1}} placeholder="New level" value={newLevelInput} onChange={e=>setNewLevelInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')addLevel();}} />
@@ -2910,7 +2910,7 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
             <div style={{display:'flex',alignItems:'center',gap:8}}><span style={{width:14,height:14,borderRadius:'50%',background:wc.color||C.textMuted}} /><span style={{fontWeight:600,fontSize:14}}>{wc.name}</span></div>
             <div style={{display:'flex',gap:6}}>
               <button style={{...S.btn,...S.btnSecondary,padding:'6px 12px',fontSize:12}} onClick={()=>{setCatForm({name:wc.name,color:wc.color||'#2b6cb0'});setEditCatId(wc.id);setShowAddCat(true);}}>Edit</button>
-              <button style={{...S.btn,...S.btnDanger,padding:'6px 12px',fontSize:12}} onClick={()=>setDelCatId(wc.id)}>x</button>
+              <button style={{...S.btn,...S.btnDanger,padding:'6px 12px',fontSize:12}} onClick={()=>setDelCatId(wc.id)}>✕</button>
             </div>
           </div>
         ))}
@@ -3063,7 +3063,7 @@ function EventsPage({ data, save, nav }) {
                     <div style={{display:'flex',gap:4}}>
                       <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'4px 10px'}} onClick={e=>{e.stopPropagation();const g=evt.gender==='Boy'?'Girl':evt.gender==='Girl'?'Boy':evt.gender;save({...data,events:[...(data.events||[]),{...evt,id:uid(),gender:g,qualifyingStandards:[],schoolRecords:[]}]});}}>Dup</button>
                       <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'4px 10px'}} onClick={e=>{e.stopPropagation();startEdit(evt);}}>Edit</button>
-                      <button style={{...S.btn,...S.btnDanger,fontSize:11,padding:'4px 10px'}} onClick={e=>{e.stopPropagation();setDelId(evt.id);}}>x</button>
+                      <button style={{...S.btn,...S.btnDanger,fontSize:11,padding:'4px 10px'}} onClick={e=>{e.stopPropagation();setDelId(evt.id);}}>✕</button>
                     </div>
                   </td>
                 </tr>,
@@ -3078,7 +3078,7 @@ function EventsPage({ data, save, nav }) {
                         {(evt.qualifyingStandards||[]).map(std=>(
                           <div key={std.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'4px 0',fontSize:12}}>
                             <span><span style={{fontWeight:600}}>{std.name}</span> - {evt.measurableType==='Time'?formatTime(std.timeMs):fieldToStr(std.ft,std.inch,std.qtr)}</span>
-                            <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12}} onClick={()=>removeStandard(evt.id,std.id)}>x</button>
+                            <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12}} onClick={()=>removeStandard(evt.id,std.id)}>✕</button>
                           </div>
                         ))}
                         {!(evt.qualifyingStandards||[]).length&&<span style={{fontSize:12,color:C.textMuted}}>None set</span>}
@@ -3092,7 +3092,7 @@ function EventsPage({ data, save, nav }) {
                           const ath=data.athletes.find(a=>a.id===rec.athleteId);
                           return (<div key={rec.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'4px 0',fontSize:12}}>
                             <span><span style={{fontWeight:600}}>{rec.type||'School Record'}</span> - {evt.measurableType==='Time'?formatTime(rec.timeMs):fieldToStr(rec.ft,rec.inch,rec.qtr)} - {ath?athDisplay(ath):'-'} ({rec.date||'-'})</span>
-                            <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12}} onClick={()=>removeRecord(evt.id,rec.id)}>x</button>
+                            <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12}} onClick={()=>removeRecord(evt.id,rec.id)}>✕</button>
                           </div>);
                         })}
                         {!(evt.schoolRecords||[]).length&&<span style={{fontSize:12,color:C.textMuted}}>None set</span>}
@@ -3154,9 +3154,9 @@ function EventsPage({ data, save, nav }) {
 }
 function ToolsPage({ data, save, nav, events, addResult, getAthletePR, checkRecord, checkQualifying, preset }) {
   const tools = [
-    { key:'raceTimer', label:'Race Timer', desc:'Single athlete, single event. Lap splits with pace tracking.', icon:'>', color:C.accent },
-    { key:'multiSplit', label:'Multi-Split Timer', desc:'Multiple athletes simultaneously. Target times and live pace.', icon:'||>', color:C.blue },
-    { key:'fieldEvent', label:'Field Event Entry', desc:'Record attempts for jumps, throws, and pole vault.', icon:'*', color:C.success },
+    { key:'raceTimer', label:'Race Timer', desc:'Single athlete, single event. Lap splits with pace tracking.', icon:'⏱️', color:C.accent },
+    { key:'multiSplit', label:'Multi-Split Timer', desc:'Multiple athletes simultaneously. Target times and live pace.', icon:'⏱️', color:C.blue },
+    { key:'fieldEvent', label:'Field Event Entry', desc:'Record attempts for jumps, throws, and pole vault.', icon:'📏', color:C.success },
   ];
   return (
     <div>
@@ -3338,7 +3338,7 @@ function MultiSplitTimer({ data, save, nav, events, addResult, getAthletePR, che
                     {Array.from({length:60},(_,n)=><option key={n} value={n.toFixed(2)}>{String(n).padStart(2,'0')}</option>)}
                   </select>
                 </div>
-                {athletes.length>1&&<button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',flexShrink:0}} onClick={()=>setAthletes(a=>a.filter((_,j)=>j!==i))}>x</button>}
+                {athletes.length>1&&<button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',flexShrink:0}} onClick={()=>setAthletes(a=>a.filter((_,j)=>j!==i))}>✕</button>}
               </div>
             ))}
           </div>
@@ -3448,7 +3448,7 @@ function FieldEventPage({ data, save, nav, events, addResult, getAthletePR, chec
             <thead><tr><th style={S.th}>#</th><th style={S.th}>Mark</th><th style={S.th}></th></tr></thead>
             <tbody>{attempts.map((a,i)=>{
               const isBest = a.total === Math.max(...attempts.map(x=>x.total));
-              return (<tr key={i}><td style={S.td}>{i+1}</td><td style={{...S.td,fontWeight:isBest?700:400,color:isBest?C.accent:C.text}}>{fieldToStr(a.ft,a.inch,a.qtr)}{isBest&&' *'}</td><td style={S.td}><button style={{background:'none',border:'none',color:C.danger,cursor:'pointer'}} onClick={()=>setAttempts(prev=>prev.filter((_,j)=>j!==i))}>x</button></td></tr>);
+              return (<tr key={i}><td style={S.td}>{i+1}</td><td style={{...S.td,fontWeight:isBest?700:400,color:isBest?C.accent:C.text}}>{fieldToStr(a.ft,a.inch,a.qtr)}{isBest&&' *'}</td><td style={S.td}><button style={{background:'none',border:'none',color:C.danger,cursor:'pointer'}} onClick={()=>setAttempts(prev=>prev.filter((_,j)=>j!==i))}>✕</button></td></tr>);
             })}</tbody>
           </table>
         )}
@@ -3538,7 +3538,7 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
               </div>
               <div style={{display:'flex',gap:6}}>
                 {!s.active && <button style={{...S.btn,...S.btnPrimary,fontSize:10,padding:'3px 10px'}} onClick={()=>toggleActiveSeason(s.id)}>Set Active</button>}
-                <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12}} onClick={()=>setDelSeasonId(s.id)}>x</button>
+                <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12}} onClick={()=>setDelSeasonId(s.id)}>✕</button>
               </div>
             </div>
           </div>
@@ -3635,7 +3635,7 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
             <div><span style={{fontWeight:600}}>{mt.name}</span>{mt.qualifying&&<span style={{fontSize:10,color:C.success,marginLeft:8,fontWeight:600}}>QUALIFYING</span>}</div>
             <div style={{display:'flex',gap:6}}>
               <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'3px 10px'}} onClick={()=>{setMtForm({name:mt.name,qualifying:mt.qualifying});setEditMTId(mt.id);setShowAddMT(true);}}>Edit</button>
-              <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12}} onClick={()=>setDelMTId(mt.id)}>x</button>
+              <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12}} onClick={()=>setDelMTId(mt.id)}>✕</button>
             </div>
           </div>
         ))}
@@ -3728,7 +3728,7 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
             URL.revokeObjectURL(url);
           }}>Export JSON</button>
           <div style={{fontSize:11,color:C.textMuted,marginTop:8}}>
-            {(data.athletes||{}).length||0} athletes, {(data.meets||{}).length||0} meets, {(data.events||{}).length||0} events, {(data.workoutLibrary||[]).length} workouts, {(data.attendance||[]).length} attendance records
+            {(data.athletes||[]).length||0} athletes, {(data.meets||[]).length||0} meets, {(data.events||[]).length||0} events, {(data.workoutLibrary||[]).length} workouts, {(data.attendance||[]).length} attendance records
           </div>
         </div>
         <div style={S.card}>
@@ -3758,7 +3758,7 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
           {importData && (
             <div style={{padding:'12px 16px',borderRadius:8,border:`1px solid ${C.accent}`,background:C.accentMuted,marginBottom:12}}>
               <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:8}}>Ready to import:</div>
-              <div style={{fontSize:13,color:C.textSecondary,marginBottom:4}}>{(importData.athletes||{}).length||0} athletes, {(importData.meets||{}).length||0} meets, {(importData.events||{}).length||0} events</div>
+              <div style={{fontSize:13,color:C.textSecondary,marginBottom:4}}>{(importData.athletes||[]).length||0} athletes, {(importData.meets||[]).length||0} meets, {(importData.events||[]).length||0} events</div>
               <div style={{fontSize:13,color:C.textSecondary,marginBottom:4}}>{(importData.workoutLibrary||[]).length} workouts, {(importData.attendance||[]).length} attendance records</div>
               {importData._team&&<div style={{fontSize:13,color:C.textSecondary,marginBottom:12}}>Team: {importData._team.name}{importData._team.school?` - ${importData._team.school}`:''}</div>}
               <div style={{display:'flex',gap:8}}>

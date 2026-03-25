@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="80" fill="#c96a1f"/>
+  <text x="256" y="200" text-anchor="middle" font-family="Arial, sans-serif" font-weight="bold" font-size="180" fill="white">T&amp;F</text>
+  <text x="256" y="360" text-anchor="middle" font-family="Arial, sans-serif" font-weight="600" font-size="100" fill="rgba(255,255,255,0.85)">HUB</text>
+  <rect x="80" y="400" width="352" height="6" rx="3" fill="rgba(255,255,255,0.4)"/>
+</svg>

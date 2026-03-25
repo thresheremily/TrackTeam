@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#c96a1f" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="TrackTeam" />
+  <title>TrackTeam</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="apple-touch-icon" href="icons/icon-192x192.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Rubik:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    html,body,#root{width:100%;height:100%}
+    body{font-family:'Rubik','Inter',system-ui,-apple-system,sans-serif;background:#f5f6f8;color:#1a1e26;-webkit-font-smoothing:antialiased;overscroll-behavior:none}
+    #msg{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#f5f6f8}
+    #msg h1{font-family:'Montserrat',sans-serif;font-size:24px;font-weight:700;color:#c96a1f;letter-spacing:.04em;text-transform:uppercase}
+    #msg p{font-size:13px;color:#8c929e;margin-top:8px;max-width:320px;word-break:break-word;text-align:center;padding:0 20px}
+  </style>
+</head>
+<body>
+  <div id="msg"><h1>TrackTeam</h1><p id="status">Loading...</p></div>
+  <div id="root"></div>
+
+  <script>
+    if('serviceWorker' in navigator){
+      navigator.serviceWorker.getRegistrations().then(function(r){r.forEach(function(s){s.unregister()})});
+      caches.keys().then(function(k){k.forEach(function(n){caches.delete(n)})});
+    }
+    function showErr(s){document.getElementById('msg').innerHTML='<h1 style="color:#c53030">Error</h1><p style="color:#5c6370;margin-top:12px;max-width:340px;word-break:break-all;padding:0 20px">'+s+'</p>';}
+    function setStatus(s){var el=document.getElementById('status');if(el)el.textContent=s;}
+    window.onerror=function(m,u,l){showErr(m+' (line '+l+')');};
+  </script>
+
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+  <script type="module">
+    try {
+      setStatus('Loading compiler...');
+      var esbuild = await import('https://cdn.jsdelivr.net/npm/esbuild-wasm@0.24.2/esm/browser.min.js');
+      await esbuild.initialize({
+        wasmURL: 'https://cdn.jsdelivr.net/npm/esbuild-wasm@0.24.2/esbuild.wasm'
+      });
+
+      setStatus('Loading app...');
+      var r = await fetch('app.js?v=' + Date.now());
+      if (!r.ok) { showErr('Fetch failed: ' + r.status); throw new Error('stop'); }
+      var jsx = await r.text();
+
+      setStatus('Compiling...');
+      var result = await esbuild.transform(jsx, {
+        loader: 'jsx',
+        jsx: 'transform',
+        jsxFactory: 'React.createElement',
+        jsxFragment: 'React.Fragment',
+        target: 'es2015'
+      });
+
+      setStatus('Starting...');
+      var s = document.createElement('script');
+      s.textContent = result.code;
+      document.body.appendChild(s);
+      var m = document.getElementById('msg');
+      if (m) { m.style.opacity = '0'; setTimeout(function(){ m.remove(); }, 500); }
+    } catch(e) {
+      if (e.message !== 'stop') showErr(e.message ? e.message.substring(0, 300) : String(e));
+    }
+  </script>
+</body>
+</html>

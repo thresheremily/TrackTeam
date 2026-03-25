@@ -36,6 +36,21 @@
     window.onerror=function(m,u,l){showErr(m+' (line '+l+')');};
   </script>
 
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script>
+    firebase.initializeApp({
+      apiKey: "AIzaSyDSGL09Jd8FX08VSk-w0h2_8y49TWPBEno",
+      authDomain: "trackteam-b9172.firebaseapp.com",
+      projectId: "trackteam-b9172",
+      storageBucket: "trackteam-b9172.firebasestorage.app",
+      messagingSenderId: "293072726515",
+      appId: "1:293072726515:web:466fce62d3cd4834f78a86"
+    });
+  </script>
+
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 

@@ -1974,6 +1974,11 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
   const [editForm, setEditForm] = useState({});
   const [editPracticeDay, setEditPracticeDay] = useState(null);
   const [practiceEditItems, setPracticeEditItems] = useState([]);
+  const [athPracticeForm, setAthPracticeForm] = useState({category:'',type:'',workoutId:'',workoutSearch:''});
+  const [athPracticeFocus, setAthPracticeFocus] = useState('');
+  const athPracticeBlurRef = useRef(null);
+  const athPFocus = (f)=>{clearTimeout(athPracticeBlurRef.current);setAthPracticeFocus(f);};
+  const athPBlur = ()=>{athPracticeBlurRef.current=setTimeout(()=>setAthPracticeFocus(''),200);};
   const athlete = data.athletes.find(a=>a.id===athleteId);
   if(!athlete) return <div style={S.card}><p>Athlete not found</p><button style={S.backLink} onClick={()=>nav('athletes')}>{"<- "}Back</button></div>;
   const groups = data.workoutGroups || [];
@@ -2346,7 +2351,17 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
                 </div>
               );
             })}
-            {editPracticeDay && (
+            {editPracticeDay && (()=>{
+              const library = data.workoutLibrary||[];
+              const apf = athPracticeForm;
+              const catLib = apf.category ? library.filter(l=>(l.category||(l.categories||[])[0]||'').toLowerCase().includes(apf.category.toLowerCase())) : library;
+              const typesInCat = [...new Set(catLib.map(l=>l.type||'').filter(Boolean))].sort();
+              const typeLib = apf.type ? catLib.filter(l=>(l.type||'').toLowerCase().includes(apf.type.toLowerCase())) : catLib;
+              const addFromLib = (w) => {
+                setPracticeEditItems([...practiceEditItems, {name:w.name,category:w.category||(w.categories||[])[0]||'',mileage:w.mileage||'',type:w.type||''}]);
+                setAthPracticeForm({category:'',type:'',workoutId:'',workoutSearch:''});
+              };
+              return (
               <div style={{marginTop:8,padding:'12px 14px',borderRadius:6,border:`1px solid ${C.accent}`,background:C.accentMuted}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
                   <span style={{fontSize:13,fontWeight:700,color:C.accent}}>{editPracticeDay} - {athDisplay(athlete)}</span>
@@ -2356,20 +2371,55 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
                   </div>
                 </div>
                 {practiceEditItems.map((it,i)=>(
-                  <div key={i} style={{display:'flex',gap:4,alignItems:'center',marginBottom:4}}>
-                    <input style={{...S.input,flex:2,fontSize:11,padding:'4px 8px'}} placeholder="Workout name" value={it.name} onChange={e=>{const c=[...practiceEditItems];c[i]={...c[i],name:e.target.value};setPracticeEditItems(c);}} />
-                    <input style={{...S.input,flex:1,fontSize:11,padding:'4px 8px'}} placeholder="Category" value={it.category||''} onChange={e=>{const c=[...practiceEditItems];c[i]={...c[i],category:e.target.value};setPracticeEditItems(c);}} />
-                    <input style={{...S.input,width:50,fontSize:11,padding:'4px 8px'}} placeholder="mi" value={it.mileage||''} onChange={e=>{const c=[...practiceEditItems];c[i]={...c[i],mileage:e.target.value};setPracticeEditItems(c);}} />
-                    <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12}} onClick={()=>{const c=[...practiceEditItems];c.splice(i,1);setPracticeEditItems(c);}}>✕</button>
+                  <div key={i} style={{display:'flex',gap:4,alignItems:'center',marginBottom:4,padding:'4px 8px',background:C.surface,borderRadius:4,border:`1px solid ${C.borderLight}`}}>
+                    <span style={{flex:2,fontSize:12,fontWeight:600,color:catColors[it.category]||C.text}}>{it.name||'-'}</span>
+                    <span style={{fontSize:10,color:C.textMuted}}>{it.category}</span>
+                    {it.mileage&&<span style={{fontSize:10,color:C.accent,fontWeight:600}}>{it.mileage}mi</span>}
+                    <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12,padding:'2px 4px'}} onClick={()=>{const c=[...practiceEditItems];c.splice(i,1);setPracticeEditItems(c);}}>✕</button>
                   </div>
                 ))}
-                <div style={{display:'flex',gap:6,marginTop:6}}>
-                  <button style={{...S.btn,...S.btnSecondary,fontSize:10,padding:'4px 10px'}} onClick={()=>setPracticeEditItems([...practiceEditItems,{name:'',category:'',mileage:''}])}>+ Add Workout</button>
+                <div style={{marginTop:6,padding:'8px',background:C.surface,borderRadius:6,border:`1px solid ${C.borderLight}`}}>
+                  <div style={{fontSize:11,fontWeight:600,color:C.textSecondary,marginBottom:6}}>Add from Library</div>
+                  <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:4}}>
+                    <div style={{flex:1,minWidth:80,position:'relative'}}>
+                      <input style={{...S.input,fontSize:11,padding:'4px 8px'}} placeholder="Category" value={apf.category} onChange={e=>setAthPracticeForm({category:e.target.value,type:'',workoutId:'',workoutSearch:''})} onFocus={()=>athPFocus('athCat')} onBlur={athPBlur} />
+                      {athPracticeFocus==='athCat'&&(()=>{const opts=categories.filter(c=>!apf.category||c.name.toLowerCase().includes(apf.category.toLowerCase()));return opts.length>0&&(
+                        <div style={{position:'absolute',top:'100%',left:0,right:0,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,boxShadow:'0 4px 12px rgba(0,0,0,0.1)',zIndex:20,maxHeight:150,overflowY:'auto'}}>
+                          {opts.map(c=><div key={c.id} style={{padding:'6px 10px',fontSize:11,cursor:'pointer',borderBottom:`1px solid ${C.borderLight}`}} onMouseDown={()=>{setAthPracticeForm({category:c.name,type:'',workoutId:'',workoutSearch:''});setAthPracticeFocus('');}}>{c.name}</div>)}
+                        </div>);})()}
+                    </div>
+                    <div style={{flex:1,minWidth:80,position:'relative'}}>
+                      <input style={{...S.input,fontSize:11,padding:'4px 8px'}} placeholder="Type" value={apf.type} onChange={e=>setAthPracticeForm({...apf,type:e.target.value,workoutId:'',workoutSearch:''})} onFocus={()=>athPFocus('athType')} onBlur={athPBlur} />
+                      {athPracticeFocus==='athType'&&(()=>{const opts=typesInCat.filter(t=>!apf.type||t.toLowerCase().includes(apf.type.toLowerCase()));return opts.length>0&&(
+                        <div style={{position:'absolute',top:'100%',left:0,right:0,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,boxShadow:'0 4px 12px rgba(0,0,0,0.1)',zIndex:20,maxHeight:150,overflowY:'auto'}}>
+                          {opts.map(t=><div key={t} style={{padding:'6px 10px',fontSize:11,cursor:'pointer',borderBottom:`1px solid ${C.borderLight}`}} onMouseDown={()=>{setAthPracticeForm({...apf,type:t,workoutId:'',workoutSearch:''});setAthPracticeFocus('');}}>{t}</div>)}
+                        </div>);})()}
+                    </div>
+                  </div>
+                  <div style={{maxHeight:120,overflowY:'auto'}}>
+                    {typeLib.slice(0,15).map(w=>(
+                      <div key={w.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'5px 8px',borderBottom:`1px solid ${C.borderLight}`,cursor:'pointer',fontSize:11}} onClick={()=>addFromLib(w)}>
+                        <div>
+                          <span style={{fontWeight:600,color:C.text}}>{w.name}</span>
+                          {w.mileage&&<span style={{color:C.accent,marginLeft:6}}>{w.mileage}mi</span>}
+                          {w.description&&<div style={{fontSize:10,color:C.textMuted}}>{w.description}</div>}
+                        </div>
+                        <span style={{color:C.accent,fontWeight:700,fontSize:14}}>+</span>
+                      </div>
+                    ))}
+                    {typeLib.length===0&&<div style={{fontSize:11,color:C.textMuted,padding:8,textAlign:'center'}}>No workouts found</div>}
+                  </div>
+                </div>
+                <div style={{display:'flex',gap:4,alignItems:'center',marginTop:6}}>
+                  <input style={{...S.input,flex:1,fontSize:11,padding:'4px 8px'}} placeholder="Or type custom workout name..." onKeyDown={e=>{if(e.key==='Enter'&&e.target.value.trim()){setPracticeEditItems([...practiceEditItems,{name:e.target.value.trim(),category:'',mileage:''}]);e.target.value='';}}} />
+                </div>
+                <div style={{display:'flex',gap:6,marginTop:8}}>
                   <button style={{...S.btn,...S.btnSecondary,fontSize:10,padding:'4px 10px'}} onClick={()=>{saveOverride(editPracticeDay,[],true);setEditPracticeDay(null);}}>Set Rest Day</button>
                   <button style={{...S.btn,...S.btnPrimary,fontSize:10,padding:'4px 10px',marginLeft:'auto'}} onClick={()=>{saveOverride(editPracticeDay,practiceEditItems.filter(it=>it.name.trim()),false);setEditPracticeDay(null);}}>Save</button>
                 </div>
               </div>
-            )}
+              );
+            })()}
           </div>
         );
       })()}

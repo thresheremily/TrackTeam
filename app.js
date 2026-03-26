@@ -3877,10 +3877,8 @@ function MultiSplitTimer({ data, save, nav, events, addResult, getAthletePR, che
           <div style={{marginTop:16}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
               <span style={{fontSize:14,fontWeight:600,color:C.textSecondary}}>Athletes</span>
-              <div style={{display:'flex',gap:6}}>
-                <button style={{...S.btn,...S.btnSecondary,padding:'4px 12px',fontSize:12}} onClick={()=>setAthletes(a=>[...a,{id:uid(),athleteId:'',laps:[],goalMs:0}])}>+ Add</button>
-                <button style={{...S.btn,...S.btnDanger,padding:'4px 12px',fontSize:12}} onClick={()=>setAthletes([{id:uid(),athleteId:'',laps:[],goalMs:0},{id:uid(),athleteId:'',laps:[],goalMs:0}])}>Reset Setup</button>
-              </div>
+              <button style={{...S.btn,...S.btnSecondary,padding:'4px 12px',fontSize:12}} onClick={()=>setAthletes(a=>[...a,{id:uid(),athleteId:'',laps:[],goalMs:0}])}>+ Add</button>
+            </div>
             </div>
             {athletes.map((at,i)=>(
               <div key={at.id} style={{display:'flex',gap:8,marginBottom:8,alignItems:'center',flexWrap:'wrap'}}>
@@ -3902,6 +3900,9 @@ function MultiSplitTimer({ data, save, nav, events, addResult, getAthletePR, che
                 {athletes.length>1&&<button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',flexShrink:0}} onClick={()=>setAthletes(a=>a.filter((_,j)=>j!==i))}>✕</button>}
               </div>
             ))}
+            <div style={{display:'flex',justifyContent:'flex-end',marginTop:4}}>
+              <button style={{...S.btn,...S.btnDanger,padding:'4px 12px',fontSize:11}} onClick={()=>setAthletes([{id:uid(),athleteId:'',laps:[],goalMs:0},{id:uid(),athleteId:'',laps:[],goalMs:0}])}>Reset Setup</button>
+            </div>
           </div>
         </div>
       )}
@@ -3938,7 +3939,7 @@ function MultiSplitTimer({ data, save, nav, events, addResult, getAthletePR, che
         if(at.laps.length===0) return null;
         const athObj=data.athletes.find(a=>a.id===at.athleteId);
         const athleteColor=COLORS[i%COLORS.length];
-        const hasTarget=at.goalMs&&totalLaps>0&&totalLaps<999;
+        const hasTarget=!!at.goalMs&&totalLaps>0&&totalLaps<999;
         const targetPerLap=hasTarget?at.goalMs/totalLaps:0;
         return (<div key={at.id} style={{...S.card,borderLeft:`4px solid ${athleteColor}`}}>
           <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>

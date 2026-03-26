@@ -3879,7 +3879,6 @@ function MultiSplitTimer({ data, save, nav, events, addResult, getAthletePR, che
               <span style={{fontSize:14,fontWeight:600,color:C.textSecondary}}>Athletes</span>
               <button style={{...S.btn,...S.btnSecondary,padding:'4px 12px',fontSize:12}} onClick={()=>setAthletes(a=>[...a,{id:uid(),athleteId:'',laps:[],goalMs:0}])}>+ Add</button>
             </div>
-            </div>
             {athletes.map((at,i)=>(
               <div key={at.id} style={{display:'flex',gap:8,marginBottom:8,alignItems:'center',flexWrap:'wrap'}}>
                 <div style={{width:8,height:32,borderRadius:4,background:COLORS[i%COLORS.length],flexShrink:0}} />

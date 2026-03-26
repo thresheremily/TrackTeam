@@ -388,10 +388,10 @@ const exTotals = (exercises) => {
   return parts.join(' + ');
 };
 const makeStyles = (C) => ({
-  app: { fontFamily:"'Rubik','Inter',system-ui,-apple-system,sans-serif", background:C.bg, minHeight:'100vh', color:C.text, letterSpacing:'-0.01em' },
-  container: { maxWidth:1100, margin:'0 auto', padding:'16px 20px' },
+  app: { fontFamily:"'Rubik','Inter',system-ui,-apple-system,sans-serif", background:C.bg, minHeight:'100vh', color:C.text, letterSpacing:'-0.01em', overflowX:'hidden' },
+  container: { maxWidth:1100, margin:'0 auto', padding:'16px 20px', width:'100%', boxSizing:'border-box', overflowX:'hidden' },
   containerDesktop: { marginLeft:250, maxWidth:'none', padding:'16px 28px' },
-  card: { background:C.surface, borderRadius:8, padding:'14px 18px', marginBottom:10, border:`1px solid ${C.border}` },
+  card: { background:C.surface, borderRadius:8, padding:'14px 18px', marginBottom:10, border:`1px solid ${C.border}`, maxWidth:'100%', boxSizing:'border-box' },
   btn: { padding:'8px 16px', borderRadius:6, border:'none', cursor:'pointer', fontWeight:600, fontSize:12, transition:'opacity 0.15s', lineHeight:'18px', textTransform:'uppercase', letterSpacing:'0.04em' },
   btnPrimary: { background:C.accent, color:C.white },
   btnSecondary: { background:C.surface2, color:C.textSecondary, border:`1px solid ${C.border}` },
@@ -1333,7 +1333,7 @@ function AttendancePage({ data, save, nav, season, activeAthletes }) {
         <button style={{...S.btn,...S.btnSecondary,padding:'4px 12px'}} onClick={()=>setWeekOffset(w=>w+1)}>Next -></button>
       </div>
       
-      <div style={{...S.card, overflowX:'auto'}}>
+      <div style={{...S.card, overflowX:'auto',WebkitOverflowScrolling:'touch'}}>
         <table style={{width:'100%',borderCollapse:'collapse',minWidth:600}}>
           <thead>
             <tr>
@@ -1495,7 +1495,7 @@ function MeetsPage({ data, save, nav, events }) {
         {(search||filterTrack||filterType||filterState)&&<button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'4px 10px'}} onClick={()=>{setSearch('');setFilterTrack('');setFilterType('');setFilterState('');}}>Clear</button>}
       </div>
       
-      <div style={{...S.card, overflowX:'auto'}}>
+      <div style={{...S.card, overflowX:'auto',WebkitOverflowScrolling:'touch'}}>
         <table style={{width:'100%',borderCollapse:'collapse',minWidth:700}}>
           <thead><tr>
             <SortHeader col="name" label="Meet" />
@@ -1658,7 +1658,8 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
               </div>
             </div>
             {hasEntries && (
-              <table style={{width:'100%',borderCollapse:'collapse'}}>
+              <div style={{overflowX:'auto',WebkitOverflowScrolling:'touch'}}>
+              <table style={{width:'100%',borderCollapse:'collapse',minWidth:400}}>
                 <thead><tr><th style={S.th}>Athlete</th><th style={S.th}>PR</th><th style={S.th}>Goal</th><th style={{...S.th,width:40}}></th></tr></thead>
                 <tbody>
                   {entries.map((en,ei) => {
@@ -1854,10 +1855,10 @@ function AthletesPage({ data, save, nav }) {
           <input type="checkbox" checked={showInactive} onChange={e=>setShowInactive(e.target.checked)} /> Show Inactive
         </label>
       </div>
-      <div style={S.card}>
-        <table style={{width:'100%',borderCollapse:'collapse'}}>
+      <div style={{...S.card, overflowX:'auto', WebkitOverflowScrolling:'touch'}}>
+        <table style={{width:'100%',borderCollapse:'collapse',minWidth:600}}>
           <thead><tr>
-            <th style={{...S.th,cursor:'pointer',userSelect:'none'}} onClick={()=>toggleSort('name')}>Name {sortCol==='name'?(sortDir==='asc'?'\u25B2':'\u25BC'):''}</th><th style={{...S.th,cursor:'pointer',userSelect:'none'}} onClick={()=>toggleSort('gradYear')}>Year {sortCol==='gradYear'?(sortDir==='asc'?'\u25B2':'\u25BC'):''}</th><th style={{...S.th,cursor:'pointer',userSelect:'none'}} onClick={()=>toggleSort('gender')}>Gender {sortCol==='gender'?(sortDir==='asc'?'\u25B2':'\u25BC'):''}</th><th style={{...S.th,cursor:'pointer',userSelect:'none'}} onClick={()=>toggleSort('group')}>Group(s) {sortCol==='group'?(sortDir==='asc'?'\u25B2':'\u25BC'):''}</th><th style={{...S.th,cursor:'pointer',userSelect:'none'}} onClick={()=>toggleSort('status')}>Status {sortCol==='status'?(sortDir==='asc'?'\u25B2':'\u25BC'):''}</th><th style={S.th}></th>
+            <th style={{...S.th,cursor:'pointer',userSelect:'none'}} onClick={()=>toggleSort('name')}>Name {sortCol==='name'?(sortDir==='asc'?'▲':'▼'):''}</th><th style={{...S.th,cursor:'pointer',userSelect:'none'}} onClick={()=>toggleSort('gradYear')}>Year {sortCol==='gradYear'?(sortDir==='asc'?'▲':'▼'):''}</th><th style={{...S.th,cursor:'pointer',userSelect:'none'}} onClick={()=>toggleSort('gender')}>Gender {sortCol==='gender'?(sortDir==='asc'?'▲':'▼'):''}</th><th style={{...S.th,cursor:'pointer',userSelect:'none'}} onClick={()=>toggleSort('group')}>Group(s) {sortCol==='group'?(sortDir==='asc'?'▲':'▼'):''}</th><th style={{...S.th,cursor:'pointer',userSelect:'none'}} onClick={()=>toggleSort('status')}>Status {sortCol==='status'?(sortDir==='asc'?'▲':'▼'):''}</th><th style={S.th}></th>
           </tr></thead>
           <tbody>
             {athletes.map(a => {
@@ -1927,8 +1928,10 @@ function AthletesPage({ data, save, nav }) {
 }
 function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, checkRecord, checkQualifying, season }) {
   const [showEditInfo, setShowEditInfo] = useState(false);
-  const [showNotes, setShowNotes] = useState(false);
   const [showAddNote, setShowAddNote] = useState(false);
+  const [showResolved, setShowResolved] = useState(false);
+  const [expandedNotes, setExpandedNotes] = useState({});
+  const [progressForm, setProgressForm] = useState({});
   const [noteForm, setNoteForm] = useState({ type:'Other', effectiveDate:'', details:'', trainerCheckIn:false, trainerDate:'', trainerDetails:'', needFollowUp:false, followUpName:'', followUpContact:'', followUpLastDate:'', followUpResolution:'' });
   const [editForm, setEditForm] = useState({});
   const athlete = data.athletes.find(a=>a.id===athleteId);
@@ -2018,7 +2021,6 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
           {athlete.notes && <div style={{fontSize:12,color:C.textSecondary,marginTop:6,fontStyle:'italic'}}>{athlete.notes}</div>}
         </div>
         <div style={{display:'flex',gap:6}}>
-          <button style={{...S.btn,...S.btnSecondary,fontSize:11}} onClick={()=>setShowNotes(true)}>Notes</button>
           <button style={{...S.btn,...S.btnSecondary,fontSize:11}} onClick={startEdit}>Edit</button>
         </div>
       </div>
@@ -2037,6 +2039,98 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
           <div style={{fontSize:22,fontWeight:700,color:improvement!==null&&improvement>0?C.success:C.text}}>{improvement!==null?`${improvement}%`:'-'}</div>
         </div>
       </div>
+      
+      {(()=>{
+        const active = medicalNotes.filter(n=>!n.needFollowUp || !n.followUpResolution);
+        const resolved = medicalNotes.filter(n=>n.needFollowUp && n.followUpResolution);
+        const hasActive = active.some(n=>n.needFollowUp && !n.followUpResolution);
+        const renderNote = (n) => {
+          const typeColor = n.type==='Injury'?C.danger:n.type==='Illness'?'#b8860b':n.type==='Medical Clearance'?C.success:C.blue;
+          const progs = n.progressNotes||[];
+          const isExpanded = expandedNotes[n.id];
+          const pf = progressForm[n.id]||'';
+          const needsAction = n.needFollowUp && !n.followUpResolution;
+          return (
+            <div key={n.id} style={{padding:'12px 14px',marginBottom:8,borderRadius:8,borderLeft:`4px solid ${typeColor}`,background:needsAction?C.surface:C.bg,border:needsAction?`1px solid ${typeColor}33`:`1px solid ${C.borderLight}`}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
+                    <span style={{fontSize:11,fontWeight:700,color:typeColor,textTransform:'uppercase',background:typeColor+'15',padding:'2px 8px',borderRadius:4}}>{n.type}</span>
+                    <span style={{fontSize:11,color:C.textMuted}}>{n.effectiveDate||n.entryDate}</span>
+                    {needsAction && <span style={{fontSize:10,fontWeight:700,color:C.danger,textTransform:'uppercase'}}>Needs Follow-Up</span>}
+                  </div>
+                  <div style={{fontSize:13,color:C.text,lineHeight:'1.5'}}>{n.details}</div>
+                  {n.trainerCheckIn && <div style={{fontSize:12,color:C.blue,marginTop:4,padding:'4px 8px',background:C.blue+'10',borderRadius:4}}>Trainer: {n.trainerDate} - {n.trainerDetails}</div>}
+                  {n.needFollowUp && <div style={{fontSize:12,color:C.accent,marginTop:4}}>Contact: {n.followUpName}{n.followUpContact?` (${n.followUpContact})`:''}{n.followUpResolution?<span style={{color:C.success,fontWeight:600}}>{' '}Resolved {n.followUpResolution}</span>:''}</div>}
+                </div>
+                <div style={{display:'flex',gap:6,flexShrink:0,marginLeft:12,alignItems:'center'}}>
+                  {needsAction && <button style={{fontSize:11,fontWeight:600,color:C.success,background:C.successMuted,border:'none',borderRadius:6,padding:'5px 12px',cursor:'pointer'}} onClick={()=>save({...data,medicalNotes:(data.medicalNotes||[]).map(mn=>mn.id===n.id?{...mn,followUpResolution:new Date().toISOString().split('T')[0]}:mn)})}>Resolve</button>}
+                  <button style={{background:'none',border:'none',color:C.textMuted,cursor:'pointer',fontSize:13,padding:'4px'}} onClick={()=>save({...data,medicalNotes:(data.medicalNotes||[]).filter(mn=>mn.id!==n.id)})}>✕</button>
+                </div>
+              </div>
+              <div style={{marginTop:8,borderTop:`1px solid ${C.borderLight}`,paddingTop:6}}>
+                <div style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer'}} onClick={()=>setExpandedNotes(prev=>({...prev,[n.id]:!prev[n.id]}))}>
+                  <span style={{fontSize:11,color:C.accent,fontWeight:600}}>{isExpanded?'▼':'▶'} Progress Notes ({progs.length})</span>
+                </div>
+                {isExpanded&&<div style={{marginTop:8,paddingLeft:12,borderLeft:`2px solid ${C.accent}33`}}>
+                  {progs.map((p,pi)=>(
+                    <div key={pi} style={{fontSize:12,color:C.text,padding:'6px 0',borderBottom:`1px solid ${C.borderLight}`}}>
+                      <span style={{fontWeight:600,color:C.accent,marginRight:8,fontSize:11}}>{p.date}</span>{p.text}
+                    </div>
+                  ))}
+                  {!progs.length&&<div style={{fontSize:12,color:C.textMuted,padding:'6px 0',fontStyle:'italic'}}>No progress notes yet</div>}
+                  <div style={{display:'flex',gap:6,marginTop:8}}>
+                    <input style={{...S.input,flex:1,fontSize:12,padding:'6px 10px'}} placeholder="Add progress note..." value={pf} onChange={e=>setProgressForm(prev=>({...prev,[n.id]:e.target.value}))} onKeyDown={e=>{if(e.key==='Enter'&&pf.trim()){const updated=(data.medicalNotes||[]).map(mn=>mn.id===n.id?{...mn,progressNotes:[...(mn.progressNotes||[]),{date:new Date().toISOString().split('T')[0],text:pf.trim()}]}:mn);save({...data,medicalNotes:updated});setProgressForm(prev=>({...prev,[n.id]:''}));}}} />
+                    <button style={{...S.btn,...S.btnPrimary,fontSize:11,padding:'6px 14px'}} onClick={()=>{if(!pf.trim())return;const updated=(data.medicalNotes||[]).map(mn=>mn.id===n.id?{...mn,progressNotes:[...(mn.progressNotes||[]),{date:new Date().toISOString().split('T')[0],text:pf.trim()}]}:mn);save({...data,medicalNotes:updated});setProgressForm(prev=>({...prev,[n.id]:''}));}}>Add</button>
+                  </div>
+                </div>}
+              </div>
+            </div>
+          );
+        };
+        return (<>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,marginTop:8}}>
+            <h2 style={{...S.h2,marginBottom:0}}>Medical / Notes {hasActive && <span style={{fontSize:12,fontWeight:500,color:C.danger,marginLeft:6}}>• Action Needed</span>}</h2>
+            <button style={{...S.btn,...S.btnPrimary,fontSize:11,padding:'6px 14px'}} onClick={()=>setShowAddNote(true)}>+ Add Note</button>
+          </div>
+          {active.length===0&&resolved.length===0&&<div style={{...S.card,textAlign:'center',color:C.textMuted,fontSize:12,padding:16}}>No medical notes</div>}
+          {active.map(renderNote)}
+          {resolved.length>0&&(
+            <div style={{marginTop:4,marginBottom:12}}>
+              <div style={{cursor:'pointer',display:'flex',alignItems:'center',gap:6,padding:'8px 0'}} onClick={()=>setShowResolved(!showResolved)}>
+                <span style={{fontSize:12,fontWeight:600,color:C.textMuted}}>{showResolved?'▼':'▶'} Resolved ({resolved.length})</span>
+              </div>
+              {showResolved&&<div style={{opacity:0.7}}>{resolved.map(renderNote)}</div>}
+            </div>
+          )}
+          <Modal open={showAddNote} onClose={()=>setShowAddNote(false)} width={520}>
+            <h2 style={{...S.h2,marginBottom:16}}>Add Medical Note</h2>
+            <div style={{display:'flex',flexDirection:'column',gap:10}}>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                <div><label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Type</label><select style={{...S.select,width:'100%'}} value={noteForm.type} onChange={e=>setNoteForm({...noteForm,type:e.target.value})}>
+                  <option>Injury</option><option>Illness</option><option>Medical Clearance</option><option>Other</option>
+                </select></div>
+                <div><label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Effective Date</label><input style={S.input} type="date" value={noteForm.effectiveDate} onChange={e=>setNoteForm({...noteForm,effectiveDate:e.target.value})} /></div>
+              </div>
+              <div><label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Details</label><textarea style={{...S.input,height:80,resize:'vertical'}} placeholder="Describe the issue, symptoms, or note..." value={noteForm.details} onChange={e=>setNoteForm({...noteForm,details:e.target.value})} /></div>
+              <label style={{display:'flex',alignItems:'center',gap:8,fontSize:13,cursor:'pointer',padding:'4px 0'}}><input type="checkbox" checked={noteForm.trainerCheckIn} onChange={e=>setNoteForm({...noteForm,trainerCheckIn:e.target.checked})} /> Trainer Check-In</label>
+              {noteForm.trainerCheckIn && <div style={{display:'grid',gridTemplateColumns:'auto 1fr',gap:10,paddingLeft:24}}>
+                <input style={S.input} type="date" value={noteForm.trainerDate} onChange={e=>setNoteForm({...noteForm,trainerDate:e.target.value})} />
+                <input style={S.input} placeholder="Trainer recommendations..." value={noteForm.trainerDetails} onChange={e=>setNoteForm({...noteForm,trainerDetails:e.target.value})} />
+              </div>}
+              <label style={{display:'flex',alignItems:'center',gap:8,fontSize:13,cursor:'pointer',padding:'4px 0'}}><input type="checkbox" checked={noteForm.needFollowUp} onChange={e=>setNoteForm({...noteForm,needFollowUp:e.target.checked})} /> Needs Follow-Up</label>
+              {noteForm.needFollowUp && <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,paddingLeft:24}}>
+                <input style={S.input} placeholder="Follow-up with (name)..." value={noteForm.followUpName} onChange={e=>setNoteForm({...noteForm,followUpName:e.target.value})} />
+                <input style={S.input} placeholder="Contact info..." value={noteForm.followUpContact} onChange={e=>setNoteForm({...noteForm,followUpContact:e.target.value})} />
+              </div>}
+              <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginTop:8}}>
+                <button style={{...S.btn,...S.btnSecondary}} onClick={()=>setShowAddNote(false)}>Cancel</button>
+                <button style={{...S.btn,...S.btnPrimary}} onClick={()=>{saveNote();setShowAddNote(false);}}>Save Note</button>
+              </div>
+            </div>
+          </Modal>
+        </>);
+      })()}
       
       <div style={S.card}>
         <h2 style={{...S.h2,marginBottom:8}}>Performances</h2>
@@ -2090,6 +2184,66 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
         )}
       </div>
       
+      {(()=>{
+        const groups = data.workoutGroups||[];
+        const categories = data.workoutCategories||[];
+        const catColors = {}; categories.forEach(cc=>{catColors[cc.name]=cc.color||'#8c929e';});
+        const today = new Date().toISOString().split('T')[0];
+        const todayDate = new Date(today+'T12:00:00');
+        const dow = todayDate.getDay();
+        const monday = new Date(todayDate);
+        monday.setDate(todayDate.getDate() - (dow===0?6:dow-1));
+        const mondayStr = monday.toISOString().split('T')[0];
+        const week = (data.workoutPlans||[]).find(w=>padDate(w.startDate)===mondayStr);
+        if(!week) return null;
+        const myGroups = athleteGroups.length>0 ? athleteGroups : [];
+        if(!myGroups.length) return null;
+        const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        const todayDay = dayNames[dow];
+        return (
+          <div style={S.card}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+              <h2 style={{...S.h2,marginBottom:0}}>This Week's Practice</h2>
+              <button style={{...S.btn,...S.btnSecondary,fontSize:10,padding:'4px 10px'}} onClick={()=>nav('practicePlans',{weekId:week.id})}>View Full Week</button>
+            </div>
+            {myGroups.map(ag=>{
+              const group = groups.find(g=>g.id===ag.groupId);
+              if(!group) return null;
+              const level = ag.level||group.levels[0]||'Level 1';
+              const hasAny = ['Mon','Tue','Wed','Thu','Fri','Sat'].some(day=>{
+                return (week.entries||[]).some(e=>e.groupId===ag.groupId&&e.level===level&&e.day===day) || (week.restDays||[]).some(rd=>rd.groupId===ag.groupId&&rd.level===level&&rd.day===day);
+              });
+              if(!hasAny) return null;
+              return (
+                <div key={ag.groupId+level} style={{marginBottom:8}}>
+                  <div style={{fontSize:11,fontWeight:700,color:C.accent,textTransform:'uppercase',marginBottom:4}}>{group.name}{group.levels.length>1?' - '+level:''}</div>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:4}}>
+                    {['Mon','Tue','Wed','Thu','Fri','Sat'].map(day=>{
+                      const items = (week.entries||[]).filter(e=>e.groupId===ag.groupId&&e.level===level&&e.day===day);
+                      const rest = (week.restDays||[]).some(rd=>rd.groupId===ag.groupId&&rd.level===level&&rd.day===day);
+                      const isToday = day===todayDay;
+                      return (
+                        <div key={day} style={{padding:'5px 4px',borderRadius:4,background:isToday?C.accentMuted:C.bg,border:isToday?`2px solid ${C.accent}`:`1px solid ${C.borderLight}`,minHeight:48,fontSize:10}}>
+                          <div style={{fontWeight:700,color:isToday?C.accent:C.textMuted,marginBottom:2,textAlign:'center',fontSize:9}}>{day}</div>
+                          {rest && <div style={{color:C.success,fontStyle:'italic',textAlign:'center',fontSize:9}}>Rest</div>}
+                          {items.map((it,ii)=>(
+                            <div key={ii} style={{marginBottom:1}}>
+                              <div style={{fontWeight:600,color:catColors[it.category]||C.text,lineHeight:1.2}}>{it.name||it.workoutName||'-'}</div>
+                              {it.mileage&&<div style={{color:C.accent,fontWeight:600}}>{it.mileage}mi</div>}
+                            </div>
+                          ))}
+                          {!rest&&!items.length&&<div style={{color:C.borderLight,textAlign:'center'}}>-</div>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
+      
       <Modal open={showEditInfo} onClose={()=>setShowEditInfo(false)} width={480}>
         <h2 style={S.h2}>Edit Athlete</h2>
         <div style={{display:'flex',flexDirection:'column',gap:10,marginTop:16}}>
@@ -2132,52 +2286,6 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
         </div>
       </Modal>
       
-      <Modal open={showNotes} onClose={()=>setShowNotes(false)} width={550}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-          <h2 style={S.h2}>Medical / Notes</h2>
-          <button style={{...S.btn,...S.btnPrimary,fontSize:11}} onClick={()=>setShowAddNote(true)}>+ Add Note</button>
-        </div>
-        {medicalNotes.map(n => (
-          <div key={n.id} style={{...S.card,padding:'12px 16px',borderLeft:`3px solid ${n.type==='Injury'?C.danger:n.type==='Medical Clearance'?C.success:C.blue}`}}>
-            <div style={{display:'flex',justifyContent:'space-between',fontSize:12}}>
-              <span style={{fontWeight:600,color:n.type==='Injury'?C.danger:C.text}}>{n.type}</span>
-              <span style={{color:C.textMuted}}>{n.entryDate}{n.effectiveDate && n.effectiveDate!==n.entryDate ? ` (eff. ${n.effectiveDate})` : ''}</span>
-            </div>
-            {n.details && <p style={{fontSize:12,color:C.textSecondary,marginTop:4}}>{n.details}</p>}
-            {n.trainerCheckIn && <div style={{fontSize:11,color:C.blue,marginTop:4}}>Trainer: {n.trainerDate} - {n.trainerDetails}</div>}
-            {n.needFollowUp && <div style={{fontSize:11,color:C.accent,marginTop:4}}>Follow-up: {n.followUpName}{n.followUpContact?` (${n.followUpContact})`:''}{n.followUpResolution?` - Resolved: ${n.followUpResolution}`:''}</div>}
-            <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:11,marginTop:4}} onClick={()=>save({...data,medicalNotes:(data.medicalNotes||[]).filter(mn=>mn.id!==n.id)})}>Delete</button>
-          </div>
-        ))}
-        {!medicalNotes.length && <p style={{color:C.textMuted,fontSize:13,textAlign:'center',padding:16}}>No notes</p>}
-        {showAddNote && (
-          <div style={{...S.card,marginTop:12,border:`1px dashed ${C.accent}`}}>
-            <h3 style={{fontSize:14,fontWeight:600,marginBottom:8}}>New Note</h3>
-            <div style={{display:'flex',flexDirection:'column',gap:8}}>
-              <select style={{...S.select,width:'100%'}} value={noteForm.type} onChange={e=>setNoteForm({...noteForm,type:e.target.value})}>
-                <option>Medical Clearance</option><option>Injury</option><option>Other</option>
-              </select>
-              <div><label style={{fontSize:12,color:C.textSecondary}}>Effective Date</label><input style={S.input} type="date" value={noteForm.effectiveDate} onChange={e=>setNoteForm({...noteForm,effectiveDate:e.target.value})} /></div>
-              <textarea style={{...S.input,height:60,resize:'vertical'}} placeholder="Details..." value={noteForm.details} onChange={e=>setNoteForm({...noteForm,details:e.target.value})} />
-              <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,cursor:'pointer'}}><input type="checkbox" checked={noteForm.trainerCheckIn} onChange={e=>setNoteForm({...noteForm,trainerCheckIn:e.target.checked})} /> Trainer Check-In</label>
-              {noteForm.trainerCheckIn && <>
-                <input style={S.input} type="date" value={noteForm.trainerDate} onChange={e=>setNoteForm({...noteForm,trainerDate:e.target.value})} />
-                <input style={S.input} placeholder="Trainer recommendations..." value={noteForm.trainerDetails} onChange={e=>setNoteForm({...noteForm,trainerDetails:e.target.value})} />
-              </>}
-              <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,cursor:'pointer'}}><input type="checkbox" checked={noteForm.needFollowUp} onChange={e=>setNoteForm({...noteForm,needFollowUp:e.target.checked})} /> Need Follow-Up?</label>
-              {noteForm.needFollowUp && <>
-                <input style={S.input} placeholder="Follow-up with (name)..." value={noteForm.followUpName} onChange={e=>setNoteForm({...noteForm,followUpName:e.target.value})} />
-                <input style={S.input} placeholder="Contact info..." value={noteForm.followUpContact} onChange={e=>setNoteForm({...noteForm,followUpContact:e.target.value})} />
-                <div><label style={{fontSize:12,color:C.textSecondary}}>Resolution Date</label><input style={S.input} type="date" value={noteForm.followUpResolution} onChange={e=>setNoteForm({...noteForm,followUpResolution:e.target.value})} /></div>
-              </>}
-              <div style={{display:'flex',gap:6}}>
-                <button style={{...S.btn,...S.btnPrimary}} onClick={saveNote}>Save Note</button>
-                <button style={{...S.btn,...S.btnSecondary}} onClick={()=>setShowAddNote(false)}>Cancel</button>
-              </div>
-            </div>
-          </div>
-        )}
-      </Modal>
     </div>
   );
 }
@@ -2247,7 +2355,7 @@ function DailyPracticeView({ data, nav, date }) {
                             </div>
                           </div>
                           {exercises.length > 0 && (
-                            <div style={{overflowX:'auto'}}>
+                            <div style={{overflowX:'auto',WebkitOverflowScrolling:'touch'}}>
                               <table style={{width:'100%',borderCollapse:'collapse'}}>
                                 <thead><tr>
                                   <th style={{...S.th,padding:'6px 8px',width:36}}>Set</th>
@@ -3174,7 +3282,7 @@ function EventsPage({ data, save, nav }) {
         <select style={S.select} value={entryFilter} onChange={e=>setEntryFilter(e.target.value)}><option value="">All Entries</option><option value="Individual">Individual</option><option value="Relay">Relay</option></select>
         {(search||typeFilter||genderFilter||trackFilter||entryFilter)&&<button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'4px 10px'}} onClick={()=>{setSearch('');setTypeFilter('');setGenderFilter('');setTrackFilter('');setEntryFilter('');}}>Clear</button>}
       </div>
-      <div style={{...S.card, overflowX:'auto'}}>
+      <div style={{...S.card, overflowX:'auto',WebkitOverflowScrolling:'touch'}}>
         <table style={{width:'100%',borderCollapse:'collapse',minWidth:750}}>
           <thead><tr>
             <SortHeader col="name" label="Event" />

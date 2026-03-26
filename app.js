@@ -906,6 +906,7 @@ function App() {
   );
 }
 function Dashboard({ data, save, nav, season, team, events, activeAthletes, featuredMeet, currentMeet, getAthletePR, checkQualifying }) {
+  const [followUpsExpanded, setFollowUpsExpanded] = useState(true);
   const today = new Date().toISOString().split('T')[0];
   const todayObj = new Date(today+'T12:00:00');
   const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -1004,9 +1005,12 @@ function Dashboard({ data, save, nav, season, team, events, activeAthletes, feat
         const followUps = (data.medicalNotes||[]).filter(n=>n.needFollowUp&&!n.followUpResolution);
         if(followUps.length===0) return null;
         return (
-          <div style={{...S.card, padding:'12px 14px', borderLeft:`4px solid ${C.accent}`}}>
-            <h2 style={{...S.h2,marginBottom:8,fontSize:14}}>Follow-Ups Needed <span style={{fontSize:12,fontWeight:500,color:C.danger,marginLeft:6}}>{followUps.length}</span></h2>
-            {followUps.sort((a,b)=>(b.entryDate||'').localeCompare(a.entryDate||'')).map(n=>{
+          <div style={{...S.card, padding:'12px 14px', borderLeft:`4px solid ${C.danger}`}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',marginBottom:followUpsExpanded?8:0}} onClick={()=>setFollowUpsExpanded(!followUpsExpanded)}>
+              <h2 style={{...S.h2,marginBottom:0,fontSize:14,color:C.danger}}>Follow-Ups Needed <span style={{fontSize:12,fontWeight:700,color:C.danger,marginLeft:4}}>{followUps.length}</span></h2>
+              <span style={{fontSize:12,color:C.danger,fontWeight:600}}>{followUpsExpanded?'▲':'▼'}</span>
+            </div>
+            {followUpsExpanded && followUps.sort((a,b)=>(b.entryDate||'').localeCompare(a.entryDate||'')).map(n=>{
               const ath = data.athletes.find(a=>a.id===n.athleteId);
               if(!ath) return null;
               const typeColor = n.type==='Injury'?C.danger:n.type==='Illness'?'#b8860b':C.blue;

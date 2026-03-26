@@ -388,8 +388,8 @@ const exTotals = (exercises) => {
   return parts.join(' + ');
 };
 const makeStyles = (C) => ({
-  app: { fontFamily:"'Rubik','Inter',system-ui,-apple-system,sans-serif", background:C.bg, minHeight:'100vh', color:C.text, letterSpacing:'-0.01em', overflowX:'hidden' },
-  container: { maxWidth:1100, margin:'0 auto', padding:'16px 20px', width:'100%', boxSizing:'border-box', overflowX:'hidden' },
+  app: { fontFamily:"'Rubik','Inter',system-ui,-apple-system,sans-serif", background:C.bg, minHeight:'100vh', color:C.text, letterSpacing:'-0.01em' },
+  container: { maxWidth:1100, margin:'0 auto', padding:'16px 20px', width:'100%', boxSizing:'border-box' },
   containerDesktop: { marginLeft:250, maxWidth:'none', padding:'16px 28px' },
   card: { background:C.surface, borderRadius:8, padding:'14px 18px', marginBottom:10, border:`1px solid ${C.border}`, maxWidth:'100%', boxSizing:'border-box' },
   btn: { padding:'8px 16px', borderRadius:6, border:'none', cursor:'pointer', fontWeight:600, fontSize:12, transition:'opacity 0.15s', lineHeight:'18px', textTransform:'uppercase', letterSpacing:'0.04em' },
@@ -1935,6 +1935,8 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
   const [progressForm, setProgressForm] = useState({});
   const [noteForm, setNoteForm] = useState({ type:'Other', effectiveDate:'', details:'', trainerCheckIn:false, trainerDate:'', trainerDetails:'', needFollowUp:false, followUpName:'', followUpContact:'', followUpLastDate:'', followUpResolution:'' });
   const [editForm, setEditForm] = useState({});
+  const [editPracticeDay, setEditPracticeDay] = useState(null);
+  const [practiceEditItems, setPracticeEditItems] = useState([]);
   const athlete = data.athletes.find(a=>a.id===athleteId);
   if(!athlete) return <div style={S.card}><p>Athlete not found</p><button style={S.backLink} onClick={()=>nav('athletes')}>{"<- "}Back</button></div>;
   const groups = data.workoutGroups || [];
@@ -2188,6 +2190,7 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
       {(()=>{
         const groups = data.workoutGroups||[];
         const categories = data.workoutCategories||[];
+        const library = data.workoutLibrary||[];
         const catColors = {}; categories.forEach(cc=>{catColors[cc.name]=cc.color||'#8c929e';});
         const today = new Date().toISOString().split('T')[0];
         const todayDate = new Date(today+'T12:00:00');
@@ -2201,6 +2204,27 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
         if(!myGroups.length) return null;
         const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
         const todayDay = dayNames[dow];
+        const overrides = week.athleteOverrides||[];
+        const getOverride = (day) => overrides.find(o=>o.athleteId===athleteId&&o.day===day);
+        const saveOverride = (day, items, isRest) => {
+          const existing = overrides.filter(o=>!(o.athleteId===athleteId&&o.day===day));
+          existing.push({athleteId, day, items:items||[], isRest:!!isRest});
+          save({...data, workoutPlans:(data.workoutPlans||[]).map(w=>w.id===week.id?{...w,athleteOverrides:existing}:w)});
+        };
+        const clearOverride = (day) => {
+          save({...data, workoutPlans:(data.workoutPlans||[]).map(w=>w.id===week.id?{...w,athleteOverrides:(w.athleteOverrides||[]).filter(o=>!(o.athleteId===athleteId&&o.day===day))}:w)});
+          setEditPracticeDay(null);
+        };
+        const openDayEditor = (day, groupId, level) => {
+          const ov = getOverride(day);
+          if(ov){
+            setPracticeEditItems(ov.items.map(it=>({...it})));
+          } else {
+            const groupItems = (week.entries||[]).filter(e=>e.groupId===groupId&&e.level===level&&e.day===day);
+            setPracticeEditItems(groupItems.map(it=>({name:it.name||it.workoutName||'',category:it.category||'',mileage:it.mileage||'',type:it.type||''})));
+          }
+          setEditPracticeDay(day);
+        };
         return (
           <div style={S.card}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
@@ -2211,21 +2235,22 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
               const group = groups.find(g=>g.id===ag.groupId);
               if(!group) return null;
               const level = ag.level||group.levels[0]||'Level 1';
-              const hasAny = ['Mon','Tue','Wed','Thu','Fri','Sat'].some(day=>{
-                return (week.entries||[]).some(e=>e.groupId===ag.groupId&&e.level===level&&e.day===day) || (week.restDays||[]).some(rd=>rd.groupId===ag.groupId&&rd.level===level&&rd.day===day);
-              });
-              if(!hasAny) return null;
               return (
                 <div key={ag.groupId+level} style={{marginBottom:8}}>
                   <div style={{fontSize:11,fontWeight:700,color:C.accent,textTransform:'uppercase',marginBottom:4}}>{group.name}{group.levels.length>1?' - '+level:''}</div>
                   <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:4}}>
                     {['Mon','Tue','Wed','Thu','Fri','Sat'].map(day=>{
-                      const items = (week.entries||[]).filter(e=>e.groupId===ag.groupId&&e.level===level&&e.day===day);
-                      const rest = (week.restDays||[]).some(rd=>rd.groupId===ag.groupId&&rd.level===level&&rd.day===day);
+                      const ov = getOverride(day);
+                      const hasOverride = !!ov;
+                      const items = hasOverride ? ov.items : (week.entries||[]).filter(e=>e.groupId===ag.groupId&&e.level===level&&e.day===day);
+                      const rest = hasOverride ? ov.isRest : (week.restDays||[]).some(rd=>rd.groupId===ag.groupId&&rd.level===level&&rd.day===day);
                       const isToday = day===todayDay;
+                      const isEditing = editPracticeDay===day;
                       return (
-                        <div key={day} style={{padding:'5px 4px',borderRadius:4,background:isToday?C.accentMuted:C.bg,border:isToday?`2px solid ${C.accent}`:`1px solid ${C.borderLight}`,minHeight:48,fontSize:10}}>
-                          <div style={{fontWeight:700,color:isToday?C.accent:C.textMuted,marginBottom:2,textAlign:'center',fontSize:9}}>{day}</div>
+                        <div key={day} style={{padding:'5px 4px',borderRadius:4,background:isToday?C.accentMuted:hasOverride?'rgba(201,106,31,0.06)':C.bg,border:isEditing?`2px solid ${C.accent}`:isToday?`2px solid ${C.accent}`:hasOverride?`1px dashed ${C.accent}`:`1px solid ${C.borderLight}`,minHeight:48,fontSize:10,cursor:'pointer',position:'relative'}} onClick={()=>openDayEditor(day,ag.groupId,level)}>
+                          <div style={{fontWeight:700,color:isToday?C.accent:C.textMuted,marginBottom:2,textAlign:'center',fontSize:9}}>
+                            {day}{hasOverride&&<span style={{color:C.accent,marginLeft:2}} title="Custom">*</span>}
+                          </div>
                           {rest && <div style={{color:C.success,fontStyle:'italic',textAlign:'center',fontSize:9}}>Rest</div>}
                           {items.map((it,ii)=>(
                             <div key={ii} style={{marginBottom:1}}>
@@ -2241,6 +2266,30 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
                 </div>
               );
             })}
+            {editPracticeDay && (
+              <div style={{marginTop:8,padding:'12px 14px',borderRadius:6,border:`1px solid ${C.accent}`,background:C.accentMuted}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                  <span style={{fontSize:13,fontWeight:700,color:C.accent}}>{editPracticeDay} - {athDisplay(athlete)}</span>
+                  <div style={{display:'flex',gap:4}}>
+                    {getOverride(editPracticeDay)&&<button style={{...S.btn,...S.btnSecondary,fontSize:10,padding:'3px 8px'}} onClick={()=>clearOverride(editPracticeDay)}>Reset to Group</button>}
+                    <button style={{background:'none',border:'none',color:C.textMuted,cursor:'pointer',fontSize:14}} onClick={()=>setEditPracticeDay(null)}>✕</button>
+                  </div>
+                </div>
+                {practiceEditItems.map((it,i)=>(
+                  <div key={i} style={{display:'flex',gap:4,alignItems:'center',marginBottom:4}}>
+                    <input style={{...S.input,flex:2,fontSize:11,padding:'4px 8px'}} placeholder="Workout name" value={it.name} onChange={e=>{const c=[...practiceEditItems];c[i]={...c[i],name:e.target.value};setPracticeEditItems(c);}} />
+                    <input style={{...S.input,flex:1,fontSize:11,padding:'4px 8px'}} placeholder="Category" value={it.category||''} onChange={e=>{const c=[...practiceEditItems];c[i]={...c[i],category:e.target.value};setPracticeEditItems(c);}} />
+                    <input style={{...S.input,width:50,fontSize:11,padding:'4px 8px'}} placeholder="mi" value={it.mileage||''} onChange={e=>{const c=[...practiceEditItems];c[i]={...c[i],mileage:e.target.value};setPracticeEditItems(c);}} />
+                    <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12}} onClick={()=>{const c=[...practiceEditItems];c.splice(i,1);setPracticeEditItems(c);}}>✕</button>
+                  </div>
+                ))}
+                <div style={{display:'flex',gap:6,marginTop:6}}>
+                  <button style={{...S.btn,...S.btnSecondary,fontSize:10,padding:'4px 10px'}} onClick={()=>setPracticeEditItems([...practiceEditItems,{name:'',category:'',mileage:''}])}>+ Add Workout</button>
+                  <button style={{...S.btn,...S.btnSecondary,fontSize:10,padding:'4px 10px'}} onClick={()=>{saveOverride(editPracticeDay,[],true);setEditPracticeDay(null);}}>Set Rest Day</button>
+                  <button style={{...S.btn,...S.btnPrimary,fontSize:10,padding:'4px 10px',marginLeft:'auto'}} onClick={()=>{saveOverride(editPracticeDay,practiceEditItems.filter(it=>it.name.trim()),false);setEditPracticeDay(null);}}>Save</button>
+                </div>
+              </div>
+            )}
           </div>
         );
       })()}

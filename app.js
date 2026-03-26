@@ -1690,6 +1690,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                   })}
                 </tbody>
               </table>
+              </div>
             )}
           </div>
         );

@@ -1563,6 +1563,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
   const [genderFilter, setGenderFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [showEntryModal, setShowEntryModal] = useState(null);
+  const [editEntryIdx, setEditEntryIdx] = useState(null);
   const [dragIdx, setDragIdx] = useState(null);
   const [dragOverIdx, setDragOverIdx] = useState(null);
   const meet = data.meets.find(m=>m.id===meetId);
@@ -1653,14 +1654,14 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                 <span style={{fontSize:10,color:C.textMuted}}>{me.evt.eventType} - {me.evt.entryType}</span>
               </div>
               <div style={{display:'flex',gap:6}}>
-                <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'6px 14px'}} onClick={()=>setShowEntryModal(me.eventId)}>+ Entry</button>
+                <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'6px 14px'}} onClick={()=>{setEditEntryIdx(null);setShowEntryModal(me.eventId);}}>+ Entry</button>
                 {hasEntries && <button style={{...S.btn,...S.btnPrimary,fontSize:12,padding:'6px 14px'}} onClick={()=>goToRecord(me)}>Record</button>}
               </div>
             </div>
             {hasEntries && (
               <div style={{overflowX:'auto',WebkitOverflowScrolling:'touch'}}>
               <table style={{width:'100%',borderCollapse:'collapse',minWidth:400}}>
-                <thead><tr><th style={S.th}>Athlete</th><th style={S.th}>PR</th><th style={S.th}>Goal</th><th style={{...S.th,width:40}}></th></tr></thead>
+                <thead><tr><th style={S.th}>Athlete</th><th style={S.th}>PR</th><th style={S.th}>Goal</th><th style={{...S.th,width:70}}></th></tr></thead>
                 <tbody>
                   {entries.map((en,ei) => {
                     if(me.evt.entryType === 'Relay') {
@@ -1672,7 +1673,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                             <td style={S.td}>{ai===0 && <span style={{fontSize:10,color:C.accent,fontWeight:700,marginRight:6}}>Relay #{ei+1}</span>}{ath?athDisplay(ath):'-'}</td>
                             <td style={S.td}>{pr ? formatTime(pr.timeMs) : '-'}</td>
                             <td style={S.td}>{a.goalMs ? formatTime(a.goalMs) : '-'}</td>
-                            <td style={S.td}>{ai===0 && <button style={{...S.btn,...S.btnDanger,fontSize:11,padding:'3px 8px'}} onClick={()=>saveEntries(me.eventId,entries.filter((_,i)=>i!==ei))}>✕</button>}</td>
+                            <td style={S.td}>{ai===0 && <div style={{display:'flex',gap:4}}><button style={{...S.btn,...S.btnSecondary,fontSize:10,padding:'2px 6px'}} onClick={()=>{setEditEntryIdx(ei);setShowEntryModal(me.eventId);}}>Edit</button><button style={{...S.btn,...S.btnDanger,fontSize:10,padding:'2px 6px'}} onClick={()=>saveEntries(me.eventId,entries.filter((_,i)=>i!==ei))}>✕</button></div>}</td>
                           </tr>
                         );
                       });
@@ -1684,7 +1685,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                         <td style={{...S.td,fontWeight:500}}>{ath?athDisplay(ath):'-'}</td>
                         <td style={S.td}>{pr ? (isFieldEvent(me.evt) ? fieldToStr(pr.ft,pr.inch,pr.qtr) : formatTime(pr.timeMs)) : '-'}</td>
                         <td style={S.td}>{en.goalMs ? formatTime(en.goalMs) : '-'}</td>
-                        <td style={S.td}><button style={{...S.btn,...S.btnDanger,fontSize:11,padding:'3px 8px'}} onClick={()=>saveEntries(me.eventId,entries.filter((_,i)=>i!==ei))}>✕</button></td>
+                        <td style={S.td}><div style={{display:'flex',gap:4}}><button style={{...S.btn,...S.btnSecondary,fontSize:10,padding:'2px 6px'}} onClick={()=>{setEditEntryIdx(ei);setShowEntryModal(me.eventId);}}>Edit</button><button style={{...S.btn,...S.btnDanger,fontSize:10,padding:'2px 6px'}} onClick={()=>saveEntries(me.eventId,entries.filter((_,i)=>i!==ei))}>✕</button></div></td>
                       </tr>
                     );
                   })}
@@ -1696,14 +1697,15 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
         );
       })}
       {!filtered.length && <div style={{...S.card,textAlign:'center',padding:20,color:C.textMuted}}>No events match your filters.</div>}
-      <MeetEntryModal data={data} save={save} meetId={meetId} eventId={showEntryModal} events={events} open={!!showEntryModal} onClose={()=>setShowEntryModal(null)} getAthletePR={getAthletePR} saveEntries={saveEntries} />
+      <MeetEntryModal data={data} save={save} meetId={meetId} eventId={showEntryModal} events={events} open={!!showEntryModal} onClose={()=>{setShowEntryModal(null);setEditEntryIdx(null);}} getAthletePR={getAthletePR} saveEntries={saveEntries} editEntryIdx={editEntryIdx} />
     </div>
   );
 }
-function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, getAthletePR, saveEntries }) {
+function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, getAthletePR, saveEntries, editEntryIdx }) {
   const [entries, setEntries] = useState([{ athleteId:'', search:'', goalMin:0, goalSec:0 }]);
   const [relayAthletes, setRelayAthletes] = useState([{ athleteId:'', search:'', goalMin:0, goalSec:0 },{ athleteId:'', search:'', goalMin:0, goalSec:0 },{ athleteId:'', search:'', goalMin:0, goalSec:0 },{ athleteId:'', search:'', goalMin:0, goalSec:0 }]);
   const [focusField, setFocusField] = useState('');
+  const [initialized, setInitialized] = useState(null);
   const blurRef = useRef(null);
   const handleFocus = (f) => { clearTimeout(blurRef.current); setFocusField(f); };
   const handleBlur = () => { blurRef.current = setTimeout(()=>setFocusField(''), 200); };
@@ -1713,6 +1715,27 @@ function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, ge
   const meet = data.meets.find(m=>m.id===meetId);
   const me = ((meet||{}).events||[]).find(e=>e.eventId===eventId);
   const existingEntries = (me||{}).entries || [];
+  const isEditing = editEntryIdx != null && editEntryIdx >= 0 && editEntryIdx < existingEntries.length;
+  const editEntry = isEditing ? existingEntries[editEntryIdx] : null;
+  const editKey = eventId + '-' + editEntryIdx;
+  if(initialized !== editKey) {
+    if(isEditing && evt.entryType==='Relay' && editEntry && editEntry.athletes) {
+      const ra = editEntry.athletes.map(a=>{
+        const ath = data.athletes.find(at=>at.id===a.athleteId);
+        const ms = a.goalMs||0;
+        return {athleteId:a.athleteId, search:ath?athDisplay(ath):'', goalMin:Math.floor(ms/60000)+'', goalSec:((ms%60000)/1000).toFixed(2)};
+      });
+      setRelayAthletes(ra);
+    } else if(isEditing && editEntry && editEntry.athleteId) {
+      const ath = data.athletes.find(a=>a.id===editEntry.athleteId);
+      const ms = editEntry.goalMs||0;
+      setEntries([{athleteId:editEntry.athleteId, search:ath?athDisplay(ath):'', goalMin:Math.floor(ms/60000)+'', goalSec:((ms%60000)/1000).toFixed(2)}]);
+    } else if(!isEditing) {
+      setEntries([{ athleteId:'', search:'', goalMin:0, goalSec:0 }]);
+      setRelayAthletes([{ athleteId:'', search:'', goalMin:0, goalSec:0 },{ athleteId:'', search:'', goalMin:0, goalSec:0 },{ athleteId:'', search:'', goalMin:0, goalSec:0 },{ athleteId:'', search:'', goalMin:0, goalSec:0 }]);
+    }
+    setInitialized(editKey);
+  }
   const activeAthletes = data.athletes.filter(a=>a.active!==false);
   const genderMatch = activeAthletes.filter(a=>!evt.gender || evt.gender==='Mixed' || a.gender===(evt.gender==='Boy'?'M':'F'));
   const athName = (a) => athDisplay(a);
@@ -1720,15 +1743,29 @@ function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, ge
     const valid = entries.filter(en=>en.athleteId);
     if(!valid.length) return;
     const newEntries = valid.map(en=>({ athleteId:en.athleteId, goalMs:parseTimeToMs(en.goalMin, en.goalSec) }));
-    saveEntries(eventId, [...existingEntries, ...newEntries]);
+    if(isEditing) {
+      const updated = [...existingEntries];
+      updated[editEntryIdx] = newEntries[0];
+      saveEntries(eventId, updated);
+    } else {
+      saveEntries(eventId, [...existingEntries, ...newEntries]);
+    }
     setEntries([{ athleteId:'', search:'', goalMin:0, goalSec:0 }]);
+    setInitialized(null);
     onClose();
   };
   const saveRelay = () => {
     const athletes = relayAthletes.filter(a=>a.athleteId).map(a=>({ athleteId:a.athleteId, goalMs:parseTimeToMs(a.goalMin,a.goalSec) }));
     if(!athletes.length) return;
-    saveEntries(eventId, [...existingEntries, { athletes }]);
+    if(isEditing) {
+      const updated = [...existingEntries];
+      updated[editEntryIdx] = { athletes };
+      saveEntries(eventId, updated);
+    } else {
+      saveEntries(eventId, [...existingEntries, { athletes }]);
+    }
     setRelayAthletes([{ athleteId:'', search:'', goalMin:0, goalSec:0 },{ athleteId:'', search:'', goalMin:0, goalSec:0 },{ athleteId:'', search:'', goalMin:0, goalSec:0 },{ athleteId:'', search:'', goalMin:0, goalSec:0 }]);
+    setInitialized(null);
     onClose();
   };
   const filteredAthletes = (search, excludeIds=[]) => genderMatch.filter(a=>
@@ -1762,31 +1799,31 @@ function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, ge
     );
   };
   return (
-    <Modal open={open} onClose={onClose} width={550}>
-      <h2 style={S.h2}>{getEventLabel(evt)}</h2>
+    <Modal open={open} onClose={()=>{setInitialized(null);onClose();}} width={550}>
+      <h2 style={S.h2}>{isEditing?'Edit':'Add'} - {getEventLabel(evt)}</h2>
       <p style={{fontSize:13,color:C.textSecondary,marginBottom:16}}>{(meet||{}).name}</p>
       {evt.entryType === 'Relay' ? (
         <div>
-          <div style={{fontSize:13,fontWeight:600,color:C.textSecondary,marginBottom:10}}>Relay Entry</div>
+          <div style={{fontSize:13,fontWeight:600,color:C.textSecondary,marginBottom:10}}>{isEditing?'Edit Relay':'Relay Entry'}</div>
           {relayAthletes.map((ra,i) => {
             const usedIds = relayAthletes.filter((_,j)=>j!==i).map(r=>r.athleteId).filter(Boolean);
             return renderRow(ra, i, 'relay', relayAthletes, setRelayAthletes, usedIds);
           })}
           <div style={{display:'flex',gap:8,marginTop:10}}>
             <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'8px 16px'}} onClick={()=>setRelayAthletes([...relayAthletes,{athleteId:'',search:'',goalMin:0,goalSec:0}])}>+ Leg</button>
-            <button style={{...S.btn,...S.btnPrimary,fontSize:13,padding:'10px 20px'}} onClick={saveRelay}>Add Relay</button>
+            <button style={{...S.btn,...S.btnPrimary,fontSize:13,padding:'10px 20px'}} onClick={saveRelay}>{isEditing?'Save Changes':'Add Relay'}</button>
           </div>
         </div>
       ) : (
         <div>
-          <div style={{fontSize:13,fontWeight:600,color:C.textSecondary,marginBottom:10}}>Entries</div>
+          <div style={{fontSize:13,fontWeight:600,color:C.textSecondary,marginBottom:10}}>{isEditing?'Edit Entry':'Entries'}</div>
           {entries.map((en,i) => {
-            const usedIds = [...existingEntries.map(e=>e.athleteId).filter(Boolean), ...entries.filter((_,j)=>j!==i).map(e=>e.athleteId).filter(Boolean)];
+            const usedIds = [...existingEntries.filter((_,j)=>!isEditing||j!==editEntryIdx).map(e=>e.athleteId).filter(Boolean), ...entries.filter((_,j)=>j!==i).map(e=>e.athleteId).filter(Boolean)];
             return renderRow(en, i, 'indiv', entries, setEntries, usedIds);
           })}
           <div style={{display:'flex',gap:8,marginTop:10}}>
-            <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'8px 16px'}} onClick={()=>setEntries([...entries,{athleteId:'',search:'',goalMin:0,goalSec:0}])}>+ Athlete</button>
-            <button style={{...S.btn,...S.btnPrimary,fontSize:13,padding:'10px 20px'}} onClick={saveIndividuals}>Add Entries</button>
+            {!isEditing && <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'8px 16px'}} onClick={()=>setEntries([...entries,{athleteId:'',search:'',goalMin:0,goalSec:0}])}>+ Athlete</button>}
+            <button style={{...S.btn,...S.btnPrimary,fontSize:13,padding:'10px 20px'}} onClick={saveIndividuals}>{isEditing?'Save Changes':'Add Entries'}</button>
           </div>
         </div>
       )}
@@ -2225,11 +2262,50 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
           }
           setEditPracticeDay(day);
         };
+        const calcAthleteWeekMi = (w) => {
+          if(!w) return 0;
+          const ov = w.athleteOverrides||[];
+          let total = 0;
+          ['Mon','Tue','Wed','Thu','Fri','Sat'].forEach(day=>{
+            const athleteOv = ov.find(o=>o.athleteId===athleteId&&o.day===day);
+            let items = [];
+            if(athleteOv) {
+              if(athleteOv.isRest) return;
+              items = athleteOv.items||[];
+            } else {
+              myGroups.forEach(ag=>{
+                const lv = ag.level||((groups.find(g=>g.id===ag.groupId)||{}).levels||['Level 1'])[0];
+                items = items.concat((w.entries||[]).filter(e=>e.groupId===ag.groupId&&e.level===lv&&e.day===day));
+              });
+            }
+            items.forEach(e=>{
+              total += parseFloat(e.mileage)||0;
+              const m = parseFloat(e.distance)||0;
+              if(m>0) total += m/1609.34;
+              (e.exercises||[]).forEach(ex=>{
+                total += parseFloat(ex.mileage)||0;
+                const em = parseFloat(ex.distance)||0;
+                if(em>0) total += em/1609.34;
+              });
+            });
+          });
+          return total;
+        };
+        const allPlans = (data.workoutPlans||[]).sort((a,b)=>(padDate(a.startDate)||'').localeCompare(padDate(b.startDate)||''));
+        const weekIdx = allPlans.findIndex(w=>w.id===week.id);
+        const prevWeek = weekIdx>0 ? allPlans[weekIdx-1] : null;
+        const thisWeekMi = calcAthleteWeekMi(week);
+        const prevWeekMi = calcAthleteWeekMi(prevWeek);
+        const miPctDiff = prevWeekMi>0 ? ((thisWeekMi-prevWeekMi)/prevWeekMi)*100 : null;
         return (
           <div style={S.card}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
               <h2 style={{...S.h2,marginBottom:0}}>This Week's Practice</h2>
-              <button style={{...S.btn,...S.btnSecondary,fontSize:10,padding:'4px 10px'}} onClick={()=>nav('practicePlans',{weekId:week.id})}>View Full Week</button>
+              <div style={{display:'flex',alignItems:'center',gap:6}}>
+                {thisWeekMi>0&&<span style={{fontSize:12,color:C.accent,fontWeight:700,background:C.accentMuted,padding:'3px 10px',borderRadius:12}}>{thisWeekMi.toFixed(1)} mi</span>}
+                {thisWeekMi>0&&miPctDiff!==null&&<span style={{fontSize:10,fontWeight:600,color:miPctDiff>0?C.success:miPctDiff<0?C.danger:C.textMuted,padding:'2px 6px',borderRadius:10,background:miPctDiff>0?C.successMuted:miPctDiff<0?C.dangerMuted:C.surface2}}>{miPctDiff>0?'▲':miPctDiff<0?'▼':'='} {Math.abs(miPctDiff).toFixed(0)}%</span>}
+                <button style={{...S.btn,...S.btnSecondary,fontSize:10,padding:'4px 10px'}} onClick={()=>nav('practicePlans',{weekId:week.id})}>View Full Week</button>
+              </div>
             </div>
             {myGroups.map(ag=>{
               const group = groups.find(g=>g.id===ag.groupId);
@@ -2246,10 +2322,14 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
                       const rest = hasOverride ? ov.isRest : (week.restDays||[]).some(rd=>rd.groupId===ag.groupId&&rd.level===level&&rd.day===day);
                       const isToday = day===todayDay;
                       const isEditing = editPracticeDay===day;
+                      const dayMi = rest?0:items.reduce((t,e)=>{let s=parseFloat(e.mileage)||0;(e.exercises||[]).forEach(ex=>{s+=parseFloat(ex.mileage)||0;});return t+s;},0);
                       return (
                         <div key={day} style={{padding:'5px 4px',borderRadius:4,background:isToday?C.accentMuted:hasOverride?'rgba(201,106,31,0.06)':C.bg,border:isEditing?`2px solid ${C.accent}`:isToday?`2px solid ${C.accent}`:hasOverride?`1px dashed ${C.accent}`:`1px solid ${C.borderLight}`,minHeight:48,fontSize:10,cursor:'pointer',position:'relative'}} onClick={()=>openDayEditor(day,ag.groupId,level)}>
-                          <div style={{fontWeight:700,color:isToday?C.accent:C.textMuted,marginBottom:2,textAlign:'center',fontSize:9}}>
-                            {day}{hasOverride&&<span style={{color:C.accent,marginLeft:2}} title="Custom">*</span>}
+                          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:2}}>
+                            <span style={{fontWeight:700,color:isToday?C.accent:C.textMuted,fontSize:9}}>
+                              {day}{hasOverride&&<span style={{color:C.accent,marginLeft:1}} title="Custom">*</span>}
+                            </span>
+                            {dayMi>0&&<span style={{fontSize:8,fontWeight:700,color:C.accent}}>{dayMi.toFixed(1)}</span>}
                           </div>
                           {rest && <div style={{color:C.success,fontStyle:'italic',textAlign:'center',fontSize:9}}>Rest</div>}
                           {items.map((it,ii)=>(

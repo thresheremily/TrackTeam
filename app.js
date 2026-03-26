@@ -1,8 +1,5 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-
-// --- DEFAULT EVENTS (Pre-loaded) ---
+const { useState, useEffect, useCallback, useRef, useMemo } = React;
 const DEFAULT_EVENTS = [
-  // Track - Individual - Shared distances
   { name:'100m', eventType:'Track', entryType:'Individual', gender:'Boy', trackType:'Both', measurableType:'Time' },
   { name:'100m', eventType:'Track', entryType:'Individual', gender:'Girl', trackType:'Both', measurableType:'Time' },
   { name:'200m', eventType:'Track', entryType:'Individual', gender:'Boy', trackType:'Both', measurableType:'Time' },
@@ -11,27 +8,22 @@ const DEFAULT_EVENTS = [
   { name:'400m', eventType:'Track', entryType:'Individual', gender:'Girl', trackType:'Both', measurableType:'Time' },
   { name:'800m', eventType:'Track', entryType:'Individual', gender:'Boy', trackType:'Both', measurableType:'Time' },
   { name:'800m', eventType:'Track', entryType:'Individual', gender:'Girl', trackType:'Both', measurableType:'Time' },
-  // Track - Gender-specific distances
   { name:'1600m', eventType:'Track', entryType:'Individual', gender:'Boy', trackType:'Outdoor', measurableType:'Time' },
   { name:'1500m', eventType:'Track', entryType:'Individual', gender:'Girl', trackType:'Both', measurableType:'Time' },
   { name:'3200m', eventType:'Track', entryType:'Individual', gender:'Boy', trackType:'Outdoor', measurableType:'Time' },
   { name:'3000m', eventType:'Track', entryType:'Individual', gender:'Girl', trackType:'Both', measurableType:'Time' },
-  // Indoor specific
   { name:'1000m', eventType:'Track', entryType:'Individual', gender:'Boy', trackType:'Indoor', measurableType:'Time' },
   { name:'1000m', eventType:'Track', entryType:'Individual', gender:'Girl', trackType:'Indoor', measurableType:'Time' },
   { name:'1600m', eventType:'Track', entryType:'Individual', gender:'Girl', trackType:'Indoor', measurableType:'Time' },
   { name:'3200m', eventType:'Track', entryType:'Individual', gender:'Girl', trackType:'Indoor', measurableType:'Time' },
-  // Hurdles
   { name:'110m Hurdles', eventType:'Track', entryType:'Individual', gender:'Boy', trackType:'Outdoor', measurableType:'Time' },
   { name:'100m Hurdles', eventType:'Track', entryType:'Individual', gender:'Girl', trackType:'Outdoor', measurableType:'Time' },
   { name:'55m Hurdles', eventType:'Track', entryType:'Individual', gender:'Boy', trackType:'Indoor', measurableType:'Time' },
   { name:'55m Hurdles', eventType:'Track', entryType:'Individual', gender:'Girl', trackType:'Indoor', measurableType:'Time' },
   { name:'400m Hurdles', eventType:'Track', entryType:'Individual', gender:'Boy', trackType:'Outdoor', measurableType:'Time' },
   { name:'400m Hurdles', eventType:'Track', entryType:'Individual', gender:'Girl', trackType:'Outdoor', measurableType:'Time' },
-  // Steeplechase
   { name:'3000m Steeplechase', eventType:'Track', entryType:'Individual', gender:'Boy', trackType:'Outdoor', measurableType:'Time' },
   { name:'2000m Steeplechase', eventType:'Track', entryType:'Individual', gender:'Girl', trackType:'Outdoor', measurableType:'Time' },
-  // Relays
   { name:'4x100m', eventType:'Track', entryType:'Relay', gender:'Boy', trackType:'Both', measurableType:'Time' },
   { name:'4x100m', eventType:'Track', entryType:'Relay', gender:'Girl', trackType:'Both', measurableType:'Time' },
   { name:'4x400m', eventType:'Track', entryType:'Relay', gender:'Boy', trackType:'Both', measurableType:'Time' },
@@ -40,7 +32,6 @@ const DEFAULT_EVENTS = [
   { name:'4x800m', eventType:'Track', entryType:'Relay', gender:'Girl', trackType:'Both', measurableType:'Time' },
   { name:'4x200m', eventType:'Track', entryType:'Relay', gender:'Boy', trackType:'Indoor', measurableType:'Time' },
   { name:'4x200m', eventType:'Track', entryType:'Relay', gender:'Girl', trackType:'Indoor', measurableType:'Time' },
-  // Field - Jumps
   { name:'Long Jump', eventType:'Field', entryType:'Individual', gender:'Boy', trackType:'Both', measurableType:'Length' },
   { name:'Long Jump', eventType:'Field', entryType:'Individual', gender:'Girl', trackType:'Both', measurableType:'Length' },
   { name:'Triple Jump', eventType:'Field', entryType:'Individual', gender:'Boy', trackType:'Both', measurableType:'Length' },
@@ -49,7 +40,6 @@ const DEFAULT_EVENTS = [
   { name:'High Jump', eventType:'Field', entryType:'Individual', gender:'Girl', trackType:'Both', measurableType:'Height' },
   { name:'Pole Vault', eventType:'Field', entryType:'Individual', gender:'Boy', trackType:'Both', measurableType:'Height' },
   { name:'Pole Vault', eventType:'Field', entryType:'Individual', gender:'Girl', trackType:'Both', measurableType:'Height' },
-  // Field - Throws
   { name:'Shot Put', eventType:'Field', entryType:'Individual', gender:'Boy', trackType:'Both', measurableType:'Length' },
   { name:'Shot Put', eventType:'Field', entryType:'Individual', gender:'Girl', trackType:'Both', measurableType:'Length' },
   { name:'Discus', eventType:'Field', entryType:'Individual', gender:'Boy', trackType:'Outdoor', measurableType:'Length' },
@@ -57,13 +47,10 @@ const DEFAULT_EVENTS = [
   { name:'Javelin', eventType:'Field', entryType:'Individual', gender:'Boy', trackType:'Outdoor', measurableType:'Length' },
   { name:'Javelin', eventType:'Field', entryType:'Individual', gender:'Girl', trackType:'Outdoor', measurableType:'Length' },
 ].map((e,i) => ({ id: `evt_${i}`, ...e, qualifyingStandards: [], schoolRecords: [] }));
-
-// --- CONSTANTS ---
 const INDOOR_LAP = 200;
 const OUTDOOR_LAP = 400;
 const CLOSE_THRESHOLD = 0.03;
 const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat'];
-
 const EXERCISE_COLUMNS = [
   { key:'exercise', label:'Exercise', width:'flex', type:'text', placeholder:'e.g. Planks' },
   { key:'type', label:'Type', width:85, type:'text', placeholder:'e.g. Core' },
@@ -74,7 +61,6 @@ const EXERCISE_COLUMNS = [
   { key:'weight', label:'Wt (lbs)', width:65, type:'text', placeholder:'25' },
   { key:'effort', label:'Effort', width:60, type:'text', placeholder:'80%' },
 ];
-
 const ATTENDANCE_STATUSES = [
   { key:'present', label:'Present', color:'#25763b', icon:'✓' },
   { key:'absent', label:'Absent', color:'#c53030', icon:'✗' },
@@ -82,11 +68,8 @@ const ATTENDANCE_STATUSES = [
   { key:'late', label:'Late', color:'#2b6cb0', icon:'⌚' },
   { key:'signedout', label:'Signed Out', color:'#6b46c1', icon:'→' },
 ];
-
-// --- HELPERS ---
 const uid = () => Math.random().toString(36).substr(2,9);
 const padDate = (d) => { if(!d) return ''; const s=d+''; if(s.includes('/')) { const p=s.split('/'); if(p.length===3) return `${p[2]}-${p[0].padStart(2,'0')}-${p[1].padStart(2,'0')}`; } const p=s.split('-'); if(p.length===3&&p[0].length===4) return `${p[0]}-${p[1].padStart(2,'0')}-${p[2].padStart(2,'0')}`; return s; };
-
 const formatTime = (ms) => {
   if(!ms && ms!==0) return "--";
   const totalSec = Math.floor(ms/1000);
@@ -95,9 +78,7 @@ const formatTime = (ms) => {
   const centis = Math.floor((ms%1000)/10);
   return `${min}:${String(sec).padStart(2,'0')}.${String(centis).padStart(2,'0')}`;
 };
-
 const parseTimeToMs = (min, sec) => (parseInt(min||0)*60 + parseFloat(sec||0)) * 1000;
-
 const formatDiff = (ms) => {
   const abs = Math.abs(ms);
   const sign = ms >= 0 ? '+' : '-';
@@ -108,7 +89,6 @@ const formatDiff = (ms) => {
   if(min > 0) return `${sign}${min}:${String(sec).padStart(2,'0')}.${String(centis).padStart(2,'0')}`;
   return `${sign}${sec}.${String(centis).padStart(2,'0')}`;
 };
-
 const fieldToStr = (ft, inch, qtr) => `${ft}' ${parseFloat(inch) + parseFloat(qtr)}"`;
 const fieldToInches = (ft, inch, qtr) => parseInt(ft)*12 + parseInt(inch) + parseFloat(qtr);
 const inchesToField = (total) => {
@@ -118,24 +98,19 @@ const inchesToField = (total) => {
   const qtr = Math.round((rem - inch)*4)/4;
   return { ft, inch, qtr };
 };
-
 const isFieldEvent = (evt) => (evt||{}).eventType === 'Field' || (evt||{}).measurableType === 'Length' || (evt||{}).measurableType === 'Height';
 const isRelay = (evt) => (evt||{}).entryType === 'Relay';
 const isTrackEvent = (evt) => (evt||{}).eventType === 'Track';
-
-// --- ATHLETE NAME HELPERS ---
 const athLast = (a) => { if(a.lastName) return a.lastName; const p=(a.name||'').trim().split(/\s+/); return p.length>1?p[p.length-1]:p[0]||''; };
 const athFirst = (a) => { if(a.firstName) return a.firstName; const p=(a.name||'').trim().split(/\s+/); return p.length>1?p.slice(0,-1).join(' '):''; };
 const athPreferred = (a) => a.preferredName || athFirst(a);
 const athDisplay = (a, useLegal) => { const l=athLast(a), f=useLegal?athFirst(a):athPreferred(a); return l&&f?`${l}, ${f}`:l||f||'Unknown'; };
 const athSearch = (a, q) => { const ql=q.toLowerCase(); return athDisplay(a).toLowerCase().includes(ql) || athDisplay(a,true).toLowerCase().includes(ql) || (a.name||'').toLowerCase().includes(ql) || (a.preferredName||'').toLowerCase().includes(ql); };
-
 const getEventLabel = (evt) => {
   if(!evt) return '';
   const g = evt.gender === 'Boy' ? '(B)' : evt.gender === 'Girl' ? '(G)' : '(Mixed)';
   return `${evt.name} ${g}`;
 };
-
 const TRACK_DISTANCES = {
   '55m':55,'100m':100,'200m':200,'400m':400,'800m':800,'1000m':1000,
   '1500m':1500,'1600m':1600,'3000m':3000,'3200m':3200,
@@ -144,8 +119,6 @@ const TRACK_DISTANCES = {
   '4x100m':400,'4x200m':800,'4x400m':1600,'4x800m':3200,
 };
 const getDistance = (evt) => TRACK_DISTANCES[(evt||{}).name] || 0;
-
-// --- CSV PARSER ---
 const parseCSV = (text) => {
   const lines = text.trim().split(/\r?\n/);
   if(lines.length < 2) return { headers: [], rows: [] };
@@ -167,8 +140,6 @@ const parseCSV = (text) => {
   });
   return { headers, rows };
 };
-
-// --- FIREBASE DETECTION ---
 const HAS_FIREBASE = typeof firebase !== 'undefined' && !!firebase.apps;
 let db = null;
 let authService = null;
@@ -177,15 +148,9 @@ if (HAS_FIREBASE) {
   authService = firebase.auth();
   db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
 }
-
-// --- STORAGE ABSTRACTION ---
-// Uses localStorage for PWA, falls back to window.storage for Claude artifacts
-// Writes to BOTH so data survives across environments
 const appStorage = {
   async get(key) {
-    // Try localStorage first (works in PWA)
     try { const v = localStorage.getItem(key); if(v) return v; } catch(e) {}
-    // Try window.storage (works in Claude artifacts)
     try { if(window.storage&&window.storage.get) { const r = await window.storage.get(key); if(r&&r.value) { try { localStorage.setItem(key, r.value); } catch(e) {} return r.value; } } } catch(e) {}
     return null;
   },
@@ -194,8 +159,6 @@ const appStorage = {
     try { if(window.storage&&window.storage.set) await window.storage.set(key, value); } catch(e) {}
   }
 };
-
-// --- DEFAULT DATA ---
 const STORE_KEY = "trackapp-data";
 const defaultData = () => ({
   athletes: [],
@@ -227,8 +190,6 @@ const defaultData = () => ({
   medicalNotes: [],
   workoutOverrides: [],
 });
-
-// --- AUTH HOOK ---
 const useAuth = () => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -249,20 +210,16 @@ const useAuth = () => {
   const signOut = () => authService.signOut();
   return { user, loading, signUp, signIn, signInGoogle, signOut };
 };
-
-// --- TEAM HOOK ---
 const generateJoinCode = () => {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let code = 'TF-';
   for(let i=0;i<5;i++) code += chars[Math.floor(Math.random()*chars.length)];
   return code;
 };
-
 const useTeam = (userId) => {
   const [team, setTeam] = useState(null);
   const [teamLoading, setTeamLoading] = useState(true);
   const unsubRef = useRef([]);
-
   useEffect(() => {
     unsubRef.current.forEach(fn=>fn());
     unsubRef.current = [];
@@ -291,7 +248,6 @@ const useTeam = (userId) => {
     unsubRef.current.push(unsub1);
     return () => unsubRef.current.forEach(fn=>fn());
   }, [userId]);
-
   const createTeam = async (name, school, userId, userEmail, userName) => {
     const joinCode = generateJoinCode();
     const teamRef = await db.collection('teams').add({
@@ -303,7 +259,6 @@ const useTeam = (userId) => {
     await teamRef.collection('data').doc('main').set(defaultData());
     return teamRef.id;
   };
-
   const joinTeam = async (code, userId, userEmail, userName) => {
     const snap = await db.collection('teams').where('joinCode','==',code.toUpperCase().trim()).get();
     if(snap.empty) throw new Error('Invalid join code');
@@ -313,25 +268,19 @@ const useTeam = (userId) => {
     await db.collection('users').doc(userId).set({ teamId:teamDoc.id, email:userEmail, name:userName||userEmail }, { merge:true });
     return teamDoc.id;
   };
-
   const updateTeam = async (teamId, updates) => {
     if(!HAS_FIREBASE) {
-      // Persist locally by updating team state and saving to data store
       setTeam(prev => prev ? { ...prev, ...updates } : prev);
       try { await appStorage.set('trackapp-team', JSON.stringify({ ...team, ...updates })); } catch(e) { console.error(e); }
       return;
     }
     await db.collection('teams').doc(teamId).update(updates);
   };
-
   return { team, teamLoading, createTeam, joinTeam, updateTeam };
 };
-
-// --- DATA STORE HOOK ---
 const useStore = (teamId) => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-
   useEffect(() => {
     if(!teamId) { setLoading(false); return; }
     if(!HAS_FIREBASE) {
@@ -340,17 +289,11 @@ const useStore = (teamId) => {
           const r = await appStorage.get(STORE_KEY);
           if(r) {
             const loaded = JSON.parse(r);
-            // Migrate: add default events if none exist
             if(!loaded.events || loaded.events.length === 0) loaded.events = DEFAULT_EVENTS.map(e=>({id:uid(), ...e, qualifyingStandards:[], schoolRecords:[]}));
-            // Migrate: add IDs to events that lack them
             loaded.events = (loaded.events||[]).map(e=>e.id?e:{...e, id:uid(), qualifyingStandards:e.qualifyingStandards||[], schoolRecords:e.schoolRecords||[]});
-            // Migrate: add default workout categories if none exist
             if(!loaded.workoutCategories || loaded.workoutCategories.length === 0) loaded.workoutCategories = defaultData().workoutCategories;
-            // Migrate: add default meet types if none exist
             if(!loaded.meetTypes || loaded.meetTypes.length === 0) loaded.meetTypes = defaultData().meetTypes;
-            // Migrate: add default groups if none exist
             if(!loaded.workoutGroups || loaded.workoutGroups.length === 0) loaded.workoutGroups = defaultData().workoutGroups;
-            // Migrate: one-time swap of firstName/lastName (they were stored backwards)
             if(!loaded._nameSwapDone) {
               loaded.athletes = (loaded.athletes||[]).map(a => {
                 if(a.firstName && a.lastName) return {...a, firstName:a.lastName, lastName:a.firstName};
@@ -358,14 +301,12 @@ const useStore = (teamId) => {
               });
               loaded._nameSwapDone = true;
             }
-            // Migrate: pad all dates to YYYY-MM-DD
             (loaded.meets||[]).forEach(m=>{ m.startDate=padDate(m.startDate||m.date); m.endDate=padDate(m.endDate); if(m.date) m.date=padDate(m.date); });
             (loaded.seasons||[]).forEach(s=>{ s.startDate=padDate(s.startDate); s.endDate=padDate(s.endDate); });
             (loaded.workoutPlans||[]).forEach(w=>{ w.startDate=padDate(w.startDate); });
             (loaded.attendance||[]).forEach(r=>{ r.date=padDate(r.date); });
             (loaded.results||[]).forEach(r=>{ r.date=padDate(r.date); });
             setData(loaded);
-            // Persist padded dates back to storage
             try { await appStorage.set(STORE_KEY, JSON.stringify(loaded)); } catch(e) {}
           }
           else setData(defaultData());
@@ -390,7 +331,6 @@ const useStore = (teamId) => {
             });
             loaded._nameSwapDone = true;
           }
-          // Migrate: pad all dates to YYYY-MM-DD
           (loaded.meets||[]).forEach(m=>{ m.startDate=padDate(m.startDate||m.date); m.endDate=padDate(m.endDate); if(m.date) m.date=padDate(m.date); });
           (loaded.seasons||[]).forEach(s=>{ s.startDate=padDate(s.startDate); s.endDate=padDate(s.endDate); });
           (loaded.workoutPlans||[]).forEach(w=>{ w.startDate=padDate(w.startDate); });
@@ -402,7 +342,6 @@ const useStore = (teamId) => {
         setLoading(false);
       }, () => { setData(defaultData()); setLoading(false); });
   }, [teamId]);
-
   const save = useCallback(async (newData) => {
     setData(newData);
     if(!HAS_FIREBASE) {
@@ -414,24 +353,18 @@ const useStore = (teamId) => {
       catch(e) { console.error('Save error:', e); }
     }
   }, [teamId]);
-
   return { data, save, loading };
 };
-
-// --- SEASON HELPERS ---
 const getActiveSeason = (data) => ((data||{}).seasons||[]).find(s=>s.active);
 const isInSeason = (date, season) => {
   if(!season) return true;
   return date >= season.startDate && date <= season.endDate;
 };
-
-// --- DYNAMIC COLORS ---
 const hexToRgb = (hex) => {
   const h = hex.replace('#','');
   return { r:parseInt(h.slice(0,2),16), g:parseInt(h.slice(2,4),16), b:parseInt(h.slice(4,6),16) };
 };
 const lightenChannel = (c, amt) => Math.min(255, Math.round(c + (255-c) * amt));
-
 const makeColors = (primary='#c96a1f', secondary='#2b6cb0') => {
   const p = hexToRgb(primary);
   const s = hexToRgb(secondary);
@@ -445,7 +378,6 @@ const makeColors = (primary='#c96a1f', secondary='#2b6cb0') => {
     success:'#25763b', successMuted:'rgba(37,118,59,0.08)',
   };
 };
-
 const HEADING_FONT = "'Montserrat','Rubik',sans-serif";
 const exTotals = (exercises) => {
   let mi=0, m=0;
@@ -502,10 +434,8 @@ const makeStyles = (C) => ({
   trophy: { color:'#b8860b', marginLeft:4 },
   pr: { background:C.accentMuted, color:C.accent, padding:'2px 8px', borderRadius:4, fontSize:11, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.03em' },
 });
-
 let C = makeColors();
 let S = makeStyles(C);
-
 const COLOR_PRESETS = [
   { name:'Burnt Orange', primary:'#c96a1f', secondary:'#2b6cb0' },
   { name:'Navy & Gold', primary:'#1a365d', secondary:'#c8a951' },
@@ -518,8 +448,6 @@ const COLOR_PRESETS = [
   { name:'Steel Blue', primary:'#2b6cb0', secondary:'#c96a1f' },
   { name:'Black & Gold', primary:'#1a1e26', secondary:'#b8860b' },
 ];
-
-// --- SHARED COMPONENTS ---
 const Modal = ({ open, onClose, children, width }) => {
   if(!open) return null;
   return (
@@ -532,7 +460,6 @@ const Modal = ({ open, onClose, children, width }) => {
     </div>
   );
 };
-
 const ConfirmModal = ({ open, onClose, onConfirm, message }) => (
   <Modal open={open} onClose={onClose} width={380}>
     <p style={{ fontSize:14, marginBottom:20, color:C.text }}>{message}</p>
@@ -543,7 +470,6 @@ const ConfirmModal = ({ open, onClose, onConfirm, message }) => (
     </div>
   </Modal>
 );
-
 const TimeDropdown = ({ min, sec, onMinChange, onSecChange, label, compact }) => (
   <div style={{ display:'flex', gap:4, alignItems:'center' }}>
     {label && <span style={{fontSize:11,color:C.textMuted,marginRight:4}}>{label}</span>}
@@ -556,7 +482,6 @@ const TimeDropdown = ({ min, sec, onMinChange, onSecChange, label, compact }) =>
     </select>
   </div>
 );
-
 const FieldMeasure = ({ ft, inch, qtr, onFtChange, onInchChange, onQtrChange }) => (
   <div style={{ display:'flex', gap:4, alignItems:'center' }}>
     <select style={{...S.select, width:70}} value={ft} onChange={e=>onFtChange(e.target.value)}>
@@ -570,8 +495,6 @@ const FieldMeasure = ({ ft, inch, qtr, onFtChange, onInchChange, onQtrChange }) 
     </select>
   </div>
 );
-
-// --- BADGES ---
 const RecordBadge = ({ status, small }) => {
   if(!status) return null;
   const config = {
@@ -582,19 +505,16 @@ const RecordBadge = ({ status, small }) => {
   if(!c) return null;
   return <span style={{ background:c.bg, color:c.color, padding:small?'1px 5px':'2px 8px', borderRadius:4, fontSize:small?9:11, fontWeight:600, letterSpacing:'0.03em' }}>{c.text}</span>;
 };
-
 const MEDALS = { 1:{emoji:'1st',color:'#b8860b'}, 2:{emoji:'2nd',color:'#8a8a8a'}, 3:{emoji:'3rd',color:'#cd7f32'} };
 const MedalBadge = ({ place, small }) => {
   if(!place || !MEDALS[place]) return null;
   const medal = MEDALS[place];
   return <span style={{ fontSize:small?12:16 }}>{medal.emoji}</span>;
 };
-
 const VerifiedBadge = ({ verified, small }) => {
   if(!verified) return null;
   return <span style={{ color:'#2b6cb0', fontSize:small?9:11, fontWeight:600, background:'rgba(43,108,176,0.08)', padding:'1px 6px', borderRadius:4 }}>VERIFIED</span>;
 };
-
 const QualifyingBadge = ({ status, small }) => {
   if(!status) return null;
   const config = {
@@ -605,13 +525,10 @@ const QualifyingBadge = ({ status, small }) => {
   if(!c) return null;
   return <span style={{ background:c.bg, color:c.color, padding:small?'1px 5px':'2px 8px', borderRadius:4, fontSize:small?9:11, fontWeight:600 }}>{c.text}</span>;
 };
-
 const SavedIndicator = ({ saved }) => {
   if(!saved) return null;
   return <span style={{ color:C.success, fontSize:13, fontWeight:500 }}>✓ Saved</span>;
 };
-
-// --- TREND CHART ---
 function TrendChart({ points, width=320, height=160, color=C.accent, label, invertY=true }) {
   if(!points || points.length < 2) return null;
   const vals = points.map(p=>p.value);
@@ -643,13 +560,10 @@ function TrendChart({ points, width=320, height=160, color=C.accent, label, inve
     </svg>
   );
 }
-
-// --- CSV IMPORT MODAL ---
 function ImportModal({ open, onClose, type, onImport }) {
   const [rawText, setRawText] = useState('');
   const [parsed, setParsed] = useState(null);
   const [error, setError] = useState('');
-
   const handleParse = (text) => {
     setRawText(text);
     setError('');
@@ -660,7 +574,6 @@ function ImportModal({ open, onClose, type, onImport }) {
       setParsed(result);
     } catch(e) { setError('Could not parse CSV'); setParsed(null); }
   };
-
   const placeholders = {
     athletes: { text:'Name,Grad Year,Gender\nJane Smith,2026,F\nJohn Doe,2027,M', help:'Columns: Name (required), Grad Year, Gender (M/F). Groups assigned manually after import.' },
     meets: { text:'Name,Date,Location,Type\nConference Champs,2026-04-15,Lincoln HS,League', help:'Columns: Name, Date, Location, Type, Category.' },
@@ -668,7 +581,6 @@ function ImportModal({ open, onClose, type, onImport }) {
     workouts: { text:'Category,Workout,Mileage\nMain,4x800,2.0\nWarm-Up,2 laps,0.5', help:'Columns: Category, Workout (name), Mileage.' },
   };
   const ph = placeholders[type] || placeholders.athletes;
-
   return (
     <Modal open={open} onClose={()=>{onClose();setRawText('');setParsed(null);setError('');}} width={600}>
       <h2 style={S.h2}>Import {type}</h2>
@@ -694,8 +606,6 @@ function ImportModal({ open, onClose, type, onImport }) {
     </Modal>
   );
 }
-
-// --- AUTH SCREENS ---
 function AuthScreen({ authHook }) {
   const { signIn, signUp, signInGoogle } = authHook;
   const [mode, setMode] = useState('login');
@@ -704,7 +614,6 @@ function AuthScreen({ authHook }) {
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-
   const handleSubmit = async () => {
     setError(''); setBusy(true);
     try {
@@ -713,7 +622,6 @@ function AuthScreen({ authHook }) {
     } catch(e) { setError((e.message||'').replace('Firebase: ','').replace(/\(auth\/.*\)/,'')||'Something went wrong'); }
     setBusy(false);
   };
-
   return (
     <div style={{...S.app, display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh'}}>
       <div style={{ width:380, padding:32 }}>
@@ -742,7 +650,6 @@ function AuthScreen({ authHook }) {
     </div>
   );
 }
-
 function TeamSetupScreen({ user, teamHook }) {
   const { createTeam, joinTeam } = teamHook;
   const [mode, setMode] = useState('choose');
@@ -751,7 +658,6 @@ function TeamSetupScreen({ user, teamHook }) {
   const [joinCode, setJoinCode] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-
   const handleCreate = async () => {
     if(!teamName.trim()) return;
     setError(''); setBusy(true);
@@ -759,7 +665,6 @@ function TeamSetupScreen({ user, teamHook }) {
     catch(e) { setError(e.message||'Failed to create team'); }
     setBusy(false);
   };
-
   const handleJoin = async () => {
     if(!joinCode.trim()) return;
     setError(''); setBusy(true);
@@ -767,7 +672,6 @@ function TeamSetupScreen({ user, teamHook }) {
     catch(e) { setError(e.message||'Failed to join team'); }
     setBusy(false);
   };
-
   return (
     <div style={{...S.app, display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh'}}>
       <div style={{ width:400, padding:32 }}>
@@ -814,9 +718,7 @@ function TeamSetupScreen({ user, teamHook }) {
     </div>
   );
 }
-
-// --- MAIN APP ---
-export default function App() {
+function App() {
   const authHook = useAuth();
   const { user, loading: authLoading } = authHook;
   const teamHook = useTeam((user||{}).uid);
@@ -832,14 +734,12 @@ export default function App() {
     return () => window.removeEventListener('resize', onResize);
   }, []);
   const [, forceUpdate] = useState(0);
-
   useEffect(() => {
     const link = document.createElement('link');
     link.href = 'https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap';
     link.rel = 'stylesheet';
     document.head.appendChild(link);
   }, []);
-
   useEffect(() => {
     if((team||{}).colors) {
       C = makeColors(team.colors.primary, team.colors.secondary);
@@ -847,20 +747,15 @@ export default function App() {
       forceUpdate(n=>n+1);
     }
   }, [((team||{}).colors||{}).primary, ((team||{}).colors||{}).secondary]);
-
   if(authLoading) return <div style={{...S.app,display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh'}}><div style={{fontSize:16,color:C.textSecondary}}>Loading...</div></div>;
   if(HAS_FIREBASE && !user) return <AuthScreen authHook={authHook} />;
   if(HAS_FIREBASE && !teamLoading && !team) return <TeamSetupScreen user={user} teamHook={teamHook} />;
   if(teamLoading || dataLoading || !data) return <div style={{...S.app,display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh'}}><div style={{fontSize:16,color:C.textSecondary}}>Loading team data...</div></div>;
-
   const nav = (pg, params={}) => { setPage(pg); setPageParams(params); setSidebarOpen(false); };
   const season = getActiveSeason(data);
   const today = new Date().toISOString().split('T')[0];
   const events = data.events || [];
-
-  // -- Helper functions passed to children --
   const getEventById = (id) => events.find(e => e.id === id);
-
   const getAthletePR = (athleteId, eventId) => {
     const evt = getEventById(eventId);
     const isRelayEvt = isRelay(evt);
@@ -873,7 +768,6 @@ export default function App() {
     }
     return results.reduce((best,r) => (!best || r.timeMs < best.timeMs) ? r : best, null);
   };
-
   const checkRecord = (eventId, valueMs, valueTotalInches) => {
     const evt = getEventById(eventId);
     if(!evt) return { record:null, status:null, diff:null };
@@ -898,7 +792,6 @@ export default function App() {
       return { record:rec, status:null, diff };
     }
   };
-
   const checkQualifying = (eventId, meetId, valueMs, valueTotalInches) => {
     const evt = getEventById(eventId);
     if(!evt) return { status:null, standard:null };
@@ -919,23 +812,18 @@ export default function App() {
     }
     return { status:null, standard:stds[0] };
   };
-
   const addResult = (result) => { save({ ...data, results: [...data.results, result] }); };
   const updateResult = (id, updates) => { save({ ...data, results: data.results.map(r => r.id === id ? {...r,...updates} : r) }); };
-
   const activeAthletes = data.athletes.filter(a => a.active !== false);
-
   const currentMeet = data.meets.find(m => today >= (m.startDate||m.date) && today <= (m.endDate||m.startDate||m.date));
   const upcomingMeets = data.meets.filter(m => (m.startDate||m.date) > today).sort((a,b) => (a.startDate||a.date).localeCompare(b.startDate||b.date));
   const featuredMeet = currentMeet || upcomingMeets[0];
-
   const hasPractice = (date) => {
     return (data.workoutPlans||[]).some(w => {
       const entries = (w.entries||[]).filter(e => e.day === ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(date+'T12:00:00').getDay()]);
       return entries.length > 0;
     });
   };
-
   const pages = {
     dashboard: () => <Dashboard data={data} save={save} nav={nav} season={season} team={team} events={events} activeAthletes={activeAthletes} featuredMeet={featuredMeet} currentMeet={currentMeet} getAthletePR={getAthletePR} checkQualifying={checkQualifying} />,
     attendance: () => <AttendancePage data={data} save={save} nav={nav} season={season} activeAthletes={activeAthletes} />,
@@ -953,7 +841,6 @@ export default function App() {
     fieldEvent: () => <FieldEventPage data={data} save={save} nav={nav} events={events} addResult={addResult} getAthletePR={getAthletePR} checkRecord={checkRecord} checkQualifying={checkQualifying} preset={pageParams} />,
     settings: () => <SettingsPage data={data} save={save} team={team} updateTeam={teamHook.updateTeam} user={user} signOut={authHook.signOut} nav={nav} />,
   };
-
   const menuItems = [
     { key:'dashboard', label:'Dashboard', icon:'🏠' },
     { key:'attendance', label:'Attendance', icon:'📋' },
@@ -963,11 +850,9 @@ export default function App() {
     { key:'eventsPage', label:'Events', icon:'🎯' },
     { key:'tools', label:'Tools', icon:'⏱️' },
   ];
-
   const pageLabel = (menuItems.find(m=>m.key===page)||{}).label || (page==='settings'?'Settings':'TrackTeam');
   const teamDisplayName = (team||{}).name || 'TrackTeam';
   const teamSchool = (team||{}).school || 'Hub';
-
   return (
     <div style={S.app}>
       {!isDesktop && <div style={S.sidebarOverlay(sidebarOpen)} onClick={()=>setSidebarOpen(false)} />}
@@ -994,7 +879,6 @@ export default function App() {
           </button>
         </div>
       </div>
-
       <div style={isDesktop ? {...S.container,...S.containerDesktop} : S.container}>
         {!isDesktop && <div style={S.topBar}>
           <div style={{display:'flex',alignItems:'center',gap:12}}>
@@ -1021,14 +905,10 @@ export default function App() {
     </div>
   );
 }
-
-// --- DASHBOARD ---
 function Dashboard({ data, save, nav, season, team, events, activeAthletes, featuredMeet, currentMeet, getAthletePR, checkQualifying }) {
   const today = new Date().toISOString().split('T')[0];
   const todayObj = new Date(today+'T12:00:00');
   const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-
-  // Day type
   const isMeetDay = data.meets.some(m => { const sd=padDate(m.startDate||m.date); const ed=padDate(m.endDate||m.startDate||m.date); return today>=sd&&today<=ed; });
   const isPracticeDay = (data.workoutPlans||[]).some(w => {
     const ws = padDate(w.startDate);
@@ -1042,8 +922,6 @@ function Dashboard({ data, save, nav, season, team, events, activeAthletes, feat
   });
   const dayType = isMeetDay ? 'Meet' : isPracticeDay ? 'Practice' : 'Free';
   const dayTypeColors = { Meet:C.danger, Practice:C.accent, Free:C.textMuted };
-
-  // Week dates
   const getWeekDates = () => {
     const d = new Date(todayObj);
     const dayOfWeek = d.getDay();
@@ -1056,13 +934,10 @@ function Dashboard({ data, save, nav, season, team, events, activeAthletes, feat
     });
   };
   const weekDates = getWeekDates();
-
-  // Add dropdown
   const [showAdd, setShowAdd] = useState(false);
-
   return (
     <div>
-      {/* Header */}
+      
       <div style={{...S.card, padding:'12px 14px'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <div style={{flex:1,minWidth:0}}>
@@ -1089,8 +964,7 @@ function Dashboard({ data, save, nav, season, team, events, activeAthletes, feat
         </div>
       </div>
       </div>
-
-      {/* Quick Attendance */}
+      
       {(()=>{
         const todayRecords = (data.attendance||[]).filter(r=>r.date===today);
         const taken = todayRecords.length > 0;
@@ -1125,8 +999,7 @@ function Dashboard({ data, save, nav, season, team, events, activeAthletes, feat
           </div>
         );
       })()}
-
-      {/* Follow-Ups Needed */}
+      
       {(()=>{
         const followUps = (data.medicalNotes||[]).filter(n=>n.needFollowUp&&!n.followUpResolution);
         if(followUps.length===0) return null;
@@ -1159,8 +1032,7 @@ function Dashboard({ data, save, nav, season, team, events, activeAthletes, feat
           </div>
         );
       })()}
-
-      {/* Qualifying Progress */}
+      
       {(()=>{
         const qualEvents = events.filter(e=>(e.qualifyingStandards||[]).length>0);
         if(!qualEvents.length) return null;
@@ -1201,7 +1073,6 @@ function Dashboard({ data, save, nav, season, team, events, activeAthletes, feat
         );
       })()}
       
-      {/* Weekly Calendar */}
       <div style={{...S.card,padding:'10px 14px'}}>
         <h2 style={{...S.h2,marginBottom:4,fontSize:14}}>This Week</h2>
         {weekDates.map(date => {
@@ -1233,7 +1104,6 @@ function Dashboard({ data, save, nav, season, team, events, activeAthletes, feat
           if(meetOnDay) { label = meetOnDay.name; labelColor = C.danger; clickTarget = ()=>nav('meetSub',{meetId:meetOnDay.id}); }
           else if(practiceEntries.length > 0) { label = 'Practice'; labelColor = C.accent; clickTarget = ()=>nav('dailyPractice',{date}); }
           else if(isRest) { label = 'Rest'; labelColor = C.textMuted; }
-
           return (
             <div key={date} onClick={clickTarget||undefined} style={{display:'flex',alignItems:'center',gap:10,padding:'5px 10px',borderRadius:6,marginBottom:1,background:isToday ? C.accentMuted : 'transparent',cursor:clickTarget?'pointer':'default',border:isToday?`1px solid ${C.accent}33`:'1px solid transparent'}}>
               <div style={{width:44,flexShrink:0}}>
@@ -1247,8 +1117,7 @@ function Dashboard({ data, save, nav, season, team, events, activeAthletes, feat
           );
         })}
       </div>
-
-      {/* Team Overview - Analytics */}
+      
       {events.length > 0 && data.results.length > 0 && (
         <div style={{...S.card}}>
           <h2 style={{...S.h2,marginBottom:8}}>Team Overview</h2>
@@ -1266,8 +1135,7 @@ function Dashboard({ data, save, nav, season, team, events, activeAthletes, feat
           </div>
         </div>
       )}
-
-      {/* Featured Meet */}
+      
       {featuredMeet && (
         <div style={{...S.card, borderLeft:`4px solid ${currentMeet ? C.danger : C.accent}`, cursor:'pointer'}} onClick={()=>nav('meetSub',{meetId:featuredMeet.id})}>
           <div style={{fontSize:11,fontWeight:600,color:currentMeet?C.danger:C.accent,textTransform:'uppercase',letterSpacing:'0.04em'}}>
@@ -1280,9 +1148,6 @@ function Dashboard({ data, save, nav, season, team, events, activeAthletes, feat
     </div>
   );
 }
-
-// --- ATTENDANCE PAGE ---
-// --- DAILY ATTENDANCE PAGE ---
 function DailyAttendancePage({ data, save, nav, activeAthletes }) {
   const today = new Date().toISOString().split('T')[0];
   const dayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()];
@@ -1292,26 +1157,21 @@ function DailyAttendancePage({ data, save, nav, activeAthletes }) {
   const [statusFilter, setStatusFilter] = useState('');
   const [sortBy, setSortBy] = useState('lastName');
   const [sortDir, setSortDir] = useState('asc');
-
   const groups = data.workoutGroups || [];
-
   const getStatus = (athleteId) => {
     const att = (data.attendance||[]).find(r=>r.athleteId===athleteId && r.date===today);
     return (att||{}).status || null;
   };
-
   const setStatus = (athleteId, status) => {
     const existing = (data.attendance||[]).filter(r=>!(r.athleteId===athleteId && r.date===today));
     if(status) existing.push({id:uid(), athleteId, date:today, status});
     save({...data, attendance:existing});
   };
-
   const markAll = (status) => {
     const existing = (data.attendance||[]).filter(r=>r.date!==today);
     activeAthletes.forEach(a=>existing.push({id:uid(), athleteId:a.id, date:today, status}));
     save({...data, attendance:existing});
   };
-
   const filtered = activeAthletes.filter(a => {
     if(search && !athSearch(a, search)) return false;
     if(genderFilter && a.gender !== genderFilter) return false;
@@ -1341,14 +1201,11 @@ function DailyAttendancePage({ data, save, nav, activeAthletes }) {
     if(av>bv) return sortDir==='asc'?1:-1;
     return athLast(a).localeCompare(athLast(b));
   });
-
   const todayRecords = (data.attendance||[]).filter(r=>r.date===today);
   const counts = {};
   ATTENDANCE_STATUSES.forEach(s=>{ counts[s.key] = todayRecords.filter(r=>r.status===s.key).length; });
   const unmarked = activeAthletes.length - todayRecords.length;
-
   const toggleSort = (col) => { if(sortBy===col) setSortDir(d=>d==='asc'?'desc':'asc'); else { setSortBy(col); setSortDir('asc'); } };
-
   return (
     <div>
       <button style={S.backLink} onClick={()=>nav('dashboard')}>{"<- Dashboard"}</button>
@@ -1356,8 +1213,7 @@ function DailyAttendancePage({ data, save, nav, activeAthletes }) {
         <h1 style={S.h1}>{dayName} Attendance</h1>
       </div>
       <p style={{fontSize:13,color:C.textSecondary,marginBottom:16}}>{new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}</p>
-
-      {/* Summary bar */}
+      
       <div style={{display:'flex',gap:12,flexWrap:'wrap',marginBottom:12,padding:'10px 16px',background:C.surface,borderRadius:8,border:`1px solid ${C.border}`}}>
         {ATTENDANCE_STATUSES.map(s=>(
           <div key={s.key} style={{display:'flex',alignItems:'center',gap:4,cursor:'pointer'}} onClick={()=>setStatusFilter(statusFilter===s.key?'':s.key)}>
@@ -1370,8 +1226,7 @@ function DailyAttendancePage({ data, save, nav, activeAthletes }) {
           <span style={{fontSize:12,color:statusFilter==='unmarked'?C.text:C.textSecondary,fontWeight:statusFilter==='unmarked'?600:400,textDecoration:statusFilter==='unmarked'?'underline':'none'}}>Unmarked</span>
         </div>
       </div>
-
-      {/* Filters */}
+      
       <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
         <input style={{...S.input,maxWidth:180}} placeholder="Search..." value={search} onChange={e=>setSearch(e.target.value)} />
         <select style={S.select} value={genderFilter} onChange={e=>setGenderFilter(e.target.value)}>
@@ -1391,14 +1246,12 @@ function DailyAttendancePage({ data, save, nav, activeAthletes }) {
         <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'4px 10px'}} onClick={()=>setSortDir(d=>d==='asc'?'desc':'asc')}>{sortDir==='asc'?'A->Z':'Z->A'}</button>
         {(search||genderFilter||groupFilter||statusFilter)&&<button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'4px 10px'}} onClick={()=>{setSearch('');setGenderFilter('');setGroupFilter('');setStatusFilter('');}}>Clear</button>}
       </div>
-
-      {/* Quick mark all */}
+      
       <div style={{display:'flex',gap:6,marginBottom:16}}>
         <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'8px 14px'}} onClick={()=>markAll('present')}>All Present</button>
         <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'8px 14px'}} onClick={()=>markAll('absent')}>All Absent</button>
       </div>
-
-      {/* Athlete list */}
+      
       <div style={{fontSize:12,color:C.textMuted,marginBottom:8}}>{filtered.length} athlete{filtered.length!==1?'s':''}</div>
       {filtered.map(a => {
         const status = getStatus(a.id);
@@ -1428,12 +1281,10 @@ function DailyAttendancePage({ data, save, nav, activeAthletes }) {
     </div>
   );
 }
-
 function AttendancePage({ data, save, nav, season, activeAthletes }) {
   const today = new Date().toISOString().split('T')[0];
   const todayObj = new Date(today+'T12:00:00');
   const [weekOffset, setWeekOffset] = useState(0);
-
   const getWeekDates = (offset) => {
     const d = new Date(todayObj);
     d.setDate(d.getDate() + offset * 7);
@@ -1447,28 +1298,22 @@ function AttendancePage({ data, save, nav, season, activeAthletes }) {
     });
   };
   const weekDates = getWeekDates(weekOffset);
-
   const getStatus = (athleteId, date) => ((data.attendance||[]).find(r => r.athleteId===athleteId && r.date===date)||{}).status || null;
   const setStatus = (athleteId, date, status) => {
     const existing = (data.attendance||[]).filter(r => !(r.athleteId===athleteId && r.date===date));
     if(status) existing.push({ id:uid(), athleteId, date, status });
     save({...data, attendance:existing});
   };
-
-  // Season-scoped stats
   const seasonAttendance = (data.attendance||[]).filter(r => !season || isInSeason(r.date, season));
   const weekAttendance = (data.attendance||[]).filter(r => weekDates.includes(r.date));
-
   const calcPct = (records, status) => {
     if(!records.length) return 0;
     return Math.round(records.filter(r=>r.status===status).length / records.length * 100);
   };
-
   return (
     <div>
       <p style={S.h3}>{season ? `${season.name} season` : 'All time'}</p>
-
-      {/* Summary */}
+      
       <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginBottom:16}}>
         {ATTENDANCE_STATUSES.map(s => (
           <div key={s.key} style={{...S.card,padding:'12px 16px',textAlign:'center'}}>
@@ -1478,8 +1323,7 @@ function AttendancePage({ data, save, nav, season, activeAthletes }) {
           </div>
         ))}
       </div>
-
-      {/* Week Nav */}
+      
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
         <button style={{...S.btn,...S.btnSecondary,padding:'4px 12px'}} onClick={()=>setWeekOffset(w=>w-1)}>{"<- "}Prev</button>
         <span style={{fontSize:13,fontWeight:600,color:C.text}}>
@@ -1487,8 +1331,7 @@ function AttendancePage({ data, save, nav, season, activeAthletes }) {
         </span>
         <button style={{...S.btn,...S.btnSecondary,padding:'4px 12px'}} onClick={()=>setWeekOffset(w=>w+1)}>Next -></button>
       </div>
-
-      {/* Grid */}
+      
       <div style={{...S.card, overflowX:'auto'}}>
         <table style={{width:'100%',borderCollapse:'collapse',minWidth:600}}>
           <thead>
@@ -1539,8 +1382,6 @@ function AttendancePage({ data, save, nav, season, activeAthletes }) {
     </div>
   );
 }
-
-// --- MEETS PAGE ---
 function MeetFormModal({ editId, initial, meetTypes, onSave, onClose }) {
   const [f, setF] = useState({...initial});
   return (
@@ -1573,13 +1414,11 @@ function MeetFormModal({ editId, initial, meetTypes, onSave, onClose }) {
     </Modal>
   );
 }
-
 function MeetsPage({ data, save, nav, events }) {
   const [search, setSearch] = useState('');
   const [showAdd, setShowAdd] = useState(false);
   const [editMeet, setEditMeet] = useState(null);
   const [openCount, setOpenCount] = useState(0);
-
   const startEdit = (m) => {
     setEditMeet(m);
     setOpenCount(c=>c+1);
@@ -1592,15 +1431,12 @@ function MeetsPage({ data, save, nav, events }) {
   const [filterType, setFilterType] = useState('');
   const [filterTrack, setFilterTrack] = useState('');
   const [filterState, setFilterState] = useState('');
-
   const meetTypes = data.meetTypes || [];
   const allStates = [...new Set(data.meets.map(m=>m.state).filter(Boolean))].sort();
-
   const toggleSort = (col) => {
     if(sortCol===col) setSortDir(d=>d==='asc'?'desc':'asc');
     else { setSortCol(col); setSortDir('asc'); }
   };
-
   const filtered = data.meets.filter(m => {
     if(search) {
       const q = search.toLowerCase();
@@ -1626,28 +1462,22 @@ function MeetsPage({ data, save, nav, events }) {
     if(av>bv) return sortDir==='asc'?1:-1;
     return 0;
   });
-
-
-
   const deleteMeet = () => {
     save({ ...data, meets:data.meets.filter(m=>m.id!==delId), results:data.results.filter(r=>r.meetId!==delId) });
     setDelId(null);
   };
-
   const SortHeader = ({col, label, width}) => (
     <th style={{...S.th, cursor:'pointer', userSelect:'none', width}} onClick={()=>toggleSort(col)}>
       {label} {sortCol===col ? (sortDir==='asc'?'^':'v') : ''}
     </th>
   );
-
   return (
     <div>
       <div style={{display:'flex',justifyContent:'flex-end',gap:6,marginBottom:12}}>
           <button style={{...S.btn,...S.btnSecondary}} onClick={()=>setShowImport(true)}>Import</button>
           <button style={{...S.btn,...S.btnPrimary}} onClick={()=>{setEditMeet(null);setOpenCount(c=>c+1);setShowAdd(true);}}>+ New Meet</button>
       </div>
-
-      {/* Filters */}
+      
       <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
         <input style={{...S.input,maxWidth:200}} placeholder="Search..." value={search} onChange={e=>setSearch(e.target.value)} />
         <select style={S.select} value={filterTrack} onChange={e=>setFilterTrack(e.target.value)}>
@@ -1663,8 +1493,7 @@ function MeetsPage({ data, save, nav, events }) {
         </select>}
         {(search||filterTrack||filterType||filterState)&&<button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'4px 10px'}} onClick={()=>{setSearch('');setFilterTrack('');setFilterType('');setFilterState('');}}>Clear</button>}
       </div>
-
-      {/* Table */}
+      
       <div style={{...S.card, overflowX:'auto'}}>
         <table style={{width:'100%',borderCollapse:'collapse',minWidth:700}}>
           <thead><tr>
@@ -1703,7 +1532,6 @@ function MeetsPage({ data, save, nav, events }) {
         </table>
       </div>
       <div style={{fontSize:12,color:C.textMuted,marginTop:6}}>{filtered.length} meet{filtered.length!==1?'s':''}</div>
-
       {showAdd && <MeetFormModal
         key={openCount}
         editId={(editMeet||{}).id}
@@ -1729,8 +1557,6 @@ function MeetsPage({ data, save, nav, events }) {
     </div>
   );
 }
-
-// --- MEET SUB PAGE ---
 function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQualifying }) {
   const [filter, setFilter] = useState('');
   const [genderFilter, setGenderFilter] = useState('');
@@ -1739,23 +1565,17 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
   const [editEntryIdx, setEditEntryIdx] = useState(null);
   const [dragIdx, setDragIdx] = useState(null);
   const [dragOverIdx, setDragOverIdx] = useState(null);
-
   const meet = data.meets.find(m=>m.id===meetId);
   if(!meet) return <div style={S.card}><p>Meet not found</p><button style={S.backLink} onClick={()=>nav('meets')}>{"<- "}Back to Meets</button></div>;
-
   const meetType = (data.meetTypes||[]).find(mt=>mt.id===meet.meetTypeId);
-
-  // Pull events from master list based on track type, merge with any stored entries
   const applicableEvents = events.filter(e => e.trackType === meet.trackType || e.trackType === 'Both');
   const storedEntries = {};
   (meet.events||[]).forEach(me => { storedEntries[me.eventId] = me.entries || []; });
-
   const meetEvents = applicableEvents.map(evt => ({
     eventId: evt.id,
     evt,
     entries: storedEntries[evt.id] || [],
   }));
-
   const eventOrder = meet.eventOrder || [];
   const filtered = meetEvents.filter(me => {
     if(genderFilter && me.evt.gender !== genderFilter) return false;
@@ -1773,7 +1593,6 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
     if(dA !== dB) return dA - dB;
     return a.evt.name.localeCompare(b.evt.name);
   });
-
   const saveEventOrder = (newOrder) => {
     save({...data, meets:data.meets.map(m=>m.id===meetId?{...m, eventOrder:newOrder}:m)});
   };
@@ -1784,7 +1603,6 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
     ids.splice(toIdx, 0, moved);
     saveEventOrder(ids);
   };
-
   const saveEntries = (eventId, newEntries) => {
     const updatedMeetEvents = [...(meet.events||[])];
     const idx = updatedMeetEvents.findIndex(me=>me.eventId===eventId);
@@ -1792,7 +1610,6 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
     else updatedMeetEvents.push({eventId, entries:newEntries});
     save({...data, meets:data.meets.map(m=>m.id===meetId?{...m, events:updatedMeetEvents}:m)});
   };
-
   const goToRecord = (me) => {
     const entries = me.entries || [];
     const athleteIds = entries.flatMap(en => en.athletes ? en.athletes.map(a=>a.athleteId) : [en.athleteId]).filter(Boolean);
@@ -1804,7 +1621,6 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
       nav('raceTimer', { meetId, eventId:me.evt.id, athleteId:athleteIds[0], entries });
     }
   };
-
   const activeAthletes = data.athletes.filter(a=>a.active!==false);
   return (
     <div>
@@ -1815,7 +1631,6 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
         {meet.venue && ` - ${meet.venue}`}{meet.city && `, ${meet.city}`}{meet.state && ` ${meet.state}`}
         {meetType && <span style={{marginLeft:8,color:meetType.qualifying?C.success:C.textMuted,fontWeight:600}}>({meetType.name})</span>}
       </p>
-
       <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap'}}>
         <input style={{...S.input,maxWidth:200}} placeholder="Search events..." value={filter} onChange={e=>setFilter(e.target.value)} />
         <select style={S.select} value={genderFilter} onChange={e=>setGenderFilter(e.target.value)}>
@@ -1826,7 +1641,6 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
         </select>
         {eventOrder.length > 0 && <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'4px 10px'}} onClick={()=>saveEventOrder([])}>Reset Order</button>}
       </div>
-
       {filtered.map((me, meIdx) => {
         const entries = me.entries;
         const hasEntries = entries.length > 0;
@@ -1879,15 +1693,11 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
           </div>
         );
       })}
-
       {!filtered.length && <div style={{...S.card,textAlign:'center',padding:20,color:C.textMuted}}>No events match your filters.</div>}
-
       <MeetEntryModal data={data} save={save} meetId={meetId} eventId={showEntryModal} events={events} open={!!showEntryModal} onClose={()=>{setShowEntryModal(null);setEditEntryIdx(null);}} getAthletePR={getAthletePR} saveEntries={saveEntries} editEntryIdx={editEntryIdx} />
     </div>
   );
 }
-
-// --- MEET ENTRY MODAL ---
 function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, getAthletePR, saveEntries, editEntryIdx }) {
   const [entries, setEntries] = useState([{ athleteId:'', search:'', goalMin:0, goalSec:0 }]);
   const [relayAthletes, setRelayAthletes] = useState([{ athleteId:'', search:'', goalMin:0, goalSec:0 },{ athleteId:'', search:'', goalMin:0, goalSec:0 },{ athleteId:'', search:'', goalMin:0, goalSec:0 },{ athleteId:'', search:'', goalMin:0, goalSec:0 }]);
@@ -1895,18 +1705,15 @@ function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, ge
   const blurRef = useRef(null);
   const handleFocus = (f) => { clearTimeout(blurRef.current); setFocusField(f); };
   const handleBlur = () => { blurRef.current = setTimeout(()=>setFocusField(''), 200); };
-
   if(!open || !eventId) return null;
   const evt = events.find(e=>e.id===eventId);
   if(!evt) return null;
-
   const meet = data.meets.find(m=>m.id===meetId);
   const me = ((meet||{}).events||[]).find(e=>e.eventId===eventId);
   const existingEntries = (me||{}).entries || [];
   const activeAthletes = data.athletes.filter(a=>a.active!==false);
   const genderMatch = activeAthletes.filter(a=>!evt.gender || evt.gender==='Mixed' || a.gender===(evt.gender==='Boy'?'M':'F'));
   const athName = (a) => athDisplay(a);
-
   const saveIndividuals = () => {
     const valid = entries.filter(en=>en.athleteId);
     if(!valid.length) return;
@@ -1915,7 +1722,6 @@ function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, ge
     setEntries([{ athleteId:'', search:'', goalMin:0, goalSec:0 }]);
     onClose();
   };
-
   const saveRelay = () => {
     const athletes = relayAthletes.filter(a=>a.athleteId).map(a=>({ athleteId:a.athleteId, goalMs:parseTimeToMs(a.goalMin,a.goalSec) }));
     if(!athletes.length) return;
@@ -1923,11 +1729,9 @@ function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, ge
     setRelayAthletes([{ athleteId:'', search:'', goalMin:0, goalSec:0 },{ athleteId:'', search:'', goalMin:0, goalSec:0 },{ athleteId:'', search:'', goalMin:0, goalSec:0 },{ athleteId:'', search:'', goalMin:0, goalSec:0 }]);
     onClose();
   };
-
   const filteredAthletes = (search, excludeIds=[]) => genderMatch.filter(a=>
     !excludeIds.includes(a.id) && (!search || athSearch(a, search))
   );
-
   const renderRow = (row, index, fieldPrefix, rows, setRows, excludeIds) => {
     const fieldName = `${fieldPrefix}-${index}`;
     const opts = filteredAthletes(row.search, excludeIds);
@@ -1955,12 +1759,10 @@ function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, ge
       </div>
     );
   };
-
   return (
     <Modal open={open} onClose={onClose} width={550}>
       <h2 style={S.h2}>{getEventLabel(evt)}</h2>
       <p style={{fontSize:13,color:C.textSecondary,marginBottom:16}}>{(meet||{}).name}</p>
-
       {evt.entryType === 'Relay' ? (
         <div>
           <div style={{fontSize:13,fontWeight:600,color:C.textSecondary,marginBottom:10}}>Relay Entry</div>
@@ -1989,8 +1791,6 @@ function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, ge
     </Modal>
   );
 }
-
-// --- ATHLETES PAGE (List View) ---
 function AthletesPage({ data, save, nav }) {
   const [search, setSearch] = useState('');
   const [genderFilter, setGenderFilter] = useState('');
@@ -2003,7 +1803,6 @@ function AthletesPage({ data, save, nav }) {
   const [form, setForm] = useState({ firstName:'', lastName:'', preferredName:'', gradYear:'', gender:'', name:'' });
   const [delId, setDelId] = useState(null);
   const [showImport, setShowImport] = useState(false);
-
   const groups = data.workoutGroups || [];
   const athletes = data.athletes.filter(a => {
     if(!showInactive && a.active === false) return false;
@@ -2025,7 +1824,6 @@ function AthletesPage({ data, save, nav }) {
     if(av>bv) return sortDir==='asc'?1:-1;
     return athLast(a).localeCompare(athLast(b));
   });
-
   const addAthlete = () => {
     const name = form.name || `${form.firstName} ${form.lastName}`.trim();
     if(!name) return;
@@ -2033,19 +1831,16 @@ function AthletesPage({ data, save, nav }) {
     setShowAdd(false);
     setForm({ firstName:'', lastName:'', preferredName:'', gradYear:'', gender:'', name:'' });
   };
-
   const deleteAthlete = () => {
     save({ ...data, athletes:data.athletes.filter(a=>a.id!==delId) });
     setDelId(null);
   };
-
   return (
     <div>
       <div style={{display:'flex',justifyContent:'flex-end',gap:6,marginBottom:12}}>
           <button style={{...S.btn,...S.btnSecondary}} onClick={()=>setShowImport(true)}>Import CSV</button>
           <button style={{...S.btn,...S.btnPrimary}} onClick={()=>setShowAdd(true)}>+ Add Athlete</button>
       </div>
-
       <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
         <input style={{...S.input,maxWidth:200}} placeholder="Search by name..." value={search} onChange={e=>setSearch(e.target.value)} />
         <select style={S.select} value={genderFilter} onChange={e=>setGenderFilter(e.target.value)}>
@@ -2059,7 +1854,6 @@ function AthletesPage({ data, save, nav }) {
           <input type="checkbox" checked={showInactive} onChange={e=>setShowInactive(e.target.checked)} /> Show Inactive
         </label>
       </div>
-
       <div style={S.card}>
         <table style={{width:'100%',borderCollapse:'collapse'}}>
           <thead><tr>
@@ -2083,7 +1877,6 @@ function AthletesPage({ data, save, nav }) {
           </tbody>
         </table>
       </div>
-
       <Modal open={showAdd} onClose={()=>setShowAdd(false)} width={420}>
         <h2 style={S.h2}>Add Athlete</h2>
         <div style={{display:'flex',flexDirection:'column',gap:10,marginTop:16}}>
@@ -2132,8 +1925,6 @@ function AthletesPage({ data, save, nav }) {
     </div>
   );
 }
-
-// --- ATHLETE SUB PAGE ---
 function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, checkRecord, checkQualifying, season }) {
   const [showEditInfo, setShowEditInfo] = useState(false);
   const [showAddNote, setShowAddNote] = useState(false);
@@ -2153,25 +1944,16 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
   const athPracticeBlurRef = useRef(null);
   const athPFocus = (f)=>{clearTimeout(athPracticeBlurRef.current);setAthPracticeFocus(f);};
   const athPBlur = ()=>{athPracticeBlurRef.current=setTimeout(()=>setAthPracticeFocus(''),200);};
-
   const athlete = data.athletes.find(a=>a.id===athleteId);
   if(!athlete) return <div style={S.card}><p>Athlete not found</p><button style={S.backLink} onClick={()=>nav('athletes')}>{"<- "}Back</button></div>;
-
-
   const groups = data.workoutGroups || [];
   const athleteGroups = athlete.groups || (athlete.trainingGroup ? [{ groupId:athlete.trainingGroup, level:athlete.trainingLevel||'Level 1' }] : []);
   const athleteEvents = events.filter(e => e.gender==='Mixed' || (athlete.gender==='M' && e.gender==='Boy') || (athlete.gender==='F' && e.gender==='Girl'));
   const athleteResults = data.results.filter(r=>r.athleteId===athleteId);
   const seasonResults = season ? athleteResults.filter(r=>isInSeason(r.date,season)) : athleteResults;
-
-  // Attendance stats
   const seasonAttendance = (data.attendance||[]).filter(r=>r.athleteId===athleteId && (!season || isInSeason(r.date,season)));
   const attPct = seasonAttendance.length > 0 ? Math.round(seasonAttendance.filter(r=>r.status==='present'||r.status==='late').length/seasonAttendance.length*100) : null;
-
-  // Events participated
   const eventsParticipated = new Set(seasonResults.map(r=>r.eventId)).size;
-
-  // Improvement
   const calcImprovement = () => {
     if(seasonResults.length < 2) return null;
     const byEvent = {};
@@ -2192,16 +1974,13 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
     return total > 0 ? Math.round(improvements/total*100) : null;
   };
   const improvement = calcImprovement();
-
   const medicalNotes = (data.medicalNotes||[]).filter(n=>n.athleteId===athleteId).sort((a,b)=>(b.entryDate||'').localeCompare(a.entryDate||''));
-
   const saveNote = () => {
     const note = { id:uid(), athleteId, entryDate:new Date().toISOString().split('T')[0], ...noteForm };
     save({ ...data, medicalNotes:[...(data.medicalNotes||[]),note] });
     setShowAddNote(false);
     setNoteForm({ type:'Other', effectiveDate:'', details:'', trainerCheckIn:false, trainerDate:'', trainerDetails:'', needFollowUp:false, followUpName:'', followUpContact:'', followUpLastDate:'', followUpResolution:'' });
   };
-
   const startEdit = () => {
     setEditForm({
       firstName:athlete.firstName||'', lastName:athlete.lastName||'', preferredName:athlete.preferredName||'', name:athlete.name||'',
@@ -2210,19 +1989,15 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
     });
     setShowEditInfo(true);
   };
-
   const saveEdit = () => {
     const name = editForm.name || `${editForm.firstName} ${editForm.lastName}`.trim();
     save({ ...data, athletes:data.athletes.map(a=>a.id===athleteId?{...a,...editForm,name,active:editForm.active}:a) });
     setShowEditInfo(false);
   };
-
-  // Sorted athlete list for prev/next navigation (all athletes, not just active)
   const sortedAthletes = data.athletes.filter(a=>a.active!==false).sort((a,b)=>athLast(a).localeCompare(athLast(b))||athFirst(a).localeCompare(athFirst(b)));
   const curIdx = sortedAthletes.findIndex(a=>a.id===athleteId);
   const prevAthlete = curIdx > 0 ? sortedAthletes[curIdx-1] : null;
   const nextAthlete = curIdx < sortedAthletes.length-1 ? sortedAthletes[curIdx+1] : null;
-
   return (
     <div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
@@ -2237,8 +2012,7 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
           </button>
         </div>
       </div>
-
-      {/* Header */}
+      
       <div style={{...S.card,display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
         <div>
           <h1 style={{...S.h1,marginBottom:4}}>{athDisplay(athlete, true)}</h1>
@@ -2260,8 +2034,7 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
           <button style={{...S.btn,...S.btnSecondary,fontSize:11}} onClick={startEdit}>Edit</button>
         </div>
       </div>
-
-      {/* Summary Cards */}
+      
       <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginBottom:12}}>
         <div style={{...S.card,textAlign:'center',padding:12}}>
           <div style={{fontSize:10,fontWeight:600,color:C.textMuted,textTransform:'uppercase'}}>Attendance</div>
@@ -2276,8 +2049,7 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
           <div style={{fontSize:22,fontWeight:700,color:improvement!==null&&improvement>0?C.success:C.text}}>{improvement!==null?`${improvement}%`:'-'}</div>
         </div>
       </div>
-
-      {/* Medical / Notes */}
+      
       {(()=>{
         const active = medicalNotes.filter(n=>!n.needFollowUp || !n.followUpResolution);
         const resolved = medicalNotes.filter(n=>n.needFollowUp && n.followUpResolution);
@@ -2369,7 +2141,6 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
           </Modal>
         </>);
       })()}
-
       <div style={S.card}>
         <h2 style={{...S.h2,marginBottom:8}}>Performances</h2>
         {athleteEvents.filter(evt=>{
@@ -2421,8 +2192,7 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
           <p style={{color:C.textMuted,fontSize:13,textAlign:'center',padding:12}}>No results yet</p>
         )}
       </div>
-
-      {/* This Week's Practice */}
+      
       {(()=>{
         const groups = data.workoutGroups||[];
         const categories = data.workoutCategories||[];
@@ -2703,8 +2473,7 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
           </div>
         );
       })()}
-
-      {/* Edit Info Modal */}
+      
       <Modal open={showEditInfo} onClose={()=>setShowEditInfo(false)} width={480}>
         <h2 style={S.h2}>Edit Athlete</h2>
         <div style={{display:'flex',flexDirection:'column',gap:10,marginTop:16}}>
@@ -2746,30 +2515,22 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
           <button style={{...S.btn,...S.btnPrimary}} onClick={saveEdit}>Save Changes</button>
         </div>
       </Modal>
-
     </div>
   );
 }
-
-
-// --- DAILY PRACTICE VIEW ---
 function DailyPracticeView({ data, nav, date }) {
   const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const dateObj = new Date((date||new Date().toISOString().split('T')[0])+'T12:00:00');
   const dayName = dayNames[dateObj.getDay()];
   const dateStr = dateObj.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
-
-  // Find the week this date belongs to
   const dow = dateObj.getDay();
   const monday = new Date(dateObj);
   monday.setDate(dateObj.getDate() - (dow === 0 ? 6 : dow - 1));
   const mondayStr = monday.toISOString().split('T')[0];
   const week = (data.workoutPlans||[]).find(w => padDate(w.startDate) === mondayStr);
-
   const groups = data.workoutGroups || [];
   const categories = data.workoutCategories || [];
   const catColors = {}; categories.forEach(c => { catColors[c.name] = c.color || '#8c929e'; });
-
   const getDayItems = (groupId, level) => {
     if(!week) return [];
     return (week.entries||[]).filter(e => e.groupId===groupId && e.level===level && e.day===dayName);
@@ -2778,25 +2539,20 @@ function DailyPracticeView({ data, nav, date }) {
     if(!week) return false;
     return (week.restDays||[]).some(rd => rd.groupId===groupId && rd.level===level && rd.day===dayName);
   };
-
   const hasAnyContent = groups.some(g => g.levels.some(lv => getDayItems(g.id, lv).length > 0 || isRest(g.id, lv)));
-
   return (
     <div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
         <button style={S.backLink} onClick={()=>nav('dashboard')}>{"<- "}Dashboard</button>
         {week && <button style={{...S.btn,...S.btnSecondary,fontSize:11}} onClick={()=>nav('practicePlans',{weekId:week.id})}>Go to Week -></button>}
       </div>
-
       <h1 style={S.h1}>{dayName+"'s Practice"}</h1>
       <p style={S.h3}>{dateStr}</p>
-
       {!hasAnyContent && (
         <div style={{...S.card, textAlign:'center', padding:30, color:C.textSecondary}}>
           {week ? 'No workouts planned for this day.' : 'No week found for this date.'}
         </div>
       )}
-
       {groups.map(group => {
         const groupHasContent = group.levels.some(lv => getDayItems(group.id, lv).length > 0 || isRest(group.id, lv));
         if(!groupHasContent) return null;
@@ -2869,10 +2625,7 @@ function DailyPracticeView({ data, nav, date }) {
     </div>
   );
 }
-
-// --- EXERCISE TABLE (standalone to avoid re-creation) ---
 const emptyRow = () => ({ exercise:'', type:'', time:'', mileage:'', distance:'', reps:'', weight:'', effort:'' });
-
 function ExerciseTable({ exercises, onChange, readOnly, library }) {
   const [focusCell, setFocusCell] = useState('');
   const [dragRow, setDragRow] = useState(null);
@@ -2880,13 +2633,10 @@ function ExerciseTable({ exercises, onChange, readOnly, library }) {
   const blurRef = useRef(null);
   const onFocus = (f) => { clearTimeout(blurRef.current); setFocusCell(f); };
   const onBlur = () => { blurRef.current = setTimeout(()=>setFocusCell(''), 200); };
-
   const moveRow = (from, to) => {
     if(from===to||!onChange) return;
     const c=[...exercises]; const [item]=c.splice(from,1); c.splice(to,0,item); onChange(c);
   };
-
-  // Build unique exercise catalog from library
   const exerciseCatalog = useMemo(() => {
     if(!library) return [];
     const map = {};
@@ -2898,7 +2648,6 @@ function ExerciseTable({ exercises, onChange, readOnly, library }) {
     });
     return Object.values(map).sort((a,b)=>a.exercise.localeCompare(b.exercise));
   }, [library]);
-
   return (
     <div style={{overflowX:'auto',marginTop:4}}>
       <table style={{width:'100%',borderCollapse:'collapse',minWidth:580}}>
@@ -2959,8 +2708,6 @@ function ExerciseTable({ exercises, onChange, readOnly, library }) {
     </div>
   );
 }
-
-// --- PRACTICE PLANS PAGE ---
 function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
   const [tab, setTab] = useState('weekly');
   const [selectedWeek, setSelectedWeek] = useState(()=>{
@@ -2980,7 +2727,6 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
   const [expandedItems, setExpandedItems] = useState({});
   const [dragDay, setDragDay] = useState(null);
   const [dragOverDay, setDragOverDay] = useState(null);
-
   const swapDays = (weekId, groupId, level, fromDay, toDay) => {
     if(fromDay===toDay) return;
     save({...data, workoutPlans:(data.workoutPlans||[]).map(w=>{
@@ -3008,7 +2754,6 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
   const [addItemForm, setAddItemForm] = useState({ category:'', type:'', workoutId:'' });
   const [delWeekId, setDelWeekId] = useState(null);
   const [showEditMeets, setShowEditMeets] = useState(false);
-  // Library
   const [showAddLib, setShowAddLib] = useState(false);
   const [editLibId, setEditLibId] = useState(null);
   const [libForm, setLibForm] = useState({ name:'', category:'', type:'', isDefault:false, exercises:[{ exercise:'', type:'', time:'', distance:'', reps:'', weight:'', effort:'' }] });
@@ -3019,26 +2764,20 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
   const [libSort, setLibSort] = useState('name');
   const [showImportLib, setShowImportLib] = useState(false);
   const [importLibText, setImportLibText] = useState('');
-  // Groups
   const [showEditGroup, setShowEditGroup] = useState(null);
   const [groupForm, setGroupForm] = useState({ name:'', levels:[] });
   const [newLevelInput, setNewLevelInput] = useState('');
-  // Categories
   const [showAddCat, setShowAddCat] = useState(false);
   const [catForm, setCatForm] = useState({ name:'', color:'#2b6cb0' });
   const [editCatId, setEditCatId] = useState(null);
   const [delCatId, setDelCatId] = useState(null);
-
   const groups = data.workoutGroups || [];
   const library = data.workoutLibrary || [];
   const categories = data.workoutCategories || [];
   const plans = (data.workoutPlans||[]).sort((a,b)=>(a.startDate||'').localeCompare(b.startDate||''));
   const defaultCat = (categories[0]||{}).name || 'Main';
   const catColors = {}; categories.forEach(c => { catColors[c.name] = c.color || C.textMuted; });
-
   const weekLabel = (sd) => { if(!sd) return 'New Week'; const d=new Date(sd+'T12:00:00'); return `Week of ${d.toLocaleDateString('en-US',{month:'short',day:'numeric'})}`; };
-
-  // -- Auto-generate weeks for active season on load --
   useEffect(() => {
     if(!season) return;
     const existing = new Set((data.workoutPlans||[]).map(w=>w.startDate));
@@ -3055,16 +2794,11 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
     }
     if(newWeeks.length > 0) save({...data, workoutPlans:[...(data.workoutPlans||[]), ...newWeeks]});
   }, [(season||{}).id]);
-
-  // -- Day editor computed values (stable across renders) --
   const dayCatLib = addItemForm.category ? library.filter(l=>(l.category||(l.categories||[])[0]||"").toLowerCase().includes(addItemForm.category.toLowerCase())) : library;
   const dayTypesInCat = [...new Set(dayCatLib.map(l=>l.type||'').filter(Boolean))].sort();
   const dayTypeLib = addItemForm.type ? dayCatLib.filter(l=>(l.type||"").toLowerCase().includes(addItemForm.type.toLowerCase())) : dayCatLib;
   const daySelW = addItemForm.workoutId ? dayTypeLib.find(l=>l.id===addItemForm.workoutId) : null;
-
-  // -- Day helpers --
   const getDayItems = (wid,gid,lv,day) => (((data.workoutPlans||[]).find(w=>w.id===wid)||{}).entries||[]).filter(e=>e.groupId===gid&&e.level===lv&&e.day===day);
-
   const addDayItem = (wid,gid,lv,day,item) => {
     save({...data, workoutPlans:(data.workoutPlans||[]).map(w=>w.id!==wid?w:{...w,entries:[...(w.entries||[]),{id:uid(),groupId:gid,level:lv,day,...item}]})});
   };
@@ -3089,12 +2823,9 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
     const items=(((data.workoutPlans||[]).find(w=>w.id===wid)||{}).entries||[]).filter(e=>e.groupId===gid&&e.level===lv);
     let total = 0;
     items.forEach(e => {
-      // Top-level mileage (already miles)
       total += parseFloat(e.mileage) || 0;
-      // Top-level distance (meters -> miles)
       const topMeters = parseFloat(e.distance) || 0;
       if(topMeters > 0) total += topMeters / METERS_PER_MILE;
-      // Exercise-level
       (e.exercises||[]).forEach(ex => {
         total += parseFloat(ex.mileage) || 0;
         const exMeters = parseFloat(ex.distance) || 0;
@@ -3104,11 +2835,8 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
     return total;
   };
   const deleteWeek = () => { save({...data,workoutPlans:(data.workoutPlans||[]).filter(w=>w.id!==delWeekId)}); setDelWeekId(null); if(selectedWeek===delWeekId) setSelectedWeek(null); };
-
   const curWeek = plans.find(w=>w.id===selectedWeek);
   const curWeekIdx = plans.findIndex(w=>w.id===selectedWeek);
-
-  // -- Library helpers --
   const filteredLib = library.filter(l=>{
     if(libSearch&&!l.name.toLowerCase().includes(libSearch.toLowerCase())&&!(l.description||'').toLowerCase().includes(libSearch.toLowerCase())&&!(l.exercises||[]).some(ex=>(ex.exercise||'').toLowerCase().includes(libSearch.toLowerCase()))) return false;
     if(libCatFilter&&(l.category||(l.categories||[])[0])!==libCatFilter) return false;
@@ -3119,7 +2847,6 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
     return ((a.category||(a.categories||[])[0])||'').localeCompare((b.category||(b.categories||[])[0])||'')||(a.type||'').localeCompare(b.type||'')||(a.name||'').localeCompare(b.name||'');
   });
   const typesForFilter = [...new Set(library.filter(l=>!libCatFilter||(l.category||(l.categories||[])[0])===libCatFilter).map(l=>l.type||'').filter(Boolean))].sort();
-
   const startAddLib = () => { setLibForm({ name:'', category:'', type:'', description:'', isDefault:false, exercises:[emptyRow()], mileage:'',time:'',distance:'',sets:'',reps:'',weight:'',effort:'' }); setEditLibId(null); setShowAddLib(true); };
   const startEditLib = (item) => { setLibForm({ name:item.name, category:item.category||(item.categories||[])[0]||defaultCat, type:item.type||'', description:item.description||'', isDefault:!!item.isDefault, exercises:(item.exercises||[]).length>0?item.exercises.map(e=>({...e})):[emptyRow()], mileage:item.mileage||'',time:item.time||'',distance:item.distance||'',sets:item.sets||'',reps:item.reps||'',weight:item.weight||'',effort:item.effort||'' }); setEditLibId(item.id); setShowAddLib(true); };
   const saveLib = () => {
@@ -3130,15 +2857,11 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
     setShowAddLib(false); setEditLibId(null);
   };
   const deleteLib = (id) => save({...data,workoutLibrary:(data.workoutLibrary||[]).filter(l=>l.id!==id)});
-
-  // Groups
   const startEditGroup = (g) => { setGroupForm({name:g.name,levels:[...g.levels]}); setShowEditGroup(g.id); };
   const addNewGroup = () => { const g={id:uid(),name:'New Group',levels:['Level 1']}; save({...data,workoutGroups:[...(data.workoutGroups||[]),g]}); startEditGroup(g); };
   const saveGroup = () => { if(!groupForm.name) return; save({...data,workoutGroups:(data.workoutGroups||[]).map(g=>g.id===showEditGroup?{...g,name:groupForm.name,levels:groupForm.levels}:g)}); setShowEditGroup(null); };
   const deleteGroup = (id) => save({...data,workoutGroups:(data.workoutGroups||[]).filter(g=>g.id!==id)});
   const addLevel = () => { if(!newLevelInput.trim()) return; setGroupForm(f=>({...f,levels:[...f.levels,newLevelInput.trim()]})); setNewLevelInput(''); };
-
-  // Categories
   const saveCat = () => {
     if(!catForm.name) return;
     if(editCatId) save({...data,workoutCategories:(data.workoutCategories||[]).map(wc=>wc.id===editCatId?{...wc,...catForm}:wc)});
@@ -3146,30 +2869,20 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
     setShowAddCat(false); setEditCatId(null); setCatForm({name:'',color:'#2b6cb0'});
   };
   const deleteCat = () => { save({...data,workoutCategories:(data.workoutCategories||[]).filter(wc=>wc.id!==delCatId)}); setDelCatId(null); };
-
-  // -- Exercise Table Component --
-  // -- Pre-computed day editor values (avoids IIFEs in JSX) --
   const dayItems = editingDay ? getDayItems(editingDay.weekId, editingDay.groupId, editingDay.level, editingDay.day) : [];
   const dayRest = editingDay ? isRestDay(editingDay.weekId, editingDay.groupId, editingDay.level, editingDay.day) : false;
   const dayGroupName = editingDay ? ((groups.find(g=>g.id===editingDay.groupId)||{}).name||'') : '';
-
-  // -- Pre-computed library grouping --
   const libGrouped = {};
   filteredLib.forEach(l=>{const cat=l.category||(l.categories||[])[0]||'Uncategorized';if(!libGrouped[cat])libGrouped[cat]={};const tp=l.type||'General';if(!libGrouped[cat][tp])libGrouped[cat][tp]=[];libGrouped[cat][tp].push(l);});
-
-  // -- Sub-tab style --
   const tabStyle = (active) => ({ padding:'8px 16px', fontSize:13, fontWeight:active?600:400, color:active?C.accent:C.textSecondary, borderBottom:active?`2px solid ${C.accent}`:'2px solid transparent', background:'none', border:'none', cursor:'pointer' });
-
   return (
     <div>
-      
       <div style={{display:'flex',gap:0,borderBottom:`1px solid ${C.border}`,marginBottom:16}}>
         {[['weekly','Weekly Plans'],['library','Library'],['groups','Groups'],['categories','Categories']].map(([k,l])=>(
           <button key={k} style={tabStyle(tab===k)} onClick={()=>setTab(k)}>{l}</button>
         ))}
       </div>
-
-      {/* === WEEKLY === */}
+      
       {tab==='weekly' && (<div>
         <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
           {curWeekIdx>0 && <button style={{...S.btn,...S.btnSecondary,padding:'4px 10px'}} onClick={()=>setSelectedWeek(plans[curWeekIdx-1].id)}>{"<-"}</button>}
@@ -3185,7 +2898,6 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
           }}>+ Week</button>
           {selectedWeek && <button style={{...S.btn,...S.btnDanger,fontSize:11}} onClick={()=>setDelWeekId(selectedWeek)}>Delete</button>}
         </div>
-
         {curWeek ? (<div>
           <h2 style={{...S.h2,marginBottom:8}}>{weekLabel(curWeek.startDate)}</h2>
           {groups.map(group=>{
@@ -3210,7 +2922,6 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
                   {DAYS.map((day,dayIdx)=>{
                     const items=getDayItems(curWeek.id,group.id,level,day);
                     const rest=isRestDay(curWeek.id,group.id,level,day);
-                    // Compute date for this cell
                     const ws = padDate(curWeek.startDate);
                     const cellDate = (()=>{ const d=new Date(ws+'T12:00:00'); d.setDate(d.getDate()+dayIdx); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })();
                     const meet = data.meets.find(m=>{ const sd=padDate(m.startDate||m.date||''); const ed=padDate(m.endDate||m.startDate||m.date||''); return sd&&cellDate>=sd&&cellDate<=ed; });
@@ -3242,8 +2953,7 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
             })}
           </div>);})}
         </div>) : (<div style={{...S.card,textAlign:'center',padding:30,color:C.textSecondary,fontSize:13}}>{plans.length===0?'No weeks yet. Set up a season in Settings to auto-generate.':'Select a week above.'}</div>)}
-
-        {/* Day Editor */}
+        
         <Modal open={!!editingDay} onClose={()=>{setEditingDay(null);setShowAddItem(false);setShowCreateNew(false);}} width={560}>
           {editingDay&&(()=>{
             const items=getDayItems(editingDay.weekId,editingDay.groupId,editingDay.level,editingDay.day);
@@ -3261,14 +2971,12 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
                 return meet && (
                 <div style={{fontSize:12,fontWeight:600,color:C.danger,padding:'4px 10px',background:C.dangerMuted,borderRadius:6,marginBottom:8,cursor:'pointer',display:'inline-block'}} onClick={()=>nav('meetSub',{meetId:meet.id})}>{"<> "}{meet.name}</div>
               );})()}
-
               <div style={{display:'flex',gap:10,marginTop:12,marginBottom:16}}>
                 <button style={{...S.btn,fontSize:13,padding:'10px 20px',borderRadius:8,...(rest?{background:C.accent,color:C.white}:S.btnSecondary)}} onClick={()=>setRestDay(editingDay.weekId,editingDay.groupId,editingDay.level,editingDay.day,!rest)}>
                   {rest?'✓ Rest Day':'Rest Day'}
                 </button>
                 {items.length>0&&<button style={{...S.btn,...S.btnDanger,fontSize:13,padding:'10px 20px',borderRadius:8}} onClick={()=>clearDay(editingDay.weekId,editingDay.groupId,editingDay.level,editingDay.day)}>Clear Day</button>}
               </div>
-
               {!rest&&<>
                 {items.map((item,itemIdx)=>(<div key={item.id} draggable
                   onDragStart={()=>setDragIdx(itemIdx)}
@@ -3319,10 +3027,8 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
                     </div>
                   )}
                 </div>))}
-
                 {items.length===0&&!showAddItem&&<div style={{textAlign:'center',padding:24,color:C.textMuted,fontSize:14}}>No workouts planned.</div>}
-
-                {/* -- SELECT EXISTING -- */}
+                
                 {showAddItem && !showCreateNew && (
                   <div style={{padding:16,borderRadius:10,border:`2px solid ${C.accent}33`,background:C.bg,marginTop:12}}>
                     <div style={{fontSize:14,fontWeight:600,color:C.accent,marginBottom:12}}>Add from Library</div>
@@ -3390,8 +3096,7 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
                     </div>
                   </div>
                 )}
-
-                {/* -- CREATE NEW -- */}
+                
                 {showAddItem && showCreateNew && (
                   <div style={{padding:16,borderRadius:10,border:`2px solid ${C.accent}33`,background:C.bg,marginTop:12}}>
                     <div style={{fontSize:14,fontWeight:600,color:C.accent,marginBottom:12}}>Create New Workout</div>
@@ -3456,8 +3161,7 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
                     </div>
                   </div>
                 )}
-
-                {/* -- ADD BUTTON -- */}
+                
                 {!showAddItem && (
                   <div style={{display:'flex',gap:8,marginTop:12}}>
                     <button style={{...S.btn,...S.btnPrimary,flex:1,fontSize:14,padding:'12px 20px',borderRadius:8}} onClick={()=>{setAddItemForm({category:'',type:'',workoutId:'',workoutSearch:'',newCat:'',newType:'',newName:'',newDesc:'',newExercises:[emptyRow()],newMileage:'',newTime:'',newDistance:'',newSets:'',newReps:'',newWeight:'',newEffort:''});setShowAddItem(true);setShowCreateNew(false);}}>+ Add Workout</button>
@@ -3465,7 +3169,6 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
                   </div>
                 )}
               </>}
-
               <div style={{display:'flex',justifyContent:'flex-end',marginTop:16}}>
                 <button style={{...S.btn,...S.btnSecondary,fontSize:14,padding:'10px 24px',borderRadius:8}} onClick={()=>{setEditingDay(null);setShowAddItem(false);setShowCreateNew(false);}}>Done</button>
               </div>
@@ -3484,8 +3187,7 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
         </Modal>
         <ConfirmModal open={!!delWeekId} onClose={()=>setDelWeekId(null)} onConfirm={deleteWeek} message="Delete this week and all its entries?" />
       </div>)}
-
-      {/* === LIBRARY === */}
+      
       {tab==='library'&&(()=>{
         const grouped={};
         filteredLib.forEach(l=>{const cat=l.category||(l.categories||[])[0]||'Uncategorized';if(!grouped[cat])grouped[cat]={};const tp=l.type||'General';if(!grouped[cat][tp])grouped[cat][tp]=[];grouped[cat][tp].push(l);});
@@ -3503,7 +3205,6 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
             <button style={{...S.btn,...S.btnPrimary}} onClick={startAddLib}>+ Add</button>
           </div>
         </div>
-
         {Object.keys(grouped).length===0&&<div style={{...S.card,textAlign:'center',color:C.textMuted,padding:20}}>No workouts in library.</div>}
         {Object.entries(grouped).map(([catName,types])=>(
           <div key={catName} style={{marginBottom:16}}>
@@ -3570,7 +3271,6 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
             ))}
           </div>
         ))}
-
         <Modal open={showAddLib} onClose={()=>{setShowAddLib(false);setEditLibId(null);}} width={650}>
           <h2 style={S.h2}>{editLibId?'Edit':'Add'} Workout</h2>
           <div style={{display:'flex',flexDirection:'column',gap:12,marginTop:16}}>
@@ -3626,7 +3326,6 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
             <button style={{...S.btn,...S.btnPrimary}} onClick={saveLib}>{editLibId?'Save':'Add to Library'}</button>
           </div>
         </Modal>
-
         <Modal open={showImportLib} onClose={()=>setShowImportLib(false)} width={550}>
           <h2 style={S.h2}>Import Library</h2>
           <p style={{fontSize:12,color:C.textSecondary,marginTop:4,marginBottom:8}}>CSV: Category, Type, Workout</p>
@@ -3643,8 +3342,7 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
           </div>
         </Modal>
       </div>);})()}
-
-      {/* === GROUPS === */}
+      
       {tab==='groups'&&(<div>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
           <h2 style={{...S.h2,margin:0}}>Training Groups</h2>
@@ -3678,8 +3376,7 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
           </div>
         </Modal>
       </div>)}
-
-      {/* === CATEGORIES === */}
+      
       {tab==='categories'&&(<div>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
           <h2 style={{...S.h2,margin:0}}>Workout Categories</h2>
@@ -3720,7 +3417,6 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
     </div>
   );
 }
-// --- EVENTS PAGE ---
 function EventsPage({ data, save, nav }) {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
@@ -3738,9 +3434,7 @@ function EventsPage({ data, save, nav }) {
   const [stdForm, setStdForm] = useState({ name:'', timeMs:0, ft:0, inch:0, qtr:0, min:0, sec:0 });
   const [showAddRecord, setShowAddRecord] = useState(null);
   const [recForm, setRecForm] = useState({ athleteId:'', timeMs:0, ft:0, inch:0, qtr:0, min:0, sec:0, date:'', type:'School Record' });
-
   const toggleSort = (col) => { if(sortCol===col) setSortDir(d=>d==='asc'?'desc':'asc'); else { setSortCol(col); setSortDir('asc'); } };
-
   const events = (data.events||[]).filter(e => {
     if(search && !e.name.toLowerCase().includes(search.toLowerCase())) return false;
     if(typeFilter && e.eventType !== typeFilter) return false;
@@ -3773,21 +3467,17 @@ function EventsPage({ data, save, nav }) {
     if(av>bv) return sortDir==='asc'?1:-1;
     return 0;
   });
-
   const addEvent = () => {
     if(!form.name) return;
     if(editId) { save({...data, events:(data.events||[]).map(e=>e.id===editId?{...e,...form}:e)}); setEditId(null); }
     else { save({...data, events:[...(data.events||[]),{id:uid(),...form,qualifyingStandards:[],schoolRecords:[]}]}); }
     setShowAdd(false); setForm({ name:'', eventType:'Track', entryType:'Individual', gender:'Boy', trackType:'Both', measurableType:'Time' });
   };
-
   const startEdit = (evt) => {
     setForm({ name:evt.name, eventType:evt.eventType, entryType:evt.entryType, gender:evt.gender, trackType:evt.trackType, measurableType:evt.measurableType });
     setEditId(evt.id); setShowAdd(true);
   };
-
   const deleteEvent = () => { save({...data, events:(data.events||[]).filter(e=>e.id!==delId)}); setDelId(null); };
-
   const addStandard = (eventId) => {
     const timeMs = parseTimeToMs(stdForm.min, stdForm.sec);
     const std = { id:uid(), name:stdForm.name, timeMs, ft:parseInt(stdForm.ft)||0, inch:parseInt(stdForm.inch)||0, qtr:parseFloat(stdForm.qtr)||0 };
@@ -3795,7 +3485,6 @@ function EventsPage({ data, save, nav }) {
     setShowAddStandard(null); setStdForm({ name:'', timeMs:0, ft:0, inch:0, qtr:0, min:0, sec:0 });
   };
   const removeStandard = (eventId, stdId) => save({...data, events:(data.events||[]).map(e=>e.id===eventId?{...e,qualifyingStandards:(e.qualifyingStandards||[]).filter(s=>s.id!==stdId)}:e)});
-
   const addRecord = (eventId) => {
     const timeMs = parseTimeToMs(recForm.min, recForm.sec);
     const rec = { id:uid(), type:recForm.type, athleteId:recForm.athleteId, timeMs, ft:parseInt(recForm.ft)||0, inch:parseInt(recForm.inch)||0, qtr:parseFloat(recForm.qtr)||0, date:recForm.date };
@@ -3803,19 +3492,16 @@ function EventsPage({ data, save, nav }) {
     setShowAddRecord(null); setRecForm({ athleteId:'', timeMs:0, ft:0, inch:0, qtr:0, min:0, sec:0, date:'', type:'School Record' });
   };
   const removeRecord = (eventId, recId) => save({...data, events:(data.events||[]).map(e=>e.id===eventId?{...e,schoolRecords:(e.schoolRecords||[]).filter(r=>r.id!==recId)}:e)});
-
   const SortHeader = ({col, label, width}) => (
     <th style={{...S.th, cursor:'pointer', userSelect:'none', width}} onClick={()=>toggleSort(col)}>
       {label} {sortCol===col ? (sortDir==='asc'?'^':'v') : ''}
     </th>
   );
-
   return (
     <div>
       <div style={{display:'flex',justifyContent:'flex-end',gap:6,marginBottom:12}}>
         <button style={{...S.btn,...S.btnPrimary}} onClick={()=>{setForm({name:'',eventType:'Track',entryType:'Individual',gender:'Boy',trackType:'Both',measurableType:'Time'});setEditId(null);setShowAdd(true);}}>+ Add Event</button>
       </div>
-
       <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
         <input style={{...S.input,maxWidth:180}} placeholder="Search..." value={search} onChange={e=>setSearch(e.target.value)} />
         <select style={S.select} value={typeFilter} onChange={e=>setTypeFilter(e.target.value)}><option value="">All Types</option><option value="Track">Track</option><option value="Field">Field</option></select>
@@ -3824,7 +3510,6 @@ function EventsPage({ data, save, nav }) {
         <select style={S.select} value={entryFilter} onChange={e=>setEntryFilter(e.target.value)}><option value="">All Entries</option><option value="Individual">Individual</option><option value="Relay">Relay</option></select>
         {(search||typeFilter||genderFilter||trackFilter||entryFilter)&&<button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'4px 10px'}} onClick={()=>{setSearch('');setTypeFilter('');setGenderFilter('');setTrackFilter('');setEntryFilter('');}}>Clear</button>}
       </div>
-
       <div style={{...S.card, overflowX:'auto'}}>
         <table style={{width:'100%',borderCollapse:'collapse',minWidth:750}}>
           <thead><tr>
@@ -3899,7 +3584,6 @@ function EventsPage({ data, save, nav }) {
         </table>
       </div>
       <div style={{fontSize:12,color:C.textMuted,marginTop:6}}>{events.length} event{events.length!==1?'s':''}</div>
-
       <Modal open={showAdd} onClose={()=>{setShowAdd(false);setEditId(null);}} width={450}>
         <h2 style={S.h2}>{editId?'Edit':'Add'} Event</h2>
         <div style={{display:'flex',flexDirection:'column',gap:10,marginTop:16}}>
@@ -3916,7 +3600,6 @@ function EventsPage({ data, save, nav }) {
           <button style={{...S.btn,...S.btnPrimary}} onClick={addEvent}>{editId?'Save Changes':'Add Event'}</button>
         </div>
       </Modal>
-
       <Modal open={!!showAddStandard} onClose={()=>setShowAddStandard(null)} width={400}>
         <h2 style={S.h2}>Add Qualifying Standard</h2>
         <div style={{display:'flex',flexDirection:'column',gap:10,marginTop:16}}>
@@ -3927,7 +3610,6 @@ function EventsPage({ data, save, nav }) {
           <button style={{...S.btn,...S.btnPrimary}} onClick={()=>addStandard(showAddStandard)}>Add Standard</button>
         </div>
       </Modal>
-
       <Modal open={!!showAddRecord} onClose={()=>setShowAddRecord(null)} width={400}>
         <h2 style={S.h2}>Add School Record</h2>
         <div style={{display:'flex',flexDirection:'column',gap:10,marginTop:16}}>
@@ -3943,13 +3625,10 @@ function EventsPage({ data, save, nav }) {
           <button style={{...S.btn,...S.btnPrimary}} onClick={()=>addRecord(showAddRecord)}>Add Record</button>
         </div>
       </Modal>
-
       <ConfirmModal open={!!delId} onClose={()=>setDelId(null)} onConfirm={deleteEvent} message="Delete this event? Qualifying standards and records will also be removed." />
     </div>
   );
 }
-
-// --- TOOLS PAGE ---
 function ToolsPage({ data, save, nav, events, addResult, getAthletePR, checkRecord, checkQualifying, preset }) {
   const tools = [
     { key:'raceTimer', label:'Race Timer', desc:'Single athlete, single event. Lap splits with pace tracking.', icon:'⏱️', color:C.accent },
@@ -3958,7 +3637,6 @@ function ToolsPage({ data, save, nav, events, addResult, getAthletePR, checkReco
   ];
   return (
     <div>
-      
       {tools.map(t => (
         <button key={t.key} style={{...S.bigBtn, borderLeft:`4px solid ${t.color}`, background:C.surface, marginBottom:8}} onClick={()=>nav(t.key)}>
           <div style={{display:'flex',alignItems:'center',gap:12}}>
@@ -3970,8 +3648,6 @@ function ToolsPage({ data, save, nav, events, addResult, getAthletePR, checkReco
     </div>
   );
 }
-
-// --- RACE TIMER ---
 function RaceTimer({ data, save, nav, events, addResult, getAthletePR, checkRecord, checkQualifying, preset }) {
   const [meetId, setMeetId] = useState((preset||{}).meetId||'');
   const [eventId, setEventId] = useState((preset||{}).eventId||'');
@@ -3984,17 +3660,14 @@ function RaceTimer({ data, save, nav, events, addResult, getAthletePR, checkReco
   const [finished, setFinished] = useState(false);
   const [saved, setSaved] = useState(false);
   const timerRef = useRef(null);
-
   const evt = events.find(e=>e.id===eventId);
   const lapDist = trackType==='Indoor'?INDOOR_LAP:OUTDOOR_LAP;
   const totalDist = getDistance(evt);
   const totalLaps = totalDist > 0 ? Math.ceil(totalDist/lapDist) : 999;
-
   useEffect(() => {
     if(running && startTime) { timerRef.current = setInterval(()=>setElapsed(Date.now()-startTime),10); return ()=>clearInterval(timerRef.current); }
     return ()=>clearInterval(timerRef.current);
   }, [running, startTime]);
-
   const start = () => { setStartTime(Date.now()); setRunning(true); setElapsed(0); setLaps([]); setFinished(false); setSaved(false); };
   const lap = () => {
     if(!running) return;
@@ -4007,7 +3680,6 @@ function RaceTimer({ data, save, nav, events, addResult, getAthletePR, checkReco
   };
   const stop = () => { clearInterval(timerRef.current); setRunning(false); setFinished(true); };
   const reset = () => { clearInterval(timerRef.current); setRunning(false); setElapsed(0); setLaps([]); setFinished(false); setSaved(false); };
-
   const handleSave = () => {
     if(!athleteId || !eventId || laps.length===0) return;
     const meet = data.meets.find(m=>m.id===meetId);
@@ -4015,10 +3687,8 @@ function RaceTimer({ data, save, nav, events, addResult, getAthletePR, checkReco
     addResult({ id:uid(), athleteId, eventId, meetId, date:(meet||{}).startDate||(meet||{}).date||new Date().toISOString().split('T')[0], timeMs:finalTime, splits:laps });
     setSaved(true);
   };
-
   const activeAthletes = data.athletes.filter(a=>a.active!==false);
   const trackEvents = events.filter(e=>isTrackEvent(e)&&e.entryType==='Individual');
-
   return (
     <div>
       <button style={S.backLink} onClick={()=>(preset||{}).meetId?nav('meetSub',{meetId:preset.meetId}):nav('tools')}>{"<- "}Back</button>
@@ -4054,8 +3724,6 @@ function RaceTimer({ data, save, nav, events, addResult, getAthletePR, checkReco
     </div>
   );
 }
-
-// --- MULTI-SPLIT TIMER ---
 function MultiSplitTimer({ data, save, nav, events, addResult, getAthletePR, checkRecord, preset }) {
   const [meetId, setMeetId] = useState((preset||{}).meetId||'');
   const [eventId, setEventId] = useState((preset||{}).eventId||'');
@@ -4073,7 +3741,6 @@ function MultiSplitTimer({ data, save, nav, events, addResult, getAthletePR, che
   const [collapsed, setCollapsed] = useState(false);
   const [saved, setSaved] = useState(false);
   const timerRef = useRef(null);
-
   const evt = events.find(e=>e.id===eventId);
   const lapDist = trackType==='Indoor'?INDOOR_LAP:OUTDOOR_LAP;
   const totalDist = getDistance(evt);
@@ -4081,14 +3748,11 @@ function MultiSplitTimer({ data, save, nav, events, addResult, getAthletePR, che
   const isRelayEvt = (evt||{}).entryType==='Relay';
   const legsPerAthlete = isRelayEvt ? Math.ceil(totalLaps/athletes.length) : totalLaps;
   const COLORS = ['#2b6cb0','#c96a1f','#25763b','#c53030','#6b46c1','#b8860b'];
-
   useEffect(() => {
     if(running&&startTime) { timerRef.current=setInterval(()=>setElapsed(Date.now()-startTime),10); return()=>clearInterval(timerRef.current); }
     return()=>clearInterval(timerRef.current);
   }, [running, startTime]);
-
   const handleStart = () => { setStartTime(Date.now()); setRunning(true); setElapsed(0); setAthletes(a=>a.map(at=>({...at,laps:[]}))); setFinished(false); setSaved(false); setCollapsed(true); };
-
   const handleLap = (idx) => {
     if(!running) return;
     const now=Date.now(); const lapTime=now-startTime;
@@ -4102,10 +3766,8 @@ function MultiSplitTimer({ data, save, nav, events, addResult, getAthletePR, che
       return copy;
     });
   };
-
   const handleStop = () => { clearInterval(timerRef.current); setRunning(false); setFinished(true); };
   const handleReset = () => { clearInterval(timerRef.current); setRunning(false); setElapsed(0); setFinished(false); setSaved(false); setCollapsed(false); setAthletes(a=>a.map(at=>({...at,laps:[]}))); };
-
   const handleSave = () => {
     const meet=data.meets.find(m=>m.id===meetId);
     const raceDate=(meet||{}).startDate||(meet||{}).date||new Date().toISOString().split('T')[0];
@@ -4123,11 +3785,9 @@ function MultiSplitTimer({ data, save, nav, events, addResult, getAthletePR, che
     }
     setSaved(true);
   };
-
   const activeAthletes = data.athletes.filter(a=>a.active!==false);
   const trackEvents = events.filter(e=>isTrackEvent(e));
   const gender = (evt||{}).gender;
-
   return (
     <div>
       <button style={S.backLink} onClick={()=>(preset||{}).meetId?nav('meetSub',{meetId:preset.meetId}):nav('tools')}>{"<- "}Back</button>
@@ -4224,8 +3884,6 @@ function MultiSplitTimer({ data, save, nav, events, addResult, getAthletePR, che
     </div>
   );
 }
-
-// --- FIELD EVENT ---
 function FieldEventPage({ data, save, nav, events, addResult, getAthletePR, checkRecord, checkQualifying, preset }) {
   const [meetId, setMeetId] = useState((preset||{}).meetId||'');
   const [eventId, setEventId] = useState((preset||{}).eventId||'');
@@ -4235,18 +3893,15 @@ function FieldEventPage({ data, save, nav, events, addResult, getAthletePR, chec
   const [qtr, setQtr] = useState(0);
   const [attempts, setAttempts] = useState([]);
   const [saved, setSaved] = useState(false);
-
   const evt = events.find(e=>e.id===eventId);
   const pr = getAthletePR(athleteId, eventId);
   const activeAthletes = data.athletes.filter(a=>a.active!==false);
   const fieldEvents = events.filter(e=>isFieldEvent(e)&&e.entryType==='Individual');
-
   const addAttempt = () => {
     const totalInches = fieldToInches(ft,inch,qtr);
     if(totalInches<=0) return;
     setAttempts(prev=>[...prev,{ft:parseInt(ft),inch:parseInt(inch),qtr:parseFloat(qtr),total:totalInches}]);
   };
-
   const saveBest = () => {
     if(!attempts.length||!athleteId||!eventId) return;
     const best = attempts.reduce((b,a)=>a.total>b.total?a:b);
@@ -4254,7 +3909,6 @@ function FieldEventPage({ data, save, nav, events, addResult, getAthletePR, chec
     addResult({id:uid(),athleteId,eventId,meetId,date:(meet||{}).startDate||(meet||{}).date||new Date().toISOString().split('T')[0],ft:best.ft,inch:best.inch,qtr:best.qtr});
     setSaved(true);
   };
-
   return (
     <div>
       <button style={S.backLink} onClick={()=>(preset||{}).meetId?nav('meetSub',{meetId:preset.meetId}):nav('tools')}>{"<- "}Back</button>
@@ -4289,38 +3943,29 @@ function FieldEventPage({ data, save, nav, events, addResult, getAthletePR, chec
     </div>
   );
 }
-
-// --- SETTINGS PAGE ---
 function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
   const [tab, setTab] = useState('seasons');
   const [saved, setSaved] = useState(false);
   const [importData, setImportData] = useState(null);
   const [importMsg, setImportMsg] = useState('');
-  // Branding
   const [teamName, setTeamName] = useState((team||{}).name||'');
   const [school, setSchool] = useState((team||{}).school||'');
   const [primaryColor, setPrimaryColor] = useState(((team||{}).colors||{}).primary||'#c96a1f');
   const [secondaryColor, setSecondaryColor] = useState(((team||{}).colors||{}).secondary||'#2b6cb0');
   const [showCustomColors, setShowCustomColors] = useState(false);
-  // Seasons
   const [showAddSeason, setShowAddSeason] = useState(false);
   const [seasonForm, setSeasonForm] = useState({ name:'', startDate:'', endDate:'', trackType:'Outdoor', active:false });
   const [delSeasonId, setDelSeasonId] = useState(null);
-  // Meet Types
   const [showAddMT, setShowAddMT] = useState(false);
   const [mtForm, setMtForm] = useState({ name:'', qualifying:false });
   const [editMTId, setEditMTId] = useState(null);
   const [delMTId, setDelMTId] = useState(null);
-  // Workout Categories
-
   useEffect(() => { setTeamName((team||{}).name||''); setSchool((team||{}).school||''); setPrimaryColor(((team||{}).colors||{}).primary||'#c96a1f'); setSecondaryColor(((team||{}).colors||{}).secondary||'#2b6cb0'); }, [team]);
-
   const handleSaveBranding = async () => {
     await updateTeam(team.id, { name:teamName.trim(), school:school.trim(), colors:{primary:primaryColor,secondary:secondaryColor} });
     C = makeColors(primaryColor,secondaryColor); S = makeStyles(C);
     setSaved(true); setTimeout(()=>setSaved(false),2000);
   };
-
   const handleLogo = (e) => {
     const file = (e.target.files||[])[0];
     if(!file) return;
@@ -4329,8 +3974,6 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
     reader.onload = async(ev) => { await updateTeam(team.id,{logo:ev.target.result}); };
     reader.readAsDataURL(file);
   };
-
-  // Season functions
   const addSeason = () => {
     if(!seasonForm.name||!seasonForm.startDate||!seasonForm.endDate) return;
     const seasons = [...(data.seasons||[])];
@@ -4346,8 +3989,6 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
     save({...data,seasons:(data.seasons||[]).filter(s=>s.id!==delSeasonId)});
     setDelSeasonId(null);
   };
-
-  // Meet Type functions
   const saveMT = () => {
     if(!mtForm.name) return;
     if(editMTId) { save({...data,meetTypes:(data.meetTypes||[]).map(mt=>mt.id===editMTId?{...mt,...mtForm}:mt)}); }
@@ -4355,21 +3996,16 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
     setShowAddMT(false); setEditMTId(null); setMtForm({name:'',qualifying:false});
   };
   const deleteMT = () => { save({...data,meetTypes:(data.meetTypes||[]).filter(mt=>mt.id!==delMTId)}); setDelMTId(null); };
-
-  // Workout Category functions
   const previewC = makeColors(primaryColor,secondaryColor);
   const events = data.events||[];
-
   return (
     <div>
-      
       <div style={{display:'flex',gap:4,marginBottom:16,flexWrap:'wrap'}}>
         {[['seasons','Seasons'],['branding','Branding'],['meetTypes','Meet Types'],['qualifying','Qualifying'],['records','Records'],['team','Team'],['data','Data']].map(([k,l])=>(
           <button key={k} style={S.pill(tab===k)} onClick={()=>setTab(k)}>{l}</button>
         ))}
       </div>
-
-      {/* === SEASONS === */}
+      
       {tab==='seasons' && (<div>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
           <h2 style={{...S.h2,margin:0}}>Seasons</h2>
@@ -4407,8 +4043,7 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
         </Modal>
         <ConfirmModal open={!!delSeasonId} onClose={()=>setDelSeasonId(null)} onConfirm={deleteSeason} message="Delete this season?" />
       </div>)}
-
-      {/* === BRANDING === */}
+      
       {tab==='branding' && (<div>
         <div style={S.card}>
           <h2 style={{...S.h2,marginBottom:12}}>Team Info</h2>
@@ -4470,8 +4105,7 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
         </div>
         <div style={{display:'flex',gap:8}}><button style={{...S.btn,...S.btnPrimary}} onClick={handleSaveBranding}>Save Branding</button><SavedIndicator saved={saved} /></div>
       </div>)}
-
-      {/* === MEET TYPES === */}
+      
       {tab==='meetTypes' && (<div>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
           <h2 style={{...S.h2,margin:0}}>Meet Types</h2>
@@ -4497,8 +4131,7 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
         </Modal>
         <ConfirmModal open={!!delMTId} onClose={()=>setDelMTId(null)} onConfirm={deleteMT} message="Delete this meet type?" />
       </div>)}
-
-      {/* === QUALIFYING QUICK VIEW === */}
+      
       {tab==='qualifying' && (<div>
         <h2 style={{...S.h2,marginBottom:12}}>Qualifying Standards - All Events</h2>
         <div style={S.card}>
@@ -4518,8 +4151,7 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
           </table>
         </div>
       </div>)}
-
-      {/* === RECORDS QUICK VIEW === */}
+      
       {tab==='records' && (<div>
         <h2 style={{...S.h2,marginBottom:12}}>School Records - All Events</h2>
         <div style={S.card}>
@@ -4542,8 +4174,7 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
           </table>
         </div>
       </div>)}
-
-      {/* === TEAM === */}
+      
       {tab==='team' && (<div>
         <div style={S.card}>
           <h2 style={{...S.h2,marginBottom:8}}>Join Code</h2>
@@ -4565,7 +4196,6 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
           {HAS_FIREBASE && <button style={{...S.btn,...S.btnDanger}} onClick={signOut}>Sign Out</button>}
         </div>
       </div>)}
-
       {tab==='data' && (<div>
         <div style={S.card}>
           <h2 style={{...S.h2,marginBottom:8}}>Export Data</h2>
@@ -4644,3 +4274,4 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
     </div>
   );
 }
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));

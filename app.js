@@ -62,11 +62,11 @@ const EXERCISE_COLUMNS = [
   { key:'effort', label:'Effort', width:60, type:'text', placeholder:'80%' },
 ];
 const ATTENDANCE_STATUSES = [
-  { key:'present', label:'Present', color:'#25763b', icon:'✓' },
-  { key:'absent', label:'Absent', color:'#c53030', icon:'✗' },
-  { key:'excused', label:'Excused', color:'#c96a1f', icon:'○' },
-  { key:'late', label:'Late', color:'#2b6cb0', icon:'⌚' },
-  { key:'signedout', label:'Signed Out', color:'#6b46c1', icon:'→' },
+  { key:'present', label:'Present', color:'#25763b', icon:'[ok]' },
+  { key:'absent', label:'Absent', color:'#c53030', icon:'[x]' },
+  { key:'excused', label:'Excused', color:'#c96a1f', icon:'o' },
+  { key:'late', label:'Late', color:'#2b6cb0', icon:'>' },
+  { key:'signedout', label:'Signed Out', color:'#6b46c1', icon:'>' },
 ];
 const uid = () => Math.random().toString(36).substr(2,9);
 const padDate = (d) => { if(!d) return ''; const s=d+''; if(s.includes('/')) { const p=s.split('/'); if(p.length===3) return `${p[2]}-${p[0].padStart(2,'0')}-${p[1].padStart(2,'0')}`; } const p=s.split('-'); if(p.length===3&&p[0].length===4) return `${p[0]}-${p[1].padStart(2,'0')}-${p[2].padStart(2,'0')}`; return s; };
@@ -388,10 +388,10 @@ const exTotals = (exercises) => {
   return parts.join(' + ');
 };
 const makeStyles = (C) => ({
-  app: { fontFamily:"'Rubik','Inter',system-ui,-apple-system,sans-serif", background:C.bg, minHeight:'100vh', color:C.text, letterSpacing:'-0.01em' },
-  container: { maxWidth:1100, margin:'0 auto', padding:'16px 20px', width:'100%', boxSizing:'border-box' },
-  containerDesktop: { marginLeft:250, maxWidth:'none', padding:'16px 28px' },
-  card: { background:C.surface, borderRadius:8, padding:'14px 18px', marginBottom:10, border:`1px solid ${C.border}`, maxWidth:'100%', boxSizing:'border-box' },
+  app: { fontFamily:"'Rubik','Inter',system-ui,-apple-system,sans-serif", background:C.bg, minHeight:'100vh', color:C.text, letterSpacing:'-0.01em', overflowX:'hidden', width:'100%' },
+  container: { maxWidth:1100, margin:'0 auto', padding:'16px 16px', width:'100%', boxSizing:'border-box', minWidth:0 },
+  containerDesktop: { marginLeft:250, maxWidth:'none', padding:'20px 32px', width:'calc(100% - 250px)' },
+  card: { background:C.surface, borderRadius:8, padding:'14px 18px', marginBottom:10, border:`1px solid ${C.border}`, boxSizing:'border-box' },
   btn: { padding:'8px 16px', borderRadius:6, border:'none', cursor:'pointer', fontWeight:600, fontSize:12, transition:'opacity 0.15s', lineHeight:'18px', textTransform:'uppercase', letterSpacing:'0.04em' },
   btnPrimary: { background:C.accent, color:C.white },
   btnSecondary: { background:C.surface2, color:C.textSecondary, border:`1px solid ${C.border}` },
@@ -454,7 +454,7 @@ const Modal = ({ open, onClose, children, width }) => {
     <div style={{ position:'fixed', inset:0, zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center' }}>
       <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.3)' }} onClick={onClose} />
       <div style={{ position:'relative', background:C.surface, borderRadius:10, padding:24, width:width||520, maxWidth:'90vw', maxHeight:'85vh', overflowY:'auto', border:`1px solid ${C.border}`, boxShadow:'0 8px 32px rgba(0,0,0,0.12)' }} onClick={e=>e.stopPropagation()}>
-        <button onClick={onClose} style={{ position:'absolute', top:12, right:12, background:'none', border:'none', color:C.textMuted, cursor:'pointer', fontSize:18 }}>✕</button>
+        <button onClick={onClose} style={{ position:'absolute', top:12, right:12, background:'none', border:'none', color:C.textMuted, cursor:'pointer', fontSize:18 }}>x</button>
         {children}
       </div>
     </div>
@@ -505,7 +505,7 @@ const RecordBadge = ({ status, small }) => {
   if(!c) return null;
   return <span style={{ background:c.bg, color:c.color, padding:small?'1px 5px':'2px 8px', borderRadius:4, fontSize:small?9:11, fontWeight:600, letterSpacing:'0.03em' }}>{c.text}</span>;
 };
-const MEDALS = { 1:{emoji:'🥇',color:'#b8860b'}, 2:{emoji:'🥈',color:'#8a8a8a'}, 3:{emoji:'🥉',color:'#cd7f32'} };
+const MEDALS = { 1:{emoji:'1st',color:'#b8860b'}, 2:{emoji:'2nd',color:'#8a8a8a'}, 3:{emoji:'3rd',color:'#cd7f32'} };
 const MedalBadge = ({ place, small }) => {
   if(!place || !MEDALS[place]) return null;
   const medal = MEDALS[place];
@@ -527,7 +527,7 @@ const QualifyingBadge = ({ status, small }) => {
 };
 const SavedIndicator = ({ saved }) => {
   if(!saved) return null;
-  return <span style={{ color:C.success, fontSize:13, fontWeight:500 }}>✓ Saved</span>;
+  return <span style={{ color:C.success, fontSize:13, fontWeight:500 }}>[ok] Saved</span>;
 };
 function TrendChart({ points, width=320, height=160, color=C.accent, label, invertY=true }) {
   if(!points || points.length < 2) return null;
@@ -842,13 +842,13 @@ function App() {
     settings: () => <SettingsPage data={data} save={save} team={team} updateTeam={teamHook.updateTeam} user={user} signOut={authHook.signOut} nav={nav} />,
   };
   const menuItems = [
-    { key:'dashboard', label:'Dashboard', icon:'🏠' },
-    { key:'attendance', label:'Attendance', icon:'📋' },
-    { key:'practicePlans', label:'Practice Plans', icon:'📅' },
-    { key:'meets', label:'Meets', icon:'🏆' },
-    { key:'athletes', label:'Athletes', icon:'🏃' },
-    { key:'eventsPage', label:'Events', icon:'🎯' },
-    { key:'tools', label:'Tools', icon:'⏱️' },
+    { key:'dashboard', label:'Dashboard', icon:'#' },
+    { key:'attendance', label:'Attendance', icon:'=' },
+    { key:'practicePlans', label:'Practice Plans', icon:'=' },
+    { key:'meets', label:'Meets', icon:'<>' },
+    { key:'athletes', label:'Athletes', icon:'@' },
+    { key:'eventsPage', label:'Events', icon:'*' },
+    { key:'tools', label:'Tools', icon:'>' },
   ];
   const pageLabel = (menuItems.find(m=>m.key===page)||{}).label || (page==='settings'?'Settings':'TrackTeam');
   const teamDisplayName = (team||{}).name || 'TrackTeam';
@@ -874,7 +874,7 @@ function App() {
         ))}
         <div style={{borderTop:`1px solid ${C.border}`,marginTop:8,paddingTop:8}}>
           <button style={S.sidebarItem(page==='settings')} onClick={()=>{nav('settings');if(!isDesktop)setSidebarOpen(false);}}>
-            <span style={{fontSize:15,width:20,textAlign:'center',opacity:0.7}}>⚙️</span>
+            <span style={{fontSize:15,width:20,textAlign:'center',opacity:0.7}}>*</span>
             Settings
           </button>
         </div>
@@ -1037,7 +1037,6 @@ function Dashboard({ data, save, nav, season, team, events, activeAthletes, feat
         const qualEvents = events.filter(e=>(e.qualifyingStandards||[]).length>0);
         if(!qualEvents.length) return null;
         let totalQual=0, totalClose=0, totalEvents=0;
-        const rows = [];
         qualEvents.forEach(evt=>{
           const stds = evt.qualifyingStandards||[];
           const matchingAthletes = activeAthletes.filter(a=>evt.gender==='Mixed'||(a.gender==='M'&&evt.gender==='Boy')||(a.gender==='F'&&evt.gender==='Girl'));
@@ -1333,7 +1332,7 @@ function AttendancePage({ data, save, nav, season, activeAthletes }) {
         <button style={{...S.btn,...S.btnSecondary,padding:'4px 12px'}} onClick={()=>setWeekOffset(w=>w+1)}>Next -></button>
       </div>
       
-      <div style={{...S.card, overflowX:'auto',WebkitOverflowScrolling:'touch'}}>
+      <div style={{...S.card, overflowX:'auto'}}>
         <table style={{width:'100%',borderCollapse:'collapse',minWidth:600}}>
           <thead>
             <tr>
@@ -1495,7 +1494,7 @@ function MeetsPage({ data, save, nav, events }) {
         {(search||filterTrack||filterType||filterState)&&<button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'4px 10px'}} onClick={()=>{setSearch('');setFilterTrack('');setFilterType('');setFilterState('');}}>Clear</button>}
       </div>
       
-      <div style={{...S.card, overflowX:'auto',WebkitOverflowScrolling:'touch'}}>
+      <div style={{...S.card, overflowX:'auto'}}>
         <table style={{width:'100%',borderCollapse:'collapse',minWidth:700}}>
           <thead><tr>
             <SortHeader col="name" label="Meet" />
@@ -1522,7 +1521,7 @@ function MeetsPage({ data, save, nav, events }) {
                   <td style={S.td}>
                     <div style={{display:'flex',gap:4}}>
                       <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'4px 10px'}} onClick={e=>{e.stopPropagation();startEdit(m);}}>Edit</button>
-                      <button style={{...S.btn,...S.btnDanger,fontSize:11,padding:'4px 10px'}} onClick={e=>{e.stopPropagation();setDelId(m.id);}}>✕</button>
+                      <button style={{...S.btn,...S.btnDanger,fontSize:11,padding:'4px 10px'}} onClick={e=>{e.stopPropagation();setDelId(m.id);}}>x</button>
                     </div>
                   </td>
                 </tr>
@@ -1659,9 +1658,8 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
               </div>
             </div>
             {hasEntries && (
-              <div style={{overflowX:'auto',WebkitOverflowScrolling:'touch'}}>
-              <table style={{width:'100%',borderCollapse:'collapse',minWidth:400}}>
-                <thead><tr><th style={S.th}>Athlete</th><th style={S.th}>PR</th><th style={S.th}>Goal</th><th style={{...S.th,width:70}}></th></tr></thead>
+              <table style={{width:'100%',borderCollapse:'collapse'}}>
+                <thead><tr><th style={S.th}>Athlete</th><th style={S.th}>PR</th><th style={S.th}>Goal</th><th style={{...S.th,width:40}}></th></tr></thead>
                 <tbody>
                   {entries.map((en,ei) => {
                     if(me.evt.entryType === 'Relay') {
@@ -1673,7 +1671,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                             <td style={S.td}>{ai===0 && <span style={{fontSize:10,color:C.accent,fontWeight:700,marginRight:6}}>Relay #{ei+1}</span>}{ath?athDisplay(ath):'-'}</td>
                             <td style={S.td}>{pr ? formatTime(pr.timeMs) : '-'}</td>
                             <td style={S.td}>{a.goalMs ? formatTime(a.goalMs) : '-'}</td>
-                            <td style={S.td}>{ai===0 && <div style={{display:'flex',gap:4}}><button style={{...S.btn,...S.btnSecondary,fontSize:10,padding:'2px 6px'}} onClick={()=>{setEditEntryIdx(ei);setShowEntryModal(me.eventId);}}>Edit</button><button style={{...S.btn,...S.btnDanger,fontSize:10,padding:'2px 6px'}} onClick={()=>saveEntries(me.eventId,entries.filter((_,i)=>i!==ei))}>✕</button></div>}</td>
+                            <td style={S.td}>{ai===0 && <div style={{display:'flex',gap:4}}><button style={{...S.btn,...S.btnSecondary,fontSize:10,padding:'2px 6px'}} onClick={()=>{setEditEntryIdx(ei);setShowEntryModal(me.eventId);}}>Edit</button><button style={{...S.btn,...S.btnDanger,fontSize:10,padding:'2px 6px'}} onClick={()=>saveEntries(me.eventId,entries.filter((_,i)=>i!==ei))}>x</button></div>}</td>
                           </tr>
                         );
                       });
@@ -1685,13 +1683,12 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                         <td style={{...S.td,fontWeight:500}}>{ath?athDisplay(ath):'-'}</td>
                         <td style={S.td}>{pr ? (isFieldEvent(me.evt) ? fieldToStr(pr.ft,pr.inch,pr.qtr) : formatTime(pr.timeMs)) : '-'}</td>
                         <td style={S.td}>{en.goalMs ? formatTime(en.goalMs) : '-'}</td>
-                        <td style={S.td}><div style={{display:'flex',gap:4}}><button style={{...S.btn,...S.btnSecondary,fontSize:10,padding:'2px 6px'}} onClick={()=>{setEditEntryIdx(ei);setShowEntryModal(me.eventId);}}>Edit</button><button style={{...S.btn,...S.btnDanger,fontSize:10,padding:'2px 6px'}} onClick={()=>saveEntries(me.eventId,entries.filter((_,i)=>i!==ei))}>✕</button></div></td>
+                        <td style={S.td}><div style={{display:'flex',gap:4}}><button style={{...S.btn,...S.btnSecondary,fontSize:10,padding:'2px 6px'}} onClick={()=>{setEditEntryIdx(ei);setShowEntryModal(me.eventId);}}>Edit</button><button style={{...S.btn,...S.btnDanger,fontSize:10,padding:'2px 6px'}} onClick={()=>saveEntries(me.eventId,entries.filter((_,i)=>i!==ei))}>x</button></div></td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
-              </div>
             )}
           </div>
         );
@@ -1705,7 +1702,6 @@ function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, ge
   const [entries, setEntries] = useState([{ athleteId:'', search:'', goalMin:0, goalSec:0 }]);
   const [relayAthletes, setRelayAthletes] = useState([{ athleteId:'', search:'', goalMin:0, goalSec:0 },{ athleteId:'', search:'', goalMin:0, goalSec:0 },{ athleteId:'', search:'', goalMin:0, goalSec:0 },{ athleteId:'', search:'', goalMin:0, goalSec:0 }]);
   const [focusField, setFocusField] = useState('');
-  const [initialized, setInitialized] = useState(null);
   const blurRef = useRef(null);
   const handleFocus = (f) => { clearTimeout(blurRef.current); setFocusField(f); };
   const handleBlur = () => { blurRef.current = setTimeout(()=>setFocusField(''), 200); };
@@ -1715,27 +1711,6 @@ function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, ge
   const meet = data.meets.find(m=>m.id===meetId);
   const me = ((meet||{}).events||[]).find(e=>e.eventId===eventId);
   const existingEntries = (me||{}).entries || [];
-  const isEditing = editEntryIdx != null && editEntryIdx >= 0 && editEntryIdx < existingEntries.length;
-  const editEntry = isEditing ? existingEntries[editEntryIdx] : null;
-  const editKey = eventId + '-' + editEntryIdx;
-  if(initialized !== editKey) {
-    if(isEditing && evt.entryType==='Relay' && editEntry && editEntry.athletes) {
-      const ra = editEntry.athletes.map(a=>{
-        const ath = data.athletes.find(at=>at.id===a.athleteId);
-        const ms = a.goalMs||0;
-        return {athleteId:a.athleteId, search:ath?athDisplay(ath):'', goalMin:Math.floor(ms/60000)+'', goalSec:((ms%60000)/1000).toFixed(2)};
-      });
-      setRelayAthletes(ra);
-    } else if(isEditing && editEntry && editEntry.athleteId) {
-      const ath = data.athletes.find(a=>a.id===editEntry.athleteId);
-      const ms = editEntry.goalMs||0;
-      setEntries([{athleteId:editEntry.athleteId, search:ath?athDisplay(ath):'', goalMin:Math.floor(ms/60000)+'', goalSec:((ms%60000)/1000).toFixed(2)}]);
-    } else if(!isEditing) {
-      setEntries([{ athleteId:'', search:'', goalMin:0, goalSec:0 }]);
-      setRelayAthletes([{ athleteId:'', search:'', goalMin:0, goalSec:0 },{ athleteId:'', search:'', goalMin:0, goalSec:0 },{ athleteId:'', search:'', goalMin:0, goalSec:0 },{ athleteId:'', search:'', goalMin:0, goalSec:0 }]);
-    }
-    setInitialized(editKey);
-  }
   const activeAthletes = data.athletes.filter(a=>a.active!==false);
   const genderMatch = activeAthletes.filter(a=>!evt.gender || evt.gender==='Mixed' || a.gender===(evt.gender==='Boy'?'M':'F'));
   const athName = (a) => athDisplay(a);
@@ -1743,29 +1718,15 @@ function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, ge
     const valid = entries.filter(en=>en.athleteId);
     if(!valid.length) return;
     const newEntries = valid.map(en=>({ athleteId:en.athleteId, goalMs:parseTimeToMs(en.goalMin, en.goalSec) }));
-    if(isEditing) {
-      const updated = [...existingEntries];
-      updated[editEntryIdx] = newEntries[0];
-      saveEntries(eventId, updated);
-    } else {
-      saveEntries(eventId, [...existingEntries, ...newEntries]);
-    }
+    saveEntries(eventId, [...existingEntries, ...newEntries]);
     setEntries([{ athleteId:'', search:'', goalMin:0, goalSec:0 }]);
-    setInitialized(null);
     onClose();
   };
   const saveRelay = () => {
     const athletes = relayAthletes.filter(a=>a.athleteId).map(a=>({ athleteId:a.athleteId, goalMs:parseTimeToMs(a.goalMin,a.goalSec) }));
     if(!athletes.length) return;
-    if(isEditing) {
-      const updated = [...existingEntries];
-      updated[editEntryIdx] = { athletes };
-      saveEntries(eventId, updated);
-    } else {
-      saveEntries(eventId, [...existingEntries, { athletes }]);
-    }
+    saveEntries(eventId, [...existingEntries, { athletes }]);
     setRelayAthletes([{ athleteId:'', search:'', goalMin:0, goalSec:0 },{ athleteId:'', search:'', goalMin:0, goalSec:0 },{ athleteId:'', search:'', goalMin:0, goalSec:0 },{ athleteId:'', search:'', goalMin:0, goalSec:0 }]);
-    setInitialized(null);
     onClose();
   };
   const filteredAthletes = (search, excludeIds=[]) => genderMatch.filter(a=>
@@ -1794,36 +1755,36 @@ function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, ge
           {row.athleteId && pr && <div style={{fontSize:11,color:C.textMuted,marginTop:2}}>PR: {isFieldEvent(evt)?fieldToStr(pr.ft,pr.inch,pr.qtr):formatTime(pr.timeMs)}</div>}
         </div>
         {isTrackEvent(evt) && <TimeDropdown min={row.goalMin} sec={row.goalSec} onMinChange={v=>{const c=[...rows];c[index]={...c[index],goalMin:v};setRows(c);}} onSecChange={v=>{const c=[...rows];c[index]={...c[index],goalSec:v};setRows(c);}} compact />}
-        {rows.length>1 && <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:16,padding:'8px 4px'}} onClick={()=>{const c=[...rows];c.splice(index,1);setRows(c);}}>✕</button>}
+        {rows.length>1 && <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:16,padding:'8px 4px'}} onClick={()=>{const c=[...rows];c.splice(index,1);setRows(c);}}>x</button>}
       </div>
     );
   };
   return (
-    <Modal open={open} onClose={()=>{setInitialized(null);onClose();}} width={550}>
-      <h2 style={S.h2}>{isEditing?'Edit':'Add'} - {getEventLabel(evt)}</h2>
+    <Modal open={open} onClose={onClose} width={550}>
+      <h2 style={S.h2}>{getEventLabel(evt)}</h2>
       <p style={{fontSize:13,color:C.textSecondary,marginBottom:16}}>{(meet||{}).name}</p>
       {evt.entryType === 'Relay' ? (
         <div>
-          <div style={{fontSize:13,fontWeight:600,color:C.textSecondary,marginBottom:10}}>{isEditing?'Edit Relay':'Relay Entry'}</div>
+          <div style={{fontSize:13,fontWeight:600,color:C.textSecondary,marginBottom:10}}>Relay Entry</div>
           {relayAthletes.map((ra,i) => {
             const usedIds = relayAthletes.filter((_,j)=>j!==i).map(r=>r.athleteId).filter(Boolean);
             return renderRow(ra, i, 'relay', relayAthletes, setRelayAthletes, usedIds);
           })}
           <div style={{display:'flex',gap:8,marginTop:10}}>
             <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'8px 16px'}} onClick={()=>setRelayAthletes([...relayAthletes,{athleteId:'',search:'',goalMin:0,goalSec:0}])}>+ Leg</button>
-            <button style={{...S.btn,...S.btnPrimary,fontSize:13,padding:'10px 20px'}} onClick={saveRelay}>{isEditing?'Save Changes':'Add Relay'}</button>
+            <button style={{...S.btn,...S.btnPrimary,fontSize:13,padding:'10px 20px'}} onClick={saveRelay}>Add Relay</button>
           </div>
         </div>
       ) : (
         <div>
-          <div style={{fontSize:13,fontWeight:600,color:C.textSecondary,marginBottom:10}}>{isEditing?'Edit Entry':'Entries'}</div>
+          <div style={{fontSize:13,fontWeight:600,color:C.textSecondary,marginBottom:10}}>Entries</div>
           {entries.map((en,i) => {
-            const usedIds = [...existingEntries.filter((_,j)=>!isEditing||j!==editEntryIdx).map(e=>e.athleteId).filter(Boolean), ...entries.filter((_,j)=>j!==i).map(e=>e.athleteId).filter(Boolean)];
+            const usedIds = [...existingEntries.map(e=>e.athleteId).filter(Boolean), ...entries.filter((_,j)=>j!==i).map(e=>e.athleteId).filter(Boolean)];
             return renderRow(en, i, 'indiv', entries, setEntries, usedIds);
           })}
           <div style={{display:'flex',gap:8,marginTop:10}}>
-            {!isEditing && <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'8px 16px'}} onClick={()=>setEntries([...entries,{athleteId:'',search:'',goalMin:0,goalSec:0}])}>+ Athlete</button>}
-            <button style={{...S.btn,...S.btnPrimary,fontSize:13,padding:'10px 20px'}} onClick={saveIndividuals}>{isEditing?'Save Changes':'Add Entries'}</button>
+            <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'8px 16px'}} onClick={()=>setEntries([...entries,{athleteId:'',search:'',goalMin:0,goalSec:0}])}>+ Athlete</button>
+            <button style={{...S.btn,...S.btnPrimary,fontSize:13,padding:'10px 20px'}} onClick={saveIndividuals}>Add Entries</button>
           </div>
         </div>
       )}
@@ -1893,8 +1854,8 @@ function AthletesPage({ data, save, nav }) {
           <input type="checkbox" checked={showInactive} onChange={e=>setShowInactive(e.target.checked)} /> Show Inactive
         </label>
       </div>
-      <div style={{...S.card, overflowX:'auto', WebkitOverflowScrolling:'touch'}}>
-        <table style={{width:'100%',borderCollapse:'collapse',minWidth:600}}>
+      <div style={S.card}>
+        <table style={{width:'100%',borderCollapse:'collapse'}}>
           <thead><tr>
             <th style={{...S.th,cursor:'pointer',userSelect:'none'}} onClick={()=>toggleSort('name')}>Name {sortCol==='name'?(sortDir==='asc'?'▲':'▼'):''}</th><th style={{...S.th,cursor:'pointer',userSelect:'none'}} onClick={()=>toggleSort('gradYear')}>Year {sortCol==='gradYear'?(sortDir==='asc'?'▲':'▼'):''}</th><th style={{...S.th,cursor:'pointer',userSelect:'none'}} onClick={()=>toggleSort('gender')}>Gender {sortCol==='gender'?(sortDir==='asc'?'▲':'▼'):''}</th><th style={{...S.th,cursor:'pointer',userSelect:'none'}} onClick={()=>toggleSort('group')}>Group(s) {sortCol==='group'?(sortDir==='asc'?'▲':'▼'):''}</th><th style={{...S.th,cursor:'pointer',userSelect:'none'}} onClick={()=>toggleSort('status')}>Status {sortCol==='status'?(sortDir==='asc'?'▲':'▼'):''}</th><th style={S.th}></th>
           </tr></thead>
@@ -1908,7 +1869,7 @@ function AthletesPage({ data, save, nav }) {
                   <td style={S.td}>{a.gender==='M'?'B':a.gender==='F'?'G':'-'}</td>
                   <td style={{...S.td,fontSize:12}}>{athleteGroups}</td>
                   <td style={S.td}><span style={{fontSize:11,fontWeight:600,color:a.active===false?C.danger:C.success}}>{a.active===false?'Inactive':'Active'}</span></td>
-                  <td style={S.td}><button style={{background:'none',border:'none',color:C.danger,cursor:'pointer'}} onClick={e=>{e.stopPropagation();setDelId(a.id);}}>✕</button></td>
+                  <td style={S.td}><button style={{background:'none',border:'none',color:C.danger,cursor:'pointer'}} onClick={e=>{e.stopPropagation();setDelId(a.id);}}>x</button></td>
                 </tr>
               );
             })}
@@ -1976,6 +1937,8 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
   const [practiceEditItems, setPracticeEditItems] = useState([]);
   const [athPracticeForm, setAthPracticeForm] = useState({category:'',type:'',workoutId:'',workoutSearch:''});
   const [athPracticeFocus, setAthPracticeFocus] = useState('');
+  const [showCreateWorkout, setShowCreateWorkout] = useState(false);
+  const [newWorkoutForm, setNewWorkoutForm] = useState({name:'',category:'',type:'',mileage:'',description:''});
   const athPracticeBlurRef = useRef(null);
   const athPFocus = (f)=>{clearTimeout(athPracticeBlurRef.current);setAthPracticeFocus(f);};
   const athPBlur = ()=>{athPracticeBlurRef.current=setTimeout(()=>setAthPracticeFocus(''),200);};
@@ -2176,7 +2139,6 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
           </Modal>
         </>);
       })()}
-      
       <div style={S.card}>
         <h2 style={{...S.h2,marginBottom:8}}>Performances</h2>
         {athleteEvents.filter(evt=>{
@@ -2354,12 +2316,29 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
             {editPracticeDay && (()=>{
               const library = data.workoutLibrary||[];
               const apf = athPracticeForm;
-              const catLib = apf.category ? library.filter(l=>(l.category||(l.categories||[])[0]||'').toLowerCase().includes(apf.category.toLowerCase())) : library;
-              const typesInCat = [...new Set(catLib.map(l=>l.type||'').filter(Boolean))].sort();
-              const typeLib = apf.type ? catLib.filter(l=>(l.type||'').toLowerCase().includes(apf.type.toLowerCase())) : catLib;
+              const searchQ = apf.workoutSearch||'';
+              const catFilter = apf.category||'';
+              const typeFilter = apf.type||'';
+              const filtered = library.filter(w=>{
+                if(catFilter && (w.category||(w.categories||[])[0]||'').toLowerCase()!==catFilter.toLowerCase()) return false;
+                if(typeFilter && (w.type||'').toLowerCase()!==typeFilter.toLowerCase()) return false;
+                if(searchQ && !w.name.toLowerCase().includes(searchQ.toLowerCase()) && !(w.description||'').toLowerCase().includes(searchQ.toLowerCase())) return false;
+                return true;
+              });
+              const allCats = [...new Set(library.map(l=>l.category||(l.categories||[])[0]||'').filter(Boolean))].sort();
+              const allTypes = [...new Set((catFilter?library.filter(l=>(l.category||(l.categories||[])[0]||'').toLowerCase()===catFilter.toLowerCase()):library).map(l=>l.type||'').filter(Boolean))].sort();
               const addFromLib = (w) => {
                 setPracticeEditItems([...practiceEditItems, {name:w.name,category:w.category||(w.categories||[])[0]||'',mileage:w.mileage||'',type:w.type||''}]);
-                setAthPracticeForm({category:'',type:'',workoutId:'',workoutSearch:''});
+                setAthPracticeForm({...apf,workoutSearch:''});
+              };
+              const createAndAdd = () => {
+                const nw = newWorkoutForm;
+                if(!nw.name.trim()) return;
+                const newW = {id:uid(),name:nw.name.trim(),category:nw.category||'',type:nw.type||'',mileage:nw.mileage||'',description:nw.description||'',exercises:[],isDefault:false};
+                save({...data,workoutLibrary:[...(data.workoutLibrary||[]),newW]});
+                setPracticeEditItems([...practiceEditItems, {name:newW.name,category:newW.category,mileage:newW.mileage,type:newW.type}]);
+                setNewWorkoutForm({name:'',category:'',type:'',mileage:'',description:''});
+                setShowCreateWorkout(false);
               };
               return (
               <div style={{marginTop:8,padding:'12px 14px',borderRadius:6,border:`1px solid ${C.accent}`,background:C.accentMuted}}>
@@ -2367,56 +2346,82 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
                   <span style={{fontSize:13,fontWeight:700,color:C.accent}}>{editPracticeDay} - {athDisplay(athlete)}</span>
                   <div style={{display:'flex',gap:4}}>
                     {getOverride(editPracticeDay)&&<button style={{...S.btn,...S.btnSecondary,fontSize:10,padding:'3px 8px'}} onClick={()=>clearOverride(editPracticeDay)}>Reset to Group</button>}
-                    <button style={{background:'none',border:'none',color:C.textMuted,cursor:'pointer',fontSize:14}} onClick={()=>setEditPracticeDay(null)}>✕</button>
+                    <button style={{background:'none',border:'none',color:C.textMuted,cursor:'pointer',fontSize:14}} onClick={()=>{setEditPracticeDay(null);setShowCreateWorkout(false);}}>✕</button>
                   </div>
                 </div>
                 {practiceEditItems.map((it,i)=>(
-                  <div key={i} style={{display:'flex',gap:4,alignItems:'center',marginBottom:4,padding:'4px 8px',background:C.surface,borderRadius:4,border:`1px solid ${C.borderLight}`}}>
+                  <div key={i} style={{display:'flex',gap:4,alignItems:'center',marginBottom:4,padding:'6px 10px',background:C.surface,borderRadius:4,border:`1px solid ${C.borderLight}`}}>
                     <span style={{flex:2,fontSize:12,fontWeight:600,color:catColors[it.category]||C.text}}>{it.name||'-'}</span>
-                    <span style={{fontSize:10,color:C.textMuted}}>{it.category}</span>
+                    <span style={{fontSize:10,color:C.textMuted}}>{it.category}{it.type?' / '+it.type:''}</span>
                     {it.mileage&&<span style={{fontSize:10,color:C.accent,fontWeight:600}}>{it.mileage}mi</span>}
                     <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12,padding:'2px 4px'}} onClick={()=>{const c=[...practiceEditItems];c.splice(i,1);setPracticeEditItems(c);}}>✕</button>
                   </div>
                 ))}
                 <div style={{marginTop:6,padding:'8px',background:C.surface,borderRadius:6,border:`1px solid ${C.borderLight}`}}>
-                  <div style={{fontSize:11,fontWeight:600,color:C.textSecondary,marginBottom:6}}>Add from Library</div>
-                  <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:4}}>
-                    <div style={{flex:1,minWidth:80,position:'relative'}}>
-                      <input style={{...S.input,fontSize:11,padding:'4px 8px'}} placeholder="Category" value={apf.category} onChange={e=>setAthPracticeForm({category:e.target.value,type:'',workoutId:'',workoutSearch:''})} onFocus={()=>athPFocus('athCat')} onBlur={athPBlur} />
-                      {athPracticeFocus==='athCat'&&(()=>{const opts=categories.filter(c=>!apf.category||c.name.toLowerCase().includes(apf.category.toLowerCase()));return opts.length>0&&(
-                        <div style={{position:'absolute',top:'100%',left:0,right:0,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,boxShadow:'0 4px 12px rgba(0,0,0,0.1)',zIndex:20,maxHeight:150,overflowY:'auto'}}>
-                          {opts.map(c=><div key={c.id} style={{padding:'6px 10px',fontSize:11,cursor:'pointer',borderBottom:`1px solid ${C.borderLight}`}} onMouseDown={()=>{setAthPracticeForm({category:c.name,type:'',workoutId:'',workoutSearch:''});setAthPracticeFocus('');}}>{c.name}</div>)}
-                        </div>);})()}
-                    </div>
-                    <div style={{flex:1,minWidth:80,position:'relative'}}>
-                      <input style={{...S.input,fontSize:11,padding:'4px 8px'}} placeholder="Type" value={apf.type} onChange={e=>setAthPracticeForm({...apf,type:e.target.value,workoutId:'',workoutSearch:''})} onFocus={()=>athPFocus('athType')} onBlur={athPBlur} />
-                      {athPracticeFocus==='athType'&&(()=>{const opts=typesInCat.filter(t=>!apf.type||t.toLowerCase().includes(apf.type.toLowerCase()));return opts.length>0&&(
-                        <div style={{position:'absolute',top:'100%',left:0,right:0,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,boxShadow:'0 4px 12px rgba(0,0,0,0.1)',zIndex:20,maxHeight:150,overflowY:'auto'}}>
-                          {opts.map(t=><div key={t} style={{padding:'6px 10px',fontSize:11,cursor:'pointer',borderBottom:`1px solid ${C.borderLight}`}} onMouseDown={()=>{setAthPracticeForm({...apf,type:t,workoutId:'',workoutSearch:''});setAthPracticeFocus('');}}>{t}</div>)}
-                        </div>);})()}
-                    </div>
+                  <div style={{position:'relative',marginBottom:6}}>
+                    <input style={{...S.input,fontSize:12,padding:'8px 10px'}} placeholder="Search workouts..." value={searchQ} onChange={e=>setAthPracticeForm({...apf,workoutSearch:e.target.value})} onFocus={()=>athPFocus('athSearch')} onBlur={athPBlur} />
+                    {athPracticeFocus==='athSearch'&&searchQ&&filtered.length>0&&(
+                      <div style={{position:'absolute',top:'100%',left:0,right:0,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,boxShadow:'0 4px 16px rgba(0,0,0,0.12)',zIndex:20,maxHeight:200,overflowY:'auto'}}>
+                        {filtered.slice(0,20).map(w=>(
+                          <div key={w.id} style={{padding:'8px 12px',cursor:'pointer',borderBottom:`1px solid ${C.borderLight}`,fontSize:12}} onMouseDown={()=>addFromLib(w)}>
+                            <div style={{display:'flex',justifyContent:'space-between'}}>
+                              <span style={{fontWeight:600}}>{w.name}</span>
+                              <span style={{color:C.textMuted,fontSize:10}}>{w.category||(w.categories||[])[0]||''}{w.type?' / '+w.type:''}</span>
+                            </div>
+                            {(w.mileage||w.description)&&<div style={{fontSize:10,color:C.textMuted,marginTop:1}}>{w.mileage?w.mileage+'mi ':''}{w.description||''}</div>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <div style={{maxHeight:120,overflowY:'auto'}}>
-                    {typeLib.slice(0,15).map(w=>(
-                      <div key={w.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'5px 8px',borderBottom:`1px solid ${C.borderLight}`,cursor:'pointer',fontSize:11}} onClick={()=>addFromLib(w)}>
-                        <div>
+                  <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:6}}>
+                    <select style={{...S.select,fontSize:11,padding:'3px 6px'}} value={catFilter} onChange={e=>setAthPracticeForm({...apf,category:e.target.value,type:''})}>
+                      <option value="">All Categories</option>
+                      {allCats.map(c=><option key={c} value={c}>{c}</option>)}
+                    </select>
+                    <select style={{...S.select,fontSize:11,padding:'3px 6px'}} value={typeFilter} onChange={e=>setAthPracticeForm({...apf,type:e.target.value})}>
+                      <option value="">All Types</option>
+                      {allTypes.map(t=><option key={t} value={t}>{t}</option>)}
+                    </select>
+                    {(catFilter||typeFilter)&&<button style={{background:'none',border:'none',color:C.accent,cursor:'pointer',fontSize:10,fontWeight:600}} onClick={()=>setAthPracticeForm({category:'',type:'',workoutSearch:''})}>Clear</button>}
+                  </div>
+                  <div style={{maxHeight:160,overflowY:'auto',borderTop:`1px solid ${C.borderLight}`}}>
+                    {filtered.map(w=>(
+                      <div key={w.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 8px',borderBottom:`1px solid ${C.borderLight}`,cursor:'pointer',fontSize:11}} onClick={()=>addFromLib(w)}>
+                        <div style={{flex:1,minWidth:0}}>
                           <span style={{fontWeight:600,color:C.text}}>{w.name}</span>
-                          {w.mileage&&<span style={{color:C.accent,marginLeft:6}}>{w.mileage}mi</span>}
-                          {w.description&&<div style={{fontSize:10,color:C.textMuted}}>{w.description}</div>}
+                          <span style={{color:C.textMuted,marginLeft:6,fontSize:10}}>{w.category||(w.categories||[])[0]||''}{w.type?' / '+w.type:''}</span>
+                          {w.mileage&&<span style={{color:C.accent,marginLeft:6,fontWeight:600}}>{w.mileage}mi</span>}
                         </div>
-                        <span style={{color:C.accent,fontWeight:700,fontSize:14}}>+</span>
+                        <span style={{color:C.accent,fontWeight:700,fontSize:16,flexShrink:0,marginLeft:8}}>+</span>
                       </div>
                     ))}
-                    {typeLib.length===0&&<div style={{fontSize:11,color:C.textMuted,padding:8,textAlign:'center'}}>No workouts found</div>}
+                    {filtered.length===0&&<div style={{fontSize:11,color:C.textMuted,padding:10,textAlign:'center'}}>No workouts match filters</div>}
                   </div>
                 </div>
-                <div style={{display:'flex',gap:4,alignItems:'center',marginTop:6}}>
-                  <input style={{...S.input,flex:1,fontSize:11,padding:'4px 8px'}} placeholder="Or type custom workout name..." onKeyDown={e=>{if(e.key==='Enter'&&e.target.value.trim()){setPracticeEditItems([...practiceEditItems,{name:e.target.value.trim(),category:'',mileage:''}]);e.target.value='';}}} />
+                <div style={{display:'flex',gap:6,marginTop:6,flexWrap:'wrap'}}>
+                  <button style={{...S.btn,...S.btnSecondary,fontSize:10,padding:'4px 10px'}} onClick={()=>setShowCreateWorkout(!showCreateWorkout)}>+ Create New Workout</button>
+                  <button style={{...S.btn,...S.btnSecondary,fontSize:10,padding:'4px 10px'}} onClick={()=>{saveOverride(editPracticeDay,[],true);setEditPracticeDay(null);setShowCreateWorkout(false);}}>Set Rest Day</button>
+                  <button style={{...S.btn,...S.btnPrimary,fontSize:10,padding:'4px 10px',marginLeft:'auto'}} onClick={()=>{saveOverride(editPracticeDay,practiceEditItems.filter(it=>it.name.trim()),false);setEditPracticeDay(null);setShowCreateWorkout(false);}}>Save</button>
                 </div>
-                <div style={{display:'flex',gap:6,marginTop:8}}>
-                  <button style={{...S.btn,...S.btnSecondary,fontSize:10,padding:'4px 10px'}} onClick={()=>{saveOverride(editPracticeDay,[],true);setEditPracticeDay(null);}}>Set Rest Day</button>
-                  <button style={{...S.btn,...S.btnPrimary,fontSize:10,padding:'4px 10px',marginLeft:'auto'}} onClick={()=>{saveOverride(editPracticeDay,practiceEditItems.filter(it=>it.name.trim()),false);setEditPracticeDay(null);}}>Save</button>
-                </div>
+                {showCreateWorkout&&(
+                  <div style={{marginTop:8,padding:'10px',background:C.bg,borderRadius:6,border:`1px dashed ${C.accent}`}}>
+                    <div style={{fontSize:12,fontWeight:600,color:C.accent,marginBottom:6}}>New Workout (saves to library)</div>
+                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:4,marginBottom:4}}>
+                      <input style={{...S.input,fontSize:11,padding:'4px 8px'}} placeholder="Name *" value={newWorkoutForm.name} onChange={e=>setNewWorkoutForm({...newWorkoutForm,name:e.target.value})} />
+                      <input style={{...S.input,fontSize:11,padding:'4px 8px'}} placeholder="Category" value={newWorkoutForm.category} onChange={e=>setNewWorkoutForm({...newWorkoutForm,category:e.target.value})} />
+                      <input style={{...S.input,fontSize:11,padding:'4px 8px'}} placeholder="Type" value={newWorkoutForm.type} onChange={e=>setNewWorkoutForm({...newWorkoutForm,type:e.target.value})} />
+                    </div>
+                    <div style={{display:'grid',gridTemplateColumns:'1fr 2fr',gap:4,marginBottom:6}}>
+                      <input style={{...S.input,fontSize:11,padding:'4px 8px'}} placeholder="Mileage" value={newWorkoutForm.mileage} onChange={e=>setNewWorkoutForm({...newWorkoutForm,mileage:e.target.value})} />
+                      <input style={{...S.input,fontSize:11,padding:'4px 8px'}} placeholder="Description" value={newWorkoutForm.description} onChange={e=>setNewWorkoutForm({...newWorkoutForm,description:e.target.value})} />
+                    </div>
+                    <div style={{display:'flex',gap:6}}>
+                      <button style={{...S.btn,...S.btnPrimary,fontSize:10,padding:'4px 10px'}} onClick={createAndAdd}>Create & Add</button>
+                      <button style={{...S.btn,...S.btnSecondary,fontSize:10,padding:'4px 10px'}} onClick={()=>setShowCreateWorkout(false)}>Cancel</button>
+                    </div>
+                  </div>
+                )}
               </div>
               );
             })()}
@@ -2456,7 +2461,7 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
                 <select style={S.select} value={ag.level||''} onChange={e=>{const c=[...(editForm.groups||[])];c[i]={...c[i],level:e.target.value};setEditForm({...editForm,groups:c});}}>
                   {((groups.find(g=>g.id===ag.groupId)||{}).levels||['Level 1']).map(l=><option key={l} value={l}>{l}</option>)}
                 </select>
-                <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer'}} onClick={()=>{const c=[...(editForm.groups||[])];c.splice(i,1);setEditForm({...editForm,groups:c});}}>✕</button>
+                <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer'}} onClick={()=>{const c=[...(editForm.groups||[])];c.splice(i,1);setEditForm({...editForm,groups:c});}}>x</button>
               </div>
             ))}
             <button style={{...S.btn,...S.btnSecondary,fontSize:11,marginTop:6}} onClick={()=>setEditForm({...editForm,groups:[...(editForm.groups||[]),{groupId:'',level:'Level 1'}]})}>+ Add Group</button>
@@ -2465,7 +2470,6 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
           <button style={{...S.btn,...S.btnPrimary}} onClick={saveEdit}>Save Changes</button>
         </div>
       </Modal>
-      
     </div>
   );
 }
@@ -2535,7 +2539,7 @@ function DailyPracticeView({ data, nav, date }) {
                             </div>
                           </div>
                           {exercises.length > 0 && (
-                            <div style={{overflowX:'auto',WebkitOverflowScrolling:'touch'}}>
+                            <div style={{overflowX:'auto'}}>
                               <table style={{width:'100%',borderCollapse:'collapse'}}>
                                 <thead><tr>
                                   <th style={{...S.th,padding:'6px 8px',width:36}}>Set</th>
@@ -2649,7 +2653,7 @@ function ExerciseTable({ exercises, onChange, readOnly, library }) {
               ))}
               {!readOnly && <td style={{...S.td,padding:'3px 4px',whiteSpace:'nowrap'}}>
                 <button title="Duplicate" style={{background:'none',border:'none',color:C.textSecondary,cursor:'pointer',fontSize:14,padding:4}} onClick={()=>{const c=[...exercises];c.splice(i+1,0,{...row});onChange(c);}}>++</button>
-                <button title="Remove" style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:14,padding:4}} onClick={()=>{const c=[...exercises];c.splice(i,1);onChange(c);}}>✕</button>
+                <button title="Remove" style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:14,padding:4}} onClick={()=>{const c=[...exercises];c.splice(i,1);onChange(c);}}>x</button>
               </td>}
             </tr>
           ))}
@@ -2828,7 +2832,6 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
   const tabStyle = (active) => ({ padding:'8px 16px', fontSize:13, fontWeight:active?600:400, color:active?C.accent:C.textSecondary, borderBottom:active?`2px solid ${C.accent}`:'2px solid transparent', background:'none', border:'none', cursor:'pointer' });
   return (
     <div>
-      
       <div style={{display:'flex',gap:0,borderBottom:`1px solid ${C.border}`,marginBottom:16}}>
         {[['weekly','Weekly Plans'],['library','Library'],['groups','Groups'],['categories','Categories']].map(([k,l])=>(
           <button key={k} style={tabStyle(tab===k)} onClick={()=>setTab(k)}>{l}</button>
@@ -3215,7 +3218,7 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
                     <div style={{display:'flex',gap:2,alignItems:'center',flexShrink:0,marginLeft:8}}>
                       <button style={{background:'none',border:'none',cursor:'pointer',fontSize:22,color:l.isDefault?C.accent:C.border,padding:'4px 8px'}} onClick={()=>save({...data,workoutLibrary:(data.workoutLibrary||[]).map(li=>li.id===l.id?{...li,isDefault:!li.isDefault}:li)})}>{l.isDefault?'*':'o'}</button>
                       <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'6px 12px'}} onClick={()=>startEditLib(l)}>Edit</button>
-                      <button style={{...S.btn,...S.btnDanger,fontSize:12,padding:'6px 12px'}} onClick={()=>deleteLib(l.id)}>✕</button>
+                      <button style={{...S.btn,...S.btnDanger,fontSize:12,padding:'6px 12px'}} onClick={()=>deleteLib(l.id)}>x</button>
                     </div>
                   </div>
                 </div>))}
@@ -3305,7 +3308,7 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
           return (<div key={group.id} style={{...S.card,marginBottom:8}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
               <div><div style={{fontWeight:600,fontSize:14}}>{group.name}</div><div style={{fontSize:12,color:C.textSecondary,marginTop:2}}>{group.levels.length>1?`${group.levels.join(' - ')} - `:''}{ac} athlete{ac!==1?'s':''}</div></div>
-              <div style={{display:'flex',gap:6}}><button style={{...S.btn,...S.btnSecondary,padding:'6px 12px',fontSize:12}} onClick={()=>startEditGroup(group)}>Edit</button><button style={{...S.btn,...S.btnDanger,padding:'6px 12px',fontSize:12}} onClick={()=>deleteGroup(group.id)}>✕</button></div>
+              <div style={{display:'flex',gap:6}}><button style={{...S.btn,...S.btnSecondary,padding:'6px 12px',fontSize:12}} onClick={()=>startEditGroup(group)}>Edit</button><button style={{...S.btn,...S.btnDanger,padding:'6px 12px',fontSize:12}} onClick={()=>deleteGroup(group.id)}>x</button></div>
             </div>
           </div>);
         })}
@@ -3317,7 +3320,7 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
               <label style={{fontSize:12,color:C.textSecondary}}>Levels</label>
               {groupForm.levels.map((lvl,i)=>(<div key={i} style={{display:'flex',gap:6,alignItems:'center',marginTop:4}}>
                 <input style={{...S.input,flex:1}} value={lvl} onChange={e=>{const nl=[...groupForm.levels];nl[i]=e.target.value;setGroupForm({...groupForm,levels:nl});}} />
-                {groupForm.levels.length>1&&<button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:16}} onClick={()=>setGroupForm(f=>({...f,levels:f.levels.filter((_,j)=>j!==i)}))}>✕</button>}
+                {groupForm.levels.length>1&&<button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:16}} onClick={()=>setGroupForm(f=>({...f,levels:f.levels.filter((_,j)=>j!==i)}))}>x</button>}
               </div>))}
               <div style={{display:'flex',gap:6,marginTop:8}}>
                 <input style={{...S.input,flex:1}} placeholder="New level" value={newLevelInput} onChange={e=>setNewLevelInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')addLevel();}} />
@@ -3340,7 +3343,7 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
             <div style={{display:'flex',alignItems:'center',gap:8}}><span style={{width:14,height:14,borderRadius:'50%',background:wc.color||C.textMuted}} /><span style={{fontWeight:600,fontSize:14}}>{wc.name}</span></div>
             <div style={{display:'flex',gap:6}}>
               <button style={{...S.btn,...S.btnSecondary,padding:'6px 12px',fontSize:12}} onClick={()=>{setCatForm({name:wc.name,color:wc.color||'#2b6cb0'});setEditCatId(wc.id);setShowAddCat(true);}}>Edit</button>
-              <button style={{...S.btn,...S.btnDanger,padding:'6px 12px',fontSize:12}} onClick={()=>setDelCatId(wc.id)}>✕</button>
+              <button style={{...S.btn,...S.btnDanger,padding:'6px 12px',fontSize:12}} onClick={()=>setDelCatId(wc.id)}>x</button>
             </div>
           </div>
         ))}
@@ -3462,7 +3465,7 @@ function EventsPage({ data, save, nav }) {
         <select style={S.select} value={entryFilter} onChange={e=>setEntryFilter(e.target.value)}><option value="">All Entries</option><option value="Individual">Individual</option><option value="Relay">Relay</option></select>
         {(search||typeFilter||genderFilter||trackFilter||entryFilter)&&<button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'4px 10px'}} onClick={()=>{setSearch('');setTypeFilter('');setGenderFilter('');setTrackFilter('');setEntryFilter('');}}>Clear</button>}
       </div>
-      <div style={{...S.card, overflowX:'auto',WebkitOverflowScrolling:'touch'}}>
+      <div style={{...S.card, overflowX:'auto'}}>
         <table style={{width:'100%',borderCollapse:'collapse',minWidth:750}}>
           <thead><tr>
             <SortHeader col="name" label="Event" />
@@ -3492,7 +3495,7 @@ function EventsPage({ data, save, nav }) {
                     <div style={{display:'flex',gap:4}}>
                       <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'4px 10px'}} onClick={e=>{e.stopPropagation();const g=evt.gender==='Boy'?'Girl':evt.gender==='Girl'?'Boy':evt.gender;save({...data,events:[...(data.events||[]),{...evt,id:uid(),gender:g,qualifyingStandards:[],schoolRecords:[]}]});}}>Dup</button>
                       <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'4px 10px'}} onClick={e=>{e.stopPropagation();startEdit(evt);}}>Edit</button>
-                      <button style={{...S.btn,...S.btnDanger,fontSize:11,padding:'4px 10px'}} onClick={e=>{e.stopPropagation();setDelId(evt.id);}}>✕</button>
+                      <button style={{...S.btn,...S.btnDanger,fontSize:11,padding:'4px 10px'}} onClick={e=>{e.stopPropagation();setDelId(evt.id);}}>x</button>
                     </div>
                   </td>
                 </tr>,
@@ -3507,7 +3510,7 @@ function EventsPage({ data, save, nav }) {
                         {(evt.qualifyingStandards||[]).map(std=>(
                           <div key={std.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'4px 0',fontSize:12}}>
                             <span><span style={{fontWeight:600}}>{std.name}</span> - {evt.measurableType==='Time'?formatTime(std.timeMs):fieldToStr(std.ft,std.inch,std.qtr)}</span>
-                            <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12}} onClick={()=>removeStandard(evt.id,std.id)}>✕</button>
+                            <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12}} onClick={()=>removeStandard(evt.id,std.id)}>x</button>
                           </div>
                         ))}
                         {!(evt.qualifyingStandards||[]).length&&<span style={{fontSize:12,color:C.textMuted}}>None set</span>}
@@ -3521,7 +3524,7 @@ function EventsPage({ data, save, nav }) {
                           const ath=data.athletes.find(a=>a.id===rec.athleteId);
                           return (<div key={rec.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'4px 0',fontSize:12}}>
                             <span><span style={{fontWeight:600}}>{rec.type||'School Record'}</span> - {evt.measurableType==='Time'?formatTime(rec.timeMs):fieldToStr(rec.ft,rec.inch,rec.qtr)} - {ath?athDisplay(ath):'-'} ({rec.date||'-'})</span>
-                            <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12}} onClick={()=>removeRecord(evt.id,rec.id)}>✕</button>
+                            <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12}} onClick={()=>removeRecord(evt.id,rec.id)}>x</button>
                           </div>);
                         })}
                         {!(evt.schoolRecords||[]).length&&<span style={{fontSize:12,color:C.textMuted}}>None set</span>}
@@ -3583,13 +3586,12 @@ function EventsPage({ data, save, nav }) {
 }
 function ToolsPage({ data, save, nav, events, addResult, getAthletePR, checkRecord, checkQualifying, preset }) {
   const tools = [
-    { key:'raceTimer', label:'Race Timer', desc:'Single athlete, single event. Lap splits with pace tracking.', icon:'⏱️', color:C.accent },
-    { key:'multiSplit', label:'Multi-Split Timer', desc:'Multiple athletes simultaneously. Target times and live pace.', icon:'⏱️', color:C.blue },
-    { key:'fieldEvent', label:'Field Event Entry', desc:'Record attempts for jumps, throws, and pole vault.', icon:'📏', color:C.success },
+    { key:'raceTimer', label:'Race Timer', desc:'Single athlete, single event. Lap splits with pace tracking.', icon:'>', color:C.accent },
+    { key:'multiSplit', label:'Multi-Split Timer', desc:'Multiple athletes simultaneously. Target times and live pace.', icon:'||>', color:C.blue },
+    { key:'fieldEvent', label:'Field Event Entry', desc:'Record attempts for jumps, throws, and pole vault.', icon:'*', color:C.success },
   ];
   return (
     <div>
-      
       {tools.map(t => (
         <button key={t.key} style={{...S.bigBtn, borderLeft:`4px solid ${t.color}`, background:C.surface, marginBottom:8}} onClick={()=>nav(t.key)}>
           <div style={{display:'flex',alignItems:'center',gap:12}}>
@@ -3774,7 +3776,7 @@ function MultiSplitTimer({ data, save, nav, events, addResult, getAthletePR, che
                     {Array.from({length:60},(_,n)=><option key={n} value={n.toFixed(2)}>{String(n).padStart(2,'0')}</option>)}
                   </select>
                 </div>
-                {athletes.length>1&&<button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',flexShrink:0}} onClick={()=>setAthletes(a=>a.filter((_,j)=>j!==i))}>✕</button>}
+                {athletes.length>1&&<button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',flexShrink:0}} onClick={()=>setAthletes(a=>a.filter((_,j)=>j!==i))}>x</button>}
               </div>
             ))}
           </div>
@@ -3884,7 +3886,7 @@ function FieldEventPage({ data, save, nav, events, addResult, getAthletePR, chec
             <thead><tr><th style={S.th}>#</th><th style={S.th}>Mark</th><th style={S.th}></th></tr></thead>
             <tbody>{attempts.map((a,i)=>{
               const isBest = a.total === Math.max(...attempts.map(x=>x.total));
-              return (<tr key={i}><td style={S.td}>{i+1}</td><td style={{...S.td,fontWeight:isBest?700:400,color:isBest?C.accent:C.text}}>{fieldToStr(a.ft,a.inch,a.qtr)}{isBest&&' *'}</td><td style={S.td}><button style={{background:'none',border:'none',color:C.danger,cursor:'pointer'}} onClick={()=>setAttempts(prev=>prev.filter((_,j)=>j!==i))}>✕</button></td></tr>);
+              return (<tr key={i}><td style={S.td}>{i+1}</td><td style={{...S.td,fontWeight:isBest?700:400,color:isBest?C.accent:C.text}}>{fieldToStr(a.ft,a.inch,a.qtr)}{isBest&&' *'}</td><td style={S.td}><button style={{background:'none',border:'none',color:C.danger,cursor:'pointer'}} onClick={()=>setAttempts(prev=>prev.filter((_,j)=>j!==i))}>x</button></td></tr>);
             })}</tbody>
           </table>
         )}
@@ -3953,7 +3955,6 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
   const events = data.events||[];
   return (
     <div>
-      
       <div style={{display:'flex',gap:4,marginBottom:16,flexWrap:'wrap'}}>
         {[['seasons','Seasons'],['branding','Branding'],['meetTypes','Meet Types'],['qualifying','Qualifying'],['records','Records'],['team','Team'],['data','Data']].map(([k,l])=>(
           <button key={k} style={S.pill(tab===k)} onClick={()=>setTab(k)}>{l}</button>
@@ -3974,7 +3975,7 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
               </div>
               <div style={{display:'flex',gap:6}}>
                 {!s.active && <button style={{...S.btn,...S.btnPrimary,fontSize:10,padding:'3px 10px'}} onClick={()=>toggleActiveSeason(s.id)}>Set Active</button>}
-                <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12}} onClick={()=>setDelSeasonId(s.id)}>✕</button>
+                <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12}} onClick={()=>setDelSeasonId(s.id)}>x</button>
               </div>
             </div>
           </div>
@@ -4071,7 +4072,7 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
             <div><span style={{fontWeight:600}}>{mt.name}</span>{mt.qualifying&&<span style={{fontSize:10,color:C.success,marginLeft:8,fontWeight:600}}>QUALIFYING</span>}</div>
             <div style={{display:'flex',gap:6}}>
               <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'3px 10px'}} onClick={()=>{setMtForm({name:mt.name,qualifying:mt.qualifying});setEditMTId(mt.id);setShowAddMT(true);}}>Edit</button>
-              <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12}} onClick={()=>setDelMTId(mt.id)}>✕</button>
+              <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12}} onClick={()=>setDelMTId(mt.id)}>x</button>
             </div>
           </div>
         ))}

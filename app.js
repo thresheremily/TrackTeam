@@ -1029,7 +1029,7 @@ function Dashboard({ data, save, nav, season, team, events, activeAthletes, feat
                       <div style={{fontSize:11,color:C.textMuted}}>{n.effectiveDate||n.entryDate}</div>
                       <button style={{fontSize:10,fontWeight:600,color:C.success,background:C.successMuted||'#e6f4ea',border:'none',borderRadius:4,padding:'3px 8px',cursor:'pointer'}} onClick={e=>{e.stopPropagation();save({...data,medicalNotes:(data.medicalNotes||[]).map(mn=>mn.id===n.id?{...mn,followUpResolution:new Date().toISOString().split('T')[0]}:mn)});}}>Resolve</button>
                     </div>
-                  </div></div>
+                  </div>
                 </div>
               );
             })}
@@ -2400,7 +2400,7 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
                         </div>
                       );
                     })}
-                  </div>
+                  </div></div>
                 </div>
               );
             })}

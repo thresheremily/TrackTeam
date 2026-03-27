@@ -62,11 +62,11 @@ const EXERCISE_COLUMNS = [
   { key:'effort', label:'Effort', width:60, type:'text', placeholder:'80%' },
 ];
 const ATTENDANCE_STATUSES = [
-  { key:'present', label:'Present', color:'#25763b', icon:'✓' },
-  { key:'absent', label:'Absent', color:'#c53030', icon:'✗' },
-  { key:'excused', label:'Excused', color:'#c96a1f', icon:'○' },
-  { key:'late', label:'Late', color:'#2b6cb0', icon:'⌚' },
-  { key:'signedout', label:'Signed Out', color:'#6b46c1', icon:'→' },
+  { key:'present', label:'Present', color:'#25763b', icon:'P' },
+  { key:'absent', label:'Absent', color:'#c53030', icon:'A' },
+  { key:'excused', label:'Excused', color:'#c96a1f', icon:'E' },
+  { key:'late', label:'Late', color:'#2b6cb0', icon:'L' },
+  { key:'signedout', label:'Signed Out', color:'#6b46c1', icon:'O' },
 ];
 const uid = () => Math.random().toString(36).substr(2,9);
 const padDate = (d) => { if(!d) return ''; const s=d+''; if(s.includes('/')) { const p=s.split('/'); if(p.length===3) return `${p[2]}-${p[0].padStart(2,'0')}-${p[1].padStart(2,'0')}`; } const p=s.split('-'); if(p.length===3&&p[0].length===4) return `${p[0]}-${p[1].padStart(2,'0')}-${p[2].padStart(2,'0')}`; return s; };
@@ -1570,6 +1570,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
   const [editEntryIdx, setEditEntryIdx] = useState(null);
   const [dragIdx, setDragIdx] = useState(null);
   const [dragOverIdx, setDragOverIdx] = useState(null);
+  const [showRoster, setShowRoster] = useState(false);
   const meet = data.meets.find(m=>m.id===meetId);
   if(!meet) return <div style={S.card}><p>Meet not found</p><button style={S.backLink} onClick={()=>nav('meets')}>{"<- "}Back to Meets</button></div>;
   const meetType = (data.meetTypes||[]).find(mt=>mt.id===meet.meetTypeId);
@@ -1650,6 +1651,58 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
         </select>
         {eventOrder.length > 0 && <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'4px 10px'}} onClick={()=>saveEventOrder([])}>Reset Order</button>}
       </div>
+      {(()=>{
+        const activeAthletes = data.athletes.filter(a=>a.active!==false);
+        const notParticipating = meet.notParticipating||[];
+        const allAssignedIds = new Set();
+        meetEvents.forEach(me=>{
+          (me.entries||[]).forEach(en=>{
+            if(en.athleteId) allAssignedIds.add(en.athleteId);
+            (en.athletes||[]).forEach(a=>{if(a.athleteId) allAssignedIds.add(a.athleteId);});
+          });
+        });
+        const unassigned = activeAthletes.filter(a=>!allAssignedIds.has(a.id)&&!notParticipating.includes(a.id));
+        const dismissed = activeAthletes.filter(a=>notParticipating.includes(a.id));
+        const assigned = activeAthletes.filter(a=>allAssignedIds.has(a.id));
+        const toggleNP = (id) => {
+          const np = notParticipating.includes(id) ? notParticipating.filter(x=>x!==id) : [...notParticipating, id];
+          save({...data, meets:data.meets.map(m=>m.id===meetId?{...m, notParticipating:np}:m)});
+        };
+        return (
+          <div style={{...S.card,padding:'10px 14px',marginBottom:8}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}} onClick={()=>setShowRoster(!showRoster)}>
+              <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12}}>
+                <span style={{fontWeight:700,color:C.text}}>Roster Check</span>
+                <span style={{color:C.success,fontWeight:600}}>{assigned.length} assigned</span>
+                {unassigned.length>0&&<span style={{color:C.danger,fontWeight:600}}>{unassigned.length} unassigned</span>}
+                {dismissed.length>0&&<span style={{color:C.textMuted}}>{dismissed.length} out</span>}
+              </div>
+              <span style={{fontSize:11,color:C.accent,fontWeight:600}}>{showRoster?'▲':'▼'}</span>
+            </div>
+            {showRoster&&(<div style={{marginTop:8}}>
+              {unassigned.length>0&&(<div style={{marginBottom:8}}>
+                <div style={{fontSize:11,fontWeight:600,color:C.danger,textTransform:'uppercase',marginBottom:4}}>Unassigned</div>
+                {unassigned.map(a=>(
+                  <div key={a.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'4px 0',borderBottom:`1px solid ${C.borderLight}`,fontSize:12}}>
+                    <span style={{fontWeight:500,cursor:'pointer',color:C.text}} onClick={()=>nav('athleteSub',{athleteId:a.id})}>{athDisplay(a)}{a.gradYear&&<span style={{color:C.textMuted,marginLeft:4}}>'{(a.gradYear+'').slice(-2)}</span>}</span>
+                    <button style={{fontSize:10,fontWeight:600,color:C.textMuted,background:C.surface2,border:`1px solid ${C.border}`,borderRadius:4,padding:'2px 8px',cursor:'pointer'}} onClick={()=>toggleNP(a.id)}>Not Participating</button>
+                  </div>
+                ))}
+              </div>)}
+              {unassigned.length===0&&<div style={{fontSize:12,color:C.success,fontWeight:600,padding:'4px 0'}}>All active athletes are assigned or marked out</div>}
+              {dismissed.length>0&&(<div>
+                <div style={{fontSize:11,fontWeight:600,color:C.textMuted,textTransform:'uppercase',marginBottom:4}}>Not Participating</div>
+                {dismissed.map(a=>(
+                  <div key={a.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'4px 0',borderBottom:`1px solid ${C.borderLight}`,fontSize:12,opacity:0.6}}>
+                    <span>{athDisplay(a)}</span>
+                    <button style={{fontSize:10,color:C.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600}} onClick={()=>toggleNP(a.id)}>Restore</button>
+                  </div>
+                ))}
+              </div>)}
+            </div>)}
+          </div>
+        );
+      })()}
       {filtered.map((me, meIdx) => {
         const entries = me.entries;
         const hasEntries = entries.length > 0;

@@ -1029,7 +1029,7 @@ function Dashboard({ data, save, nav, season, team, events, activeAthletes, feat
                       <div style={{fontSize:11,color:C.textMuted}}>{n.effectiveDate||n.entryDate}</div>
                       <button style={{fontSize:10,fontWeight:600,color:C.success,background:C.successMuted||'#e6f4ea',border:'none',borderRadius:4,padding:'3px 8px',cursor:'pointer'}} onClick={e=>{e.stopPropagation();save({...data,medicalNotes:(data.medicalNotes||[]).map(mn=>mn.id===n.id?{...mn,followUpResolution:new Date().toISOString().split('T')[0]}:mn)});}}>Resolve</button>
                     </div>
-                  </div>
+                  </div></div>
                 </div>
               );
             })}
@@ -2003,10 +2003,11 @@ function AthletesPage({ data, save, nav }) {
 function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, checkRecord, checkQualifying, season }) {
   const [showEditInfo, setShowEditInfo] = useState(false);
   const [showAddNote, setShowAddNote] = useState(false);
+  const [editNoteId, setEditNoteId] = useState(null);
   const [showResolved, setShowResolved] = useState(false);
   const [expandedNotes, setExpandedNotes] = useState({});
   const [progressForm, setProgressForm] = useState({});
-  const [noteForm, setNoteForm] = useState({ type:'Other', effectiveDate:'', details:'', trainerCheckIn:false, trainerDate:'', trainerDetails:'', needFollowUp:false, followUpName:'', followUpContact:'', followUpLastDate:'', followUpResolution:'' });
+  const [noteForm, setNoteForm] = useState({ type:'Other', effectiveDate:'', details:'', painScale:'', trainerCheckIn:false, trainerDate:'', trainerDetails:'', needFollowUp:false, followUpName:'', followUpContact:'', followUpLastDate:'', followUpResolution:'' });
   const [editForm, setEditForm] = useState({});
   const [editPracticeDay, setEditPracticeDay] = useState(null);
   const [practiceEditItems, setPracticeEditItems] = useState([]);
@@ -2051,10 +2052,20 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
   const improvement = calcImprovement();
   const medicalNotes = (data.medicalNotes||[]).filter(n=>n.athleteId===athleteId).sort((a,b)=>(b.entryDate||'').localeCompare(a.entryDate||''));
   const saveNote = () => {
-    const note = { id:uid(), athleteId, entryDate:new Date().toISOString().split('T')[0], ...noteForm };
-    save({ ...data, medicalNotes:[...(data.medicalNotes||[]),note] });
+    if(editNoteId) {
+      save({...data, medicalNotes:(data.medicalNotes||[]).map(mn=>mn.id===editNoteId?{...mn,...noteForm}:mn)});
+    } else {
+      const note = { id:uid(), athleteId, entryDate:new Date().toISOString().split('T')[0], ...noteForm };
+      save({ ...data, medicalNotes:[...(data.medicalNotes||[]),note] });
+    }
     setShowAddNote(false);
-    setNoteForm({ type:'Other', effectiveDate:'', details:'', trainerCheckIn:false, trainerDate:'', trainerDetails:'', needFollowUp:false, followUpName:'', followUpContact:'', followUpLastDate:'', followUpResolution:'' });
+    setEditNoteId(null);
+    setNoteForm({ type:'Other', effectiveDate:'', details:'', painScale:'', trainerCheckIn:false, trainerDate:'', trainerDetails:'', needFollowUp:false, followUpName:'', followUpContact:'', followUpLastDate:'', followUpResolution:'' });
+  };
+  const startEditNote = (n) => {
+    setNoteForm({type:n.type||'Other',effectiveDate:n.effectiveDate||'',details:n.details||'',painScale:n.painScale||'',trainerCheckIn:!!n.trainerCheckIn,trainerDate:n.trainerDate||'',trainerDetails:n.trainerDetails||'',needFollowUp:!!n.needFollowUp,followUpName:n.followUpName||'',followUpContact:n.followUpContact||'',followUpLastDate:n.followUpLastDate||'',followUpResolution:n.followUpResolution||''});
+    setEditNoteId(n.id);
+    setShowAddNote(true);
   };
   const startEdit = () => {
     setEditForm({
@@ -2145,10 +2156,12 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
                     {needsAction && <span style={{fontSize:10,fontWeight:700,color:C.danger,textTransform:'uppercase'}}>Needs Follow-Up</span>}
                   </div>
                   <div style={{fontSize:13,color:C.text,lineHeight:'1.5'}}>{n.details}</div>
+                  {n.painScale && <div style={{fontSize:11,marginTop:3,display:'flex',alignItems:'center',gap:4}}><span style={{color:C.textMuted}}>Pain:</span><span style={{fontWeight:700,color:parseInt(n.painScale)>=7?C.danger:parseInt(n.painScale)>=4?'#b8860b':C.success}}>{n.painScale}/10</span></div>}
                   {n.trainerCheckIn && <div style={{fontSize:12,color:C.blue,marginTop:4,padding:'4px 8px',background:C.blue+'10',borderRadius:4}}>Trainer: {n.trainerDate} - {n.trainerDetails}</div>}
                   {n.needFollowUp && <div style={{fontSize:12,color:C.accent,marginTop:4}}>Contact: {n.followUpName}{n.followUpContact?` (${n.followUpContact})`:''}{n.followUpResolution?<span style={{color:C.success,fontWeight:600}}>{' '}Resolved {n.followUpResolution}</span>:''}</div>}
                 </div>
                 <div style={{display:'flex',gap:6,flexShrink:0,marginLeft:12,alignItems:'center'}}>
+                  <button style={{fontSize:11,fontWeight:600,color:C.accent,background:C.accentMuted,border:'none',borderRadius:6,padding:'5px 10px',cursor:'pointer'}} onClick={()=>startEditNote(n)}>Edit</button>
                   {needsAction && <button style={{fontSize:11,fontWeight:600,color:C.success,background:C.successMuted,border:'none',borderRadius:6,padding:'5px 12px',cursor:'pointer'}} onClick={()=>save({...data,medicalNotes:(data.medicalNotes||[]).map(mn=>mn.id===n.id?{...mn,followUpResolution:new Date().toISOString().split('T')[0]}:mn)})}>Resolve</button>}
                   <button style={{background:'none',border:'none',color:C.textMuted,cursor:'pointer',fontSize:13,padding:'4px'}} onClick={()=>save({...data,medicalNotes:(data.medicalNotes||[]).filter(mn=>mn.id!==n.id)})}>✕</button>
                 </div>
@@ -2176,7 +2189,7 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
         return (<>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,marginTop:8}}>
             <h2 style={{...S.h2,marginBottom:0}}>Medical / Notes {hasActive && <span style={{fontSize:12,fontWeight:500,color:C.danger,marginLeft:6}}>• Action Needed</span>}</h2>
-            <button style={{...S.btn,...S.btnPrimary,fontSize:11,padding:'6px 14px'}} onClick={()=>setShowAddNote(true)}>+ Add Note</button>
+            <button style={{...S.btn,...S.btnPrimary,fontSize:11,padding:'6px 14px'}} onClick={()=>{setEditNoteId(null);setNoteForm({type:'Other',effectiveDate:'',details:'',painScale:'',trainerCheckIn:false,trainerDate:'',trainerDetails:'',needFollowUp:false,followUpName:'',followUpContact:'',followUpLastDate:'',followUpResolution:''});setShowAddNote(true);}}>+ Add Note</button>
           </div>
           {active.length===0&&resolved.length===0&&<div style={{...S.card,textAlign:'center',color:C.textMuted,fontSize:12,padding:16}}>No medical notes</div>}
           {active.map(renderNote)}
@@ -2189,7 +2202,7 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
             </div>
           )}
           <Modal open={showAddNote} onClose={()=>setShowAddNote(false)} width={520}>
-            <h2 style={{...S.h2,marginBottom:16}}>Add Medical Note</h2>
+            <h2 style={{...S.h2,marginBottom:16}}>{editNoteId?'Edit':'Add'} Medical Note</h2>
             <div style={{display:'flex',flexDirection:'column',gap:10}}>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
                 <div><label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Type</label><select style={{...S.select,width:'100%'}} value={noteForm.type} onChange={e=>setNoteForm({...noteForm,type:e.target.value})}>
@@ -2197,6 +2210,7 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
                 </select></div>
                 <div><label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Effective Date</label><input style={S.input} type="date" value={noteForm.effectiveDate} onChange={e=>setNoteForm({...noteForm,effectiveDate:e.target.value})} /></div>
               </div>
+              {(noteForm.type==='Injury'||noteForm.type==='Illness')&&<div><label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Pain Scale (1-10)</label><div style={{display:'flex',gap:4}}>{[1,2,3,4,5,6,7,8,9,10].map(v=><button key={v} style={{width:28,height:28,borderRadius:6,border:`1px solid ${noteForm.painScale==v?(v>=7?C.danger:v>=4?'#b8860b':C.success):C.border}`,background:noteForm.painScale==v?(v>=7?C.danger+'20':v>=4?'#b8860b20':C.success+'20'):C.bg,color:noteForm.painScale==v?(v>=7?C.danger:v>=4?'#b8860b':C.success):C.textMuted,fontWeight:noteForm.painScale==v?700:400,fontSize:11,cursor:'pointer'}} onClick={()=>setNoteForm({...noteForm,painScale:v})}>{v}</button>)}</div></div>}
               <div><label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Details</label><textarea style={{...S.input,height:80,resize:'vertical'}} placeholder="Describe the issue, symptoms, or note..." value={noteForm.details} onChange={e=>setNoteForm({...noteForm,details:e.target.value})} /></div>
               <label style={{display:'flex',alignItems:'center',gap:8,fontSize:13,cursor:'pointer',padding:'4px 0'}}><input type="checkbox" checked={noteForm.trainerCheckIn} onChange={e=>setNoteForm({...noteForm,trainerCheckIn:e.target.checked})} /> Trainer Check-In</label>
               {noteForm.trainerCheckIn && <div style={{display:'grid',gridTemplateColumns:'auto 1fr',gap:10,paddingLeft:24}}>
@@ -2210,7 +2224,7 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
               </div>}
               <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginTop:8}}>
                 <button style={{...S.btn,...S.btnSecondary}} onClick={()=>setShowAddNote(false)}>Cancel</button>
-                <button style={{...S.btn,...S.btnPrimary}} onClick={()=>{saveNote();setShowAddNote(false);}}>Save Note</button>
+                <button style={{...S.btn,...S.btnPrimary}} onClick={()=>{saveNote();setShowAddNote(false);}}>{ editNoteId?'Save Changes':'Save Note'}</button>
               </div>
             </div>
           </Modal>
@@ -2358,7 +2372,7 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
               return (
                 <div key={ag.groupId+level} style={{marginBottom:8}}>
                   <div style={{fontSize:11,fontWeight:700,color:C.accent,textTransform:'uppercase',marginBottom:4}}>{group.name}{group.levels.length>1?' - '+level:''}</div>
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:4}}>
+                  <div style={{overflowX:'auto',WebkitOverflowScrolling:'touch'}}><div style={{display:'grid',gridTemplateColumns:'repeat(6,minmax(70px,1fr))',gap:4,minWidth:420}}>
                     {['Mon','Tue','Wed','Thu','Fri','Sat'].map(day=>{
                       const ov = getOverride(day);
                       const hasOverride = !!ov;
@@ -3775,6 +3789,7 @@ function RaceTimer({ data, save, nav, events, addResult, getAthletePR, checkReco
             <div><label style={{fontSize:12,color:C.textSecondary}}>Event</label><select style={{...S.select,width:'100%'}} value={eventId} onChange={e=>setEventId(e.target.value)}><option value="">Select Event</option>{trackEvents.map(e=><option key={e.id} value={e.id}>{getEventLabel(e)}</option>)}</select></div>
             <div><label style={{fontSize:12,color:C.textSecondary}}>Athlete</label><select style={{...S.select,width:'100%'}} value={athleteId} onChange={e=>setAthleteId(e.target.value)}><option value="">Select</option>{activeAthletes.map(a=><option key={a.id} value={a.id}>{athDisplay(a)}</option>)}</select></div>
             <div><label style={{fontSize:12,color:C.textSecondary}}>Track</label><select style={{...S.select,width:'100%'}} value={trackType} onChange={e=>setTrackType(e.target.value)}><option>Indoor</option><option>Outdoor</option></select></div>
+            {meetId==='practice-custom'&&<div><label style={{fontSize:12,color:C.textSecondary}}>Practice Date</label><input style={{...S.input}} type="date" id="practiceDate" defaultValue={new Date().toISOString().split('T')[0]} /></div>}
           </div>
         </div>
       )}
@@ -3844,19 +3859,21 @@ function MultiSplitTimer({ data, save, nav, events, addResult, getAthletePR, che
   const handleStop = () => { clearInterval(timerRef.current); setRunning(false); setFinished(true); };
   const handleReset = () => { clearInterval(timerRef.current); setRunning(false); setElapsed(0); setFinished(false); setSaved(false); setCollapsed(false); setAthletes(a=>a.map(at=>({...at,laps:[]}))); };
   const handleSave = () => {
-    const meet=data.meets.find(m=>m.id===meetId);
-    const raceDate=(meet||{}).startDate||(meet||{}).date||new Date().toISOString().split('T')[0];
+    const isPractice=meetId==='practice'||meetId==='practice-custom';
+    const meet=isPractice?null:data.meets.find(m=>m.id===meetId);
+    const raceDate=isPractice?(meetId==='practice-custom'?(document.getElementById('practiceDate')||{}).value||new Date().toISOString().split('T')[0]:new Date().toISOString().split('T')[0]):(meet||{}).startDate||(meet||{}).date||new Date().toISOString().split('T')[0];
+    const saveMeetId=isPractice?null:meetId;
     const relayAthleteIds=[];
     athletes.forEach(at=>{
       if(!at.athleteId||at.laps.length===0) return;
       const finalTime=at.laps[at.laps.length-1].cumulative;
-      addResult({id:uid(),athleteId:at.athleteId,eventId,meetId,date:raceDate,timeMs:finalTime,splits:at.laps});
+      addResult({id:uid(),athleteId:at.athleteId,eventId,meetId:saveMeetId,date:raceDate,timeMs:finalTime,splits:at.laps,isPractice:isPractice});
       relayAthleteIds.push(at.athleteId);
     });
     if(isRelayEvt&&relayAthleteIds.length>0){
       const allLaps=athletes.filter(a=>a.athleteId&&a.laps.length>0).flatMap(a=>a.laps);
       const totalTime=Math.max(...allLaps.map(l=>l.cumulative));
-      addResult({id:uid(),eventId,meetId,date:raceDate,timeMs:totalTime,isRelay:true,relayAthletes:relayAthleteIds,splits:allLaps});
+      addResult({id:uid(),eventId,meetId:saveMeetId,date:raceDate,timeMs:totalTime,isRelay:true,relayAthletes:relayAthleteIds,splits:allLaps,isPractice:isPractice});
     }
     setSaved(true);
   };
@@ -3870,9 +3887,10 @@ function MultiSplitTimer({ data, save, nav, events, addResult, getAthletePR, che
       {!collapsed && (
         <div style={S.card}>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
-            <div><label style={{fontSize:12,color:C.textSecondary}}>Meet</label><select style={{...S.select,width:'100%'}} value={meetId} onChange={e=>setMeetId(e.target.value)}><option value="">Select</option>{data.meets.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select></div>
+            <div><label style={{fontSize:12,color:C.textSecondary}}>Meet (or Practice)</label><select style={{...S.select,width:'100%'}} value={meetId} onChange={e=>setMeetId(e.target.value)}><option value="">Select</option><option value="practice">Practice (Today)</option><option value="practice-custom">Practice (Custom Date)</option>{data.meets.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select></div>
             <div><label style={{fontSize:12,color:C.textSecondary}}>Event</label><select style={{...S.select,width:'100%'}} value={eventId} onChange={e=>setEventId(e.target.value)}><option value="">Select</option>{trackEvents.map(e=><option key={e.id} value={e.id}>{getEventLabel(e)}</option>)}</select></div>
             <div><label style={{fontSize:12,color:C.textSecondary}}>Track</label><select style={{...S.select,width:'100%'}} value={trackType} onChange={e=>setTrackType(e.target.value)}><option>Indoor</option><option>Outdoor</option></select></div>
+            {meetId==='practice-custom'&&<div><label style={{fontSize:12,color:C.textSecondary}}>Practice Date</label><input style={{...S.input}} type="date" id="practiceDate" defaultValue={new Date().toISOString().split('T')[0]} /></div>}
           </div>
           <div style={{marginTop:16}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>

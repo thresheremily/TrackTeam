@@ -1353,7 +1353,7 @@ function AttendancePage({ data, save, nav, season, activeAthletes }) {
           <tbody>
             {activeAthletes.sort((a,b)=>athLast(a).localeCompare(athLast(b))).map(a => {
               const weekStatuses = weekDates.map(d => getStatus(a.id,d));
-              const attended = weekStatuses.filter(s => s === 'present' || s === 'late').length;
+              const attended = weekStatuses.filter(s => s === 'present' || s === 'late' || s === 'signedout').length;
               const total = weekStatuses.filter(s => s !== null).length;
               const pct = total > 0 ? Math.round(attended/total*100) : null;
               return (
@@ -2068,6 +2068,8 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
   const [athPracticeFocus, setAthPracticeFocus] = useState('');
   const [showCreateWorkout, setShowCreateWorkout] = useState(false);
   const [newWorkoutForm, setNewWorkoutForm] = useState({name:'',category:'',type:'',mileage:'',description:''});
+  const [showAddResult, setShowAddResult] = useState(false);
+  const [resultForm, setResultForm] = useState({eventId:'',date:'',min:'',sec:'',ft:'',inch:'',qtr:'',note:''});
   const [editingPracticeIdx, setEditingPracticeIdx] = useState(null);
   const [newWFocus, setNewWFocus] = useState('');
   const athPracticeBlurRef = useRef(null);
@@ -2081,7 +2083,7 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
   const athleteResults = data.results.filter(r=>r.athleteId===athleteId);
   const seasonResults = season ? athleteResults.filter(r=>isInSeason(r.date,season)) : athleteResults;
   const seasonAttendance = (data.attendance||[]).filter(r=>r.athleteId===athleteId && (!season || isInSeason(r.date,season)));
-  const attPct = seasonAttendance.length > 0 ? Math.round(seasonAttendance.filter(r=>r.status==='present'||r.status==='late').length/seasonAttendance.length*100) : null;
+  const attPct = seasonAttendance.length > 0 ? Math.round(seasonAttendance.filter(r=>r.status==='present'||r.status==='late'||r.status==='signedout').length/seasonAttendance.length*100) : null;
   const eventsParticipated = new Set(seasonResults.map(r=>r.eventId)).size;
   const calcImprovement = () => {
     if(seasonResults.length < 2) return null;
@@ -2284,7 +2286,10 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
         </>);
       })()}
       <div style={S.card}>
-        <h2 style={{...S.h2,marginBottom:8}}>Performances</h2>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+          <h2 style={{...S.h2,marginBottom:0}}>Performances</h2>
+          <button style={{...S.btn,...S.btnPrimary,fontSize:11}} onClick={()=>{setResultForm({eventId:'',date:'',min:'',sec:'',ft:'',inch:'',qtr:'',note:''});setShowAddResult(true);}}>+ Add Result</button>
+        </div>
         {athleteEvents.filter(evt=>{
           return athleteResults.some(r=>r.eventId===evt.id);
         }).map(evt => {
@@ -2334,6 +2339,55 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
           <p style={{color:C.textMuted,fontSize:13,textAlign:'center',padding:12}}>No results yet</p>
         )}
       </div>
+      <Modal open={showAddResult} onClose={()=>setShowAddResult(false)} width={420}>
+        <h2 style={{...S.h2,marginBottom:16}}>Add Previous Result / PR</h2>
+        <div style={{display:'flex',flexDirection:'column',gap:10}}>
+          <div><label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Event</label>
+            <select style={{...S.select,width:'100%'}} value={resultForm.eventId} onChange={e=>setResultForm({...resultForm,eventId:e.target.value})}>
+              <option value="">Select event</option>
+              {athleteEvents.map(e=><option key={e.id} value={e.id}>{getEventLabel(e)}</option>)}
+            </select>
+          </div>
+          <div><label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Date</label>
+            <input style={S.input} type="date" value={resultForm.date} onChange={e=>setResultForm({...resultForm,date:e.target.value})} />
+          </div>
+          {resultForm.eventId && isFieldEvent(events.find(e=>e.id===resultForm.eventId)) ? (
+            <div>
+              <label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Distance / Height</label>
+              <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                <div style={{display:'flex',alignItems:'center',gap:2}}><input style={{...S.input,width:50}} type="number" placeholder="ft" value={resultForm.ft} onChange={e=>setResultForm({...resultForm,ft:e.target.value})} /><span style={{fontSize:12,color:C.textMuted}}>'</span></div>
+                <div style={{display:'flex',alignItems:'center',gap:2}}><input style={{...S.input,width:50}} type="number" placeholder="in" value={resultForm.inch} onChange={e=>setResultForm({...resultForm,inch:e.target.value})} /><span style={{fontSize:12,color:C.textMuted}}>"</span></div>
+                <div style={{display:'flex',alignItems:'center',gap:2}}><input style={{...S.input,width:60}} type="number" step="0.25" placeholder=".00" value={resultForm.qtr} onChange={e=>setResultForm({...resultForm,qtr:e.target.value})} /></div>
+              </div>
+            </div>
+          ) : resultForm.eventId ? (
+            <div>
+              <label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Time</label>
+              <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                <div style={{display:'flex',alignItems:'center',gap:2}}><input style={{...S.input,width:50}} type="number" placeholder="min" value={resultForm.min} onChange={e=>setResultForm({...resultForm,min:e.target.value})} /><span style={{fontSize:12,color:C.textMuted}}>:</span></div>
+                <div style={{display:'flex',alignItems:'center',gap:2}}><input style={{...S.input,width:70}} type="number" step="0.01" placeholder="sec" value={resultForm.sec} onChange={e=>setResultForm({...resultForm,sec:e.target.value})} /></div>
+              </div>
+            </div>
+          ) : null}
+          <div><label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Note (optional)</label>
+            <input style={S.input} placeholder="e.g. Previous season, invitational..." value={resultForm.note} onChange={e=>setResultForm({...resultForm,note:e.target.value})} />
+          </div>
+          <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:4}}>
+            <button style={{...S.btn,...S.btnSecondary}} onClick={()=>setShowAddResult(false)}>Cancel</button>
+            <button style={{...S.btn,...S.btnPrimary}} onClick={()=>{
+              const rf=resultForm;
+              if(!rf.eventId) return;
+              const evt=events.find(e=>e.id===rf.eventId);
+              const result={id:uid(),athleteId,eventId:rf.eventId,date:rf.date||new Date().toISOString().split('T')[0],note:rf.note||'',isManual:true};
+              if(isFieldEvent(evt)){result.ft=parseInt(rf.ft)||0;result.inch=parseInt(rf.inch)||0;result.qtr=parseFloat(rf.qtr)||0;}
+              else{result.timeMs=parseTimeToMs(rf.min,rf.sec);}
+              save({...data,results:[...data.results,result]});
+              setShowAddResult(false);
+              setResultForm({eventId:'',date:'',min:'',sec:'',ft:'',inch:'',qtr:'',note:''});
+            }}>Save Result</button>
+          </div>
+        </div>
+      </Modal>
       
       {(()=>{
         const groups = data.workoutGroups||[];

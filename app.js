@@ -3120,6 +3120,10 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
   const [showEditGroup, setShowEditGroup] = useState(null);
   const [groupForm, setGroupForm] = useState({ name:'', levels:[] });
   const [newLevelInput, setNewLevelInput] = useState('');
+  const [expandedGroup, setExpandedGroup] = useState(null);
+  const [bulkAssignGroup, setBulkAssignGroup] = useState(null);
+  const [bulkAssignLevel, setBulkAssignLevel] = useState('');
+  const [bulkSelected, setBulkSelected] = useState({});
   const [showAddCat, setShowAddCat] = useState(false);
   const [catForm, setCatForm] = useState({ name:'', color:'#2b6cb0' });
   const [editCatId, setEditCatId] = useState(null);
@@ -3151,7 +3155,54 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
   const dayTypesInCat = [...new Set(dayCatLib.map(l=>l.type||'').filter(Boolean))].sort();
   const dayTypeLib = addItemForm.type ? dayCatLib.filter(l=>(l.type||"").toLowerCase().includes(addItemForm.type.toLowerCase())) : dayCatLib;
   const daySelW = addItemForm.workoutId ? dayTypeLib.find(l=>l.id===addItemForm.workoutId) : null;
-  const getDayItems = (wid,gid,lv,day) => (((data.workoutPlans||[]).find(w=>w.id===wid)||{}).entries||[]).filter(e=>e.groupId===gid&&e.level===lv&&e.day===day);
+  const getSyncSource = (gid, lv) => {
+    const g = groups.find(gr=>gr.id===gid);
+    return g && g.levelSync ? g.levelSync[lv] || null : null;
+  };
+  const hasOwnItems = (wid,gid,lv,day) => {
+    const w = (data.workoutPlans||[]).find(w=>w.id===wid);
+    if(!w) return false;
+    return (w.entries||[]).some(e=>e.groupId===gid&&e.level===lv&&e.day===day) || (w.restDays||[]).some(rd=>rd.groupId===gid&&rd.level===lv&&rd.day===day);
+  };
+  const getDayItems = (wid,gid,lv,day) => {
+    const w = (data.workoutPlans||[]).find(w=>w.id===wid);
+    if(!w) return [];
+    const own = (w.entries||[]).filter(e=>e.groupId===gid&&e.level===lv&&e.day===day);
+    if(own.length>0) return own;
+    const syncSrc = getSyncSource(gid,lv);
+    if(syncSrc && !hasOwnItems(wid,gid,lv,day)) {
+      return (w.entries||[]).filter(e=>e.groupId===gid&&e.level===syncSrc&&e.day===day);
+    }
+    return [];
+  };
+  const isRestDay = (wid,gid,lv,day) => {
+    const w = (data.workoutPlans||[]).find(w=>w.id===wid);
+    if(!w) return false;
+    if((w.restDays||[]).some(rd=>rd.groupId===gid&&rd.level===lv&&rd.day===day)) return true;
+    const syncSrc = getSyncSource(gid,lv);
+    if(syncSrc && !hasOwnItems(wid,gid,lv,day)) {
+      return (w.restDays||[]).some(rd=>rd.groupId===gid&&rd.level===syncSrc&&rd.day===day);
+    }
+    return false;
+  };
+  const isSynced = (wid,gid,lv,day) => {
+    const syncSrc = getSyncSource(gid,lv);
+    return syncSrc && !hasOwnItems(wid,gid,lv,day);
+  };
+  const copyFromSync = (wid,gid,lv,day) => {
+    const syncSrc = getSyncSource(gid,lv);
+    if(!syncSrc) return;
+    const w = (data.workoutPlans||[]).find(w2=>w2.id===wid);
+    if(!w) return;
+    const srcItems = (w.entries||[]).filter(e=>e.groupId===gid&&e.level===syncSrc&&e.day===day);
+    const srcRest = (w.restDays||[]).some(rd=>rd.groupId===gid&&rd.level===syncSrc&&rd.day===day);
+    const newEntries = srcItems.map(e=>({...e,id:uid(),level:lv}));
+    const newRds = srcRest?[{groupId:gid,level:lv,day}]:[];
+    save({...data,workoutPlans:(data.workoutPlans||[]).map(w2=>w2.id!==wid?w2:{...w2,entries:[...(w2.entries||[]),...newEntries],restDays:[...(w2.restDays||[]),...newRds]})});
+  };
+  const restoreSync = (wid,gid,lv,day) => {
+    save({...data,workoutPlans:(data.workoutPlans||[]).map(w=>w.id!==wid?w:{...w,entries:(w.entries||[]).filter(e=>!(e.groupId===gid&&e.level===lv&&e.day===day)),restDays:(w.restDays||[]).filter(rd=>!(rd.groupId===gid&&rd.level===lv&&rd.day===day))})});
+  };
   const addDayItem = (wid,gid,lv,day,item) => {
     save({...data, workoutPlans:(data.workoutPlans||[]).map(w=>w.id!==wid?w:{...w,entries:[...(w.entries||[]),{id:uid(),groupId:gid,level:lv,day,...item}]})});
   };
@@ -3169,7 +3220,6 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
   };
   const clearDay = (wid,gid,lv,day) => save({...data, workoutPlans:(data.workoutPlans||[]).map(w=>w.id!==wid?w:{...w,entries:(w.entries||[]).filter(e=>!(e.groupId===gid&&e.level===lv&&e.day===day)),restDays:(w.restDays||[]).filter(rd=>!(rd.groupId===gid&&rd.level===lv&&rd.day===day))})});
   const setRestDay = (wid,gid,lv,day,on) => save({...data, workoutPlans:(data.workoutPlans||[]).map(w=>{if(w.id!==wid)return w;const rds=(w.restDays||[]).filter(rd=>!(rd.groupId===gid&&rd.level===lv&&rd.day===day));if(on)rds.push({groupId:gid,level:lv,day});return{...w,restDays:rds,entries:on?(w.entries||[]).filter(e=>!(e.groupId===gid&&e.level===lv&&e.day===day)):(w.entries||[])};})});
-  const isRestDay = (wid,gid,lv,day) => (((data.workoutPlans||[]).find(w=>w.id===wid)||{}).restDays||[]).some(rd=>rd.groupId===gid&&rd.level===lv&&rd.day===day);
   const applyDefaults = (wid,gid,lv,day) => library.filter(l=>l.isDefault).forEach(d=>addDayItem(wid,gid,lv,day,{category:d.category||(d.categories||[])[0]||defaultCat,type:d.type||'',name:d.name,exercises:d.exercises||[]}));
   const METERS_PER_MILE = 1609.34;
   const getWeekMileage = (wid,gid,lv) => {
@@ -3210,10 +3260,36 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
     setShowAddLib(false); setEditLibId(null);
   };
   const deleteLib = (id) => save({...data,workoutLibrary:(data.workoutLibrary||[]).filter(l=>l.id!==id)});
-  const startEditGroup = (g) => { setGroupForm({name:g.name,levels:[...g.levels]}); setShowEditGroup(g.id); };
-  const addNewGroup = () => { const g={id:uid(),name:'New Group',levels:['Level 1']}; save({...data,workoutGroups:[...(data.workoutGroups||[]),g]}); startEditGroup(g); };
-  const saveGroup = () => { if(!groupForm.name) return; save({...data,workoutGroups:(data.workoutGroups||[]).map(g=>g.id===showEditGroup?{...g,name:groupForm.name,levels:groupForm.levels}:g)}); setShowEditGroup(null); };
+  const startEditGroup = (g) => { setGroupForm({name:g.name,levels:[...g.levels],levelSync:{...(g.levelSync||{})}}); setShowEditGroup(g.id); };
+  const addNewGroup = () => { const g={id:uid(),name:'New Group',levels:['Level 1'],levelSync:{}}; save({...data,workoutGroups:[...(data.workoutGroups||[]),g]}); startEditGroup(g); };
+  const saveGroup = () => { if(!groupForm.name) return; save({...data,workoutGroups:(data.workoutGroups||[]).map(g=>g.id===showEditGroup?{...g,name:groupForm.name,levels:groupForm.levels,levelSync:groupForm.levelSync||{}}:g)}); setShowEditGroup(null); };
   const deleteGroup = (id) => save({...data,workoutGroups:(data.workoutGroups||[]).filter(g=>g.id!==id)});
+  const removeFromGroup = (athleteId, groupId) => {
+    save({...data, athletes:data.athletes.map(a=>{
+      if(a.id!==athleteId) return a;
+      const newGroups = (a.groups||[]).filter(ag=>ag.groupId!==groupId);
+      return {...a, groups:newGroups, trainingGroup:a.trainingGroup===groupId?'':a.trainingGroup};
+    })});
+  };
+  const addToGroup = (athleteId, groupId, level) => {
+    save({...data, athletes:data.athletes.map(a=>{
+      if(a.id!==athleteId) return a;
+      const existing = (a.groups||[]).filter(ag=>ag.groupId!==groupId);
+      return {...a, groups:[...existing, {groupId, level}]};
+    })});
+  };
+  const bulkApply = () => {
+    if(!bulkAssignGroup||!bulkAssignLevel) return;
+    const ids = Object.keys(bulkSelected).filter(k=>bulkSelected[k]);
+    if(!ids.length) return;
+    save({...data, athletes:data.athletes.map(a=>{
+      if(!ids.includes(a.id)) return a;
+      const existing = (a.groups||[]).filter(ag=>ag.groupId!==bulkAssignGroup);
+      return {...a, groups:[...existing, {groupId:bulkAssignGroup, level:bulkAssignLevel}]};
+    })});
+    setBulkSelected({});
+    setBulkAssignGroup(null);
+  };
   const addLevel = () => { if(!newLevelInput.trim()) return; setGroupForm(f=>({...f,levels:[...f.levels,newLevelInput.trim()]})); setNewLevelInput(''); };
   const saveCat = () => {
     if(!catForm.name) return;
@@ -3283,6 +3359,8 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
                     const isDayDragOver = dragOverDay===dayDragKey && dragDay!==dayDragKey;
                     const isSwapSelected = swapSelect===dayDragKey;
                     const isSwapTarget = swapSelect && swapSelect!==dayDragKey && swapSelect.split('|')[0]===group.id && swapSelect.split('|')[1]===level;
+                    const daySynced = isSynced(curWeek.id,group.id,level,day);
+                    const syncSrc = getSyncSource(group.id,level);
                     return (<div key={day} draggable
                       onDragStart={e=>{e.stopPropagation();setDragDay(dayDragKey);}}
                       onDragOver={e=>{e.preventDefault();e.stopPropagation();setDragOverDay(dayDragKey);}}
@@ -3299,7 +3377,7 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
                         }
                       }}>
                       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}>
-                        <span style={{fontWeight:600,color:C.textMuted,fontSize:10,textTransform:'uppercase'}}>{day}</span>
+                        <span style={{fontWeight:600,color:C.textMuted,fontSize:10,textTransform:'uppercase'}}>{day}{daySynced&&<span style={{color:C.blue,marginLeft:3,fontSize:8}} title={'Synced from '+syncSrc}>⟳</span>}</span>
                         <div style={{display:'flex',alignItems:'center',gap:3}}>
                           {dayMi>0&&<span style={{fontSize:9,fontWeight:700,color:C.accent}}>{dayMi.toFixed(1)}mi</span>}
                           <button style={{background:'none',border:'none',color:isSwapSelected?C.accent:C.textMuted,cursor:'pointer',fontSize:10,padding:'0 2px',fontWeight:700}} onClick={e=>{e.stopPropagation();setSwapSelect(isSwapSelected?null:dayDragKey);}} title="Tap to swap">{isSwapSelected?'✕':'⇄'}</button>
@@ -3337,12 +3415,21 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
                 return meet && (
                 <div style={{fontSize:12,fontWeight:600,color:C.danger,padding:'4px 10px',background:C.dangerMuted,borderRadius:6,marginBottom:8,cursor:'pointer',display:'inline-block'}} onClick={()=>nav('meetSub',{meetId:meet.id})}>{"<> "}{meet.name}</div>
               );})()}
-              <div style={{display:'flex',gap:10,marginTop:12,marginBottom:16}}>
+              <div style={{display:'flex',gap:10,marginTop:12,marginBottom:16,flexWrap:'wrap'}}>
                 <button style={{...S.btn,fontSize:13,padding:'10px 20px',borderRadius:8,...(rest?{background:C.accent,color:C.white}:S.btnSecondary)}} onClick={()=>setRestDay(editingDay.weekId,editingDay.groupId,editingDay.level,editingDay.day,!rest)}>
                   {rest?'✓ Rest Day':'Rest Day'}
                 </button>
                 {items.length>0&&<button style={{...S.btn,...S.btnDanger,fontSize:13,padding:'10px 20px',borderRadius:8}} onClick={()=>clearDay(editingDay.weekId,editingDay.groupId,editingDay.level,editingDay.day)}>Clear Day</button>}
+                {(()=>{
+                  const syncSrc=getSyncSource(editingDay.groupId,editingDay.level);
+                  const synced=isSynced(editingDay.weekId,editingDay.groupId,editingDay.level,editingDay.day);
+                  if(!syncSrc) return null;
+                  return synced
+                    ? <button style={{...S.btn,fontSize:12,padding:'10px 16px',borderRadius:8,background:C.blue+'20',color:C.blue,border:`1px solid ${C.blue}`}} onClick={()=>copyFromSync(editingDay.weekId,editingDay.groupId,editingDay.level,editingDay.day)}>Override (copy from {syncSrc})</button>
+                    : <button style={{...S.btn,fontSize:12,padding:'10px 16px',borderRadius:8,background:C.surface2,color:C.textSecondary,border:`1px solid ${C.border}`}} onClick={()=>restoreSync(editingDay.weekId,editingDay.groupId,editingDay.level,editingDay.day)}>Restore Sync</button>;
+                })()}
               </div>
+              {(()=>{const ss=getSyncSource(editingDay.groupId,editingDay.level);const sy=isSynced(editingDay.weekId,editingDay.groupId,editingDay.level,editingDay.day);return ss&&sy?<div style={{fontSize:11,color:C.blue,marginBottom:8,padding:'4px 8px',background:C.blue+'10',borderRadius:4}}>Synced from {ss} — edit to override</div>:null;})()}
               {!rest&&<>
                 {items.map((item,itemIdx)=>(<div key={item.id} draggable
                   onDragStart={()=>setDragIdx(itemIdx)}
@@ -3712,15 +3799,93 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
       {tab==='groups'&&(<div>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
           <h2 style={{...S.h2,margin:0}}>Training Groups</h2>
-          <button style={{...S.btn,...S.btnPrimary}} onClick={addNewGroup}>+ Add Group</button>
+          <div style={{display:'flex',gap:6}}>
+            <button style={{...S.btn,...S.btnSecondary}} onClick={()=>{setBulkAssignGroup(bulkAssignGroup?null:(groups[0]||{}).id);setBulkAssignLevel((groups[0]||{}).levels?.[0]||'Level 1');setBulkSelected({});}}>Bulk Assign</button>
+            <button style={{...S.btn,...S.btnPrimary}} onClick={addNewGroup}>+ Add Group</button>
+          </div>
         </div>
+        {bulkAssignGroup&&(
+          <div style={{...S.card,border:`2px solid ${C.accent}`,padding:'12px 16px',marginBottom:12}}>
+            <div style={{fontSize:13,fontWeight:700,color:C.accent,marginBottom:8}}>Bulk Assign Athletes</div>
+            <div style={{display:'flex',gap:8,marginBottom:10,flexWrap:'wrap',alignItems:'center'}}>
+              <select style={S.select} value={bulkAssignGroup} onChange={e=>{setBulkAssignGroup(e.target.value);const g=groups.find(gr=>gr.id===e.target.value);setBulkAssignLevel(g?g.levels[0]:'Level 1');}}>
+                {groups.map(g=><option key={g.id} value={g.id}>{g.name}</option>)}
+              </select>
+              <select style={S.select} value={bulkAssignLevel} onChange={e=>setBulkAssignLevel(e.target.value)}>
+                {(groups.find(g=>g.id===bulkAssignGroup)||{levels:['Level 1']}).levels.map(l=><option key={l} value={l}>{l}</option>)}
+              </select>
+              <button style={{...S.btn,...S.btnPrimary,fontSize:12}} onClick={bulkApply} disabled={!Object.values(bulkSelected).some(Boolean)}>Assign {Object.values(bulkSelected).filter(Boolean).length} Selected</button>
+              <button style={{...S.btn,...S.btnSecondary,fontSize:12}} onClick={()=>setBulkAssignGroup(null)}>Cancel</button>
+            </div>
+            <div style={{maxHeight:250,overflowY:'auto',border:`1px solid ${C.borderLight}`,borderRadius:6}}>
+              {data.athletes.filter(a=>a.active!==false).sort((a,b)=>athLast(a).localeCompare(athLast(b))).map(a=>{
+                const inGroup = (a.groups||[]).some(ag=>ag.groupId===bulkAssignGroup&&ag.level===bulkAssignLevel);
+                return (
+                  <div key={a.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',borderBottom:`1px solid ${C.borderLight}`,background:inGroup?C.successMuted:'transparent'}}>
+                    <input type="checkbox" checked={!!bulkSelected[a.id]} onChange={()=>setBulkSelected(p=>({...p,[a.id]:!p[a.id]}))} disabled={inGroup} />
+                    <span style={{flex:1,fontSize:12,fontWeight:500,color:inGroup?C.success:C.text}}>{athDisplay(a)}{a.gradYear&&<span style={{color:C.textMuted,marginLeft:4}}>'{(a.gradYear+'').slice(-2)}</span>}</span>
+                    <span style={{fontSize:10,color:a.gender==='M'?C.blue:'#d53f8c'}}>{a.gender==='M'?'B':'G'}</span>
+                    {inGroup&&<span style={{fontSize:9,color:C.success,fontWeight:600}}>Already in</span>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
         {groups.map(group=>{
-          const ac=data.athletes.filter(a=>a.active!==false&&((a.groups||[]).some(ag=>ag.groupId===group.id)||a.trainingGroup===group.id)).length;
+          const isExpanded = expandedGroup===group.id;
+          const members = data.athletes.filter(a=>a.active!==false&&((a.groups||[]).some(ag=>ag.groupId===group.id)||a.trainingGroup===group.id));
+          const byLevel = {};
+          group.levels.forEach(lv=>{byLevel[lv]=[];});
+          members.forEach(a=>{
+            const ag = (a.groups||[]).find(ag=>ag.groupId===group.id);
+            const lv = ag?ag.level:(group.levels[0]||'Level 1');
+            if(!byLevel[lv]) byLevel[lv]=[];
+            byLevel[lv].push(a);
+          });
+          const unassigned = data.athletes.filter(a=>a.active!==false&&!(a.groups||[]).some(ag=>ag.groupId===group.id)&&a.trainingGroup!==group.id);
           return (<div key={group.id} style={{...S.card,marginBottom:8}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-              <div><div style={{fontWeight:600,fontSize:14}}>{group.name}</div><div style={{fontSize:12,color:C.textSecondary,marginTop:2}}>{group.levels.length>1?`${group.levels.join(' - ')} - `:''}{ac} athlete{ac!==1?'s':''}</div></div>
+              <div style={{cursor:'pointer',flex:1}} onClick={()=>setExpandedGroup(isExpanded?null:group.id)}>
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <span style={{fontSize:12,color:C.accent,fontWeight:600}}>{isExpanded?'▼':'▶'}</span>
+                  <div><div style={{fontWeight:600,fontSize:14}}>{group.name}</div><div style={{fontSize:12,color:C.textSecondary,marginTop:2}}>{group.levels.join(', ')} - {members.length} athlete{members.length!==1?'s':''}</div></div>
+                </div>
+              </div>
               <div style={{display:'flex',gap:6}}><button style={{...S.btn,...S.btnSecondary,padding:'6px 12px',fontSize:12}} onClick={()=>startEditGroup(group)}>Edit</button><button style={{...S.btn,...S.btnDanger,padding:'6px 12px',fontSize:12}} onClick={()=>deleteGroup(group.id)}>✕</button></div>
             </div>
+            {isExpanded&&(<div style={{marginTop:10}}>
+              {group.levels.map(lv=>(
+                <div key={lv} style={{marginBottom:10}}>
+                  {group.levels.length>1&&<div style={{fontSize:11,fontWeight:700,color:C.accent,textTransform:'uppercase',marginBottom:4}}>{lv} ({(byLevel[lv]||[]).length})</div>}
+                  {(byLevel[lv]||[]).sort((a,b)=>athLast(a).localeCompare(athLast(b))).map(a=>(
+                    <div key={a.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'4px 8px',borderBottom:`1px solid ${C.borderLight}`,fontSize:12}}>
+                      <span style={{fontWeight:500,cursor:'pointer'}} onClick={()=>nav('athleteSub',{athleteId:a.id})}>{athDisplay(a)}{a.gradYear&&<span style={{color:C.textMuted,marginLeft:4}}>'{(a.gradYear+'').slice(-2)}</span>}</span>
+                      <div style={{display:'flex',gap:4,alignItems:'center'}}>
+                        {group.levels.length>1&&<select style={{...S.select,fontSize:10,padding:'2px 4px'}} value={lv} onChange={e=>addToGroup(a.id,group.id,e.target.value)}>
+                          {group.levels.map(l=><option key={l} value={l}>{l}</option>)}
+                        </select>}
+                        <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:11}} onClick={()=>removeFromGroup(a.id,group.id)}>✕</button>
+                      </div>
+                    </div>
+                  ))}
+                  {(byLevel[lv]||[]).length===0&&<div style={{fontSize:11,color:C.textMuted,fontStyle:'italic',padding:'4px 8px'}}>No athletes</div>}
+                </div>
+              ))}
+              <div style={{marginTop:6,padding:'8px',background:C.bg,borderRadius:6,border:`1px solid ${C.borderLight}`}}>
+                <div style={{fontSize:11,fontWeight:600,color:C.textSecondary,marginBottom:4}}>Quick Add</div>
+                <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+                  <select style={{...S.select,flex:1,fontSize:11}} id={`qadd-${group.id}`}>
+                    <option value="">Select athlete...</option>
+                    {unassigned.sort((a,b)=>athLast(a).localeCompare(athLast(b))).map(a=><option key={a.id} value={a.id}>{athDisplay(a)}</option>)}
+                  </select>
+                  {group.levels.length>1&&<select style={{...S.select,fontSize:11}} id={`qlvl-${group.id}`}>
+                    {group.levels.map(l=><option key={l} value={l}>{l}</option>)}
+                  </select>}
+                  <button style={{...S.btn,...S.btnPrimary,fontSize:10,padding:'4px 10px'}} onClick={()=>{const sel=document.getElementById(`qadd-${group.id}`);const lvl=group.levels.length>1?document.getElementById(`qlvl-${group.id}`).value:group.levels[0];if(sel.value){addToGroup(sel.value,group.id,lvl);sel.value='';}}}>Add</button>
+                </div>
+              </div>
+            </div>)}
           </div>);
         })}
         <Modal open={!!showEditGroup} onClose={()=>setShowEditGroup(null)} width={420}>
@@ -3738,6 +3903,21 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
                 <button style={{...S.btn,...S.btnSecondary,fontSize:11}} onClick={addLevel}>+ Add</button>
               </div>
             </div>
+            {groupForm.levels.length>1&&<div>
+              <label style={{fontSize:12,color:C.textSecondary}}>Level Sync</label>
+              <p style={{fontSize:11,color:C.textMuted,marginBottom:6}}>Synced levels mirror another level's workouts automatically. Override individual days as needed.</p>
+              {groupForm.levels.map((lv,i)=>{
+                const syncVal = (groupForm.levelSync||{})[lv]||'';
+                const otherLevels = groupForm.levels.filter(l=>l!==lv);
+                return (<div key={i} style={{display:'flex',gap:6,alignItems:'center',marginBottom:4}}>
+                  <span style={{fontSize:12,fontWeight:600,minWidth:60}}>{lv}</span>
+                  <select style={{...S.select,flex:1,fontSize:12}} value={syncVal} onChange={e=>{const ls={...(groupForm.levelSync||{})};if(e.target.value){ls[lv]=e.target.value;}else{delete ls[lv];}setGroupForm({...groupForm,levelSync:ls});}}>
+                    <option value="">Independent</option>
+                    {otherLevels.map(ol=><option key={ol} value={ol}>Sync from {ol}</option>)}
+                  </select>
+                </div>);
+              })}
+            </div>}
             <button style={{...S.btn,...S.btnPrimary}} onClick={saveGroup}>Save Group</button>
           </div>
         </Modal>

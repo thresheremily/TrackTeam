@@ -3209,6 +3209,7 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
   const removeDayItem = (wid,iid) => save({...data, workoutPlans:(data.workoutPlans||[]).map(w=>w.id!==wid?w:{...w,entries:(w.entries||[]).filter(e=>e.id!==iid)})});
   const updateDayItem = (wid,iid,updates) => save({...data, workoutPlans:(data.workoutPlans||[]).map(w=>w.id!==wid?w:{...w,entries:(w.entries||[]).map(e=>e.id===iid?{...e,...updates}:e)})});
   const [editItemId, setEditItemId] = useState(null);
+  const [editItemForm, setEditItemForm] = useState({});
   const moveDayItem = (wid,gid,lv,day,fromIdx,toIdx) => {
     const plan = (data.workoutPlans||[]).find(w=>w.id===wid);
     if(!plan) return;
@@ -3456,25 +3457,26 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
                       </div>
                     </div>
                     <div style={{display:'flex',gap:6,flexShrink:0}}>
-                      <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'6px 12px',borderRadius:8}} onClick={()=>setEditItemId(editItemId===item.id?null:item.id)}>{editItemId===item.id?'Done':'Edit'}</button>
+                      <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'6px 12px',borderRadius:8}} onClick={()=>{if(editItemId===item.id){updateDayItem(editingDay.weekId,item.id,editItemForm);setEditItemId(null);setEditItemForm({});}else{setEditItemId(item.id);setEditItemForm({name:item.name||'',category:item.category||'',type:item.type||'',description:item.description||'',mileage:item.mileage||'',time:item.time||'',distance:item.distance||'',effort:item.effort||'',sets:item.sets||'',reps:item.reps||'',weight:item.weight||''});}}}>{editItemId===item.id?'Save':'Edit'}</button>
+                      {editItemId===item.id&&<button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'6px 12px',borderRadius:8}} onClick={()=>{setEditItemId(null);setEditItemForm({});}}>Cancel</button>}
                       <button style={{...S.btn,...S.btnDanger,fontSize:12,padding:'6px 12px',borderRadius:8}} onClick={()=>removeDayItem(editingDay.weekId,item.id)}>Remove</button>
                     </div>
                   </div>
                   {editItemId===item.id&&(
                     <div style={{padding:'8px 0',borderTop:`1px solid ${C.borderLight}`}}>
                       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:6}}>
-                        <div><label style={{fontSize:10,color:C.textMuted}}>Name</label><input style={{...S.input,fontSize:12,padding:'6px 8px'}} value={item.name||''} onChange={e=>updateDayItem(editingDay.weekId,item.id,{name:e.target.value})} /></div>
-                        <div><label style={{fontSize:10,color:C.textMuted}}>Category</label><input style={{...S.input,fontSize:12,padding:'6px 8px'}} value={item.category||''} onChange={e=>updateDayItem(editingDay.weekId,item.id,{category:e.target.value})} /></div>
+                        <div><label style={{fontSize:10,color:C.textMuted}}>Name</label><input style={{...S.input,fontSize:12,padding:'6px 8px'}} value={editItemForm.name||''} onChange={e=>setEditItemForm(f=>({...f,name:e.target.value}))} /></div>
+                        <div><label style={{fontSize:10,color:C.textMuted}}>Category</label><input style={{...S.input,fontSize:12,padding:'6px 8px'}} value={editItemForm.category||''} onChange={e=>setEditItemForm(f=>({...f,category:e.target.value}))} /></div>
                       </div>
                       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:6}}>
-                        <div><label style={{fontSize:10,color:C.textMuted}}>Type</label><input style={{...S.input,fontSize:12,padding:'6px 8px'}} value={item.type||''} onChange={e=>updateDayItem(editingDay.weekId,item.id,{type:e.target.value})} /></div>
-                        <div><label style={{fontSize:10,color:C.textMuted}}>Description</label><input style={{...S.input,fontSize:12,padding:'6px 8px'}} value={item.description||''} onChange={e=>updateDayItem(editingDay.weekId,item.id,{description:e.target.value})} /></div>
+                        <div><label style={{fontSize:10,color:C.textMuted}}>Type</label><input style={{...S.input,fontSize:12,padding:'6px 8px'}} value={editItemForm.type||''} onChange={e=>setEditItemForm(f=>({...f,type:e.target.value}))} /></div>
+                        <div><label style={{fontSize:10,color:C.textMuted}}>Description</label><input style={{...S.input,fontSize:12,padding:'6px 8px'}} value={editItemForm.description||''} onChange={e=>setEditItemForm(f=>({...f,description:e.target.value}))} /></div>
                       </div>
                       <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6}}>
-                        <div><label style={{fontSize:10,color:C.textMuted}}>Mileage</label><input style={{...S.input,fontSize:12,padding:'6px 8px'}} value={item.mileage||''} onChange={e=>updateDayItem(editingDay.weekId,item.id,{mileage:e.target.value})} /></div>
-                        <div><label style={{fontSize:10,color:C.textMuted}}>Time</label><input style={{...S.input,fontSize:12,padding:'6px 8px'}} value={item.time||''} onChange={e=>updateDayItem(editingDay.weekId,item.id,{time:e.target.value})} /></div>
-                        <div><label style={{fontSize:10,color:C.textMuted}}>Distance</label><input style={{...S.input,fontSize:12,padding:'6px 8px'}} value={item.distance||''} onChange={e=>updateDayItem(editingDay.weekId,item.id,{distance:e.target.value})} /></div>
-                        <div><label style={{fontSize:10,color:C.textMuted}}>Effort</label><input style={{...S.input,fontSize:12,padding:'6px 8px'}} value={item.effort||''} onChange={e=>updateDayItem(editingDay.weekId,item.id,{effort:e.target.value})} /></div>
+                        <div><label style={{fontSize:10,color:C.textMuted}}>Mileage</label><input style={{...S.input,fontSize:12,padding:'6px 8px'}} value={editItemForm.mileage||''} onChange={e=>setEditItemForm(f=>({...f,mileage:e.target.value}))} /></div>
+                        <div><label style={{fontSize:10,color:C.textMuted}}>Time</label><input style={{...S.input,fontSize:12,padding:'6px 8px'}} value={editItemForm.time||''} onChange={e=>setEditItemForm(f=>({...f,time:e.target.value}))} /></div>
+                        <div><label style={{fontSize:10,color:C.textMuted}}>Distance</label><input style={{...S.input,fontSize:12,padding:'6px 8px'}} value={editItemForm.distance||''} onChange={e=>setEditItemForm(f=>({...f,distance:e.target.value}))} /></div>
+                        <div><label style={{fontSize:10,color:C.textMuted}}>Effort</label><input style={{...S.input,fontSize:12,padding:'6px 8px'}} value={editItemForm.effort||''} onChange={e=>setEditItemForm(f=>({...f,effort:e.target.value}))} /></div>
                       </div>
                     </div>
                   )}

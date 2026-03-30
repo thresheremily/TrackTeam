@@ -3207,6 +3207,8 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
     save({...data, workoutPlans:(data.workoutPlans||[]).map(w=>w.id!==wid?w:{...w,entries:[...(w.entries||[]),{id:uid(),groupId:gid,level:lv,day,...item}]})});
   };
   const removeDayItem = (wid,iid) => save({...data, workoutPlans:(data.workoutPlans||[]).map(w=>w.id!==wid?w:{...w,entries:(w.entries||[]).filter(e=>e.id!==iid)})});
+  const updateDayItem = (wid,iid,updates) => save({...data, workoutPlans:(data.workoutPlans||[]).map(w=>w.id!==wid?w:{...w,entries:(w.entries||[]).map(e=>e.id===iid?{...e,...updates}:e)})});
+  const [editItemId, setEditItemId] = useState(null);
   const moveDayItem = (wid,gid,lv,day,fromIdx,toIdx) => {
     const plan = (data.workoutPlans||[]).find(w=>w.id===wid);
     if(!plan) return;
@@ -3444,7 +3446,7 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
                   onTouchEnd={()=>{if(dragIdx!==null&&dragOverIdx!==null&&dragIdx!==dragOverIdx)moveDayItem(editingDay.weekId,editingDay.groupId,editingDay.level,editingDay.day,dragIdx,dragOverIdx);setDragIdx(null);setDragOverIdx(null);}}
                   data-dragidx={itemIdx}
                   style={{padding:'14px 16px',borderRadius:8,background:dragOverIdx===itemIdx&&dragIdx!==itemIdx?C.accentMuted:dragIdx===itemIdx?C.surface2:C.surface,border:`1px solid ${dragOverIdx===itemIdx&&dragIdx!==itemIdx?C.accent:C.borderLight}`,borderLeft:`4px solid ${catColors[item.category]||C.textMuted}`,marginBottom:10,opacity:dragIdx===itemIdx?0.5:1,transition:'background 0.15s, opacity 0.15s'}}>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:(item.exercises||[]).length>0?8:0}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:(item.exercises||[]).length>0||editItemId===item.id?8:0}}>
                     <div style={{display:'flex',alignItems:'center',gap:10,flex:1,minWidth:0}}>
                       <span style={{cursor:'grab',fontSize:18,color:C.textMuted,userSelect:'none',flexShrink:0,padding:'0 4px'}} title="Drag to reorder">:::</span>
                       <div style={{flex:1,minWidth:0}}>
@@ -3453,8 +3455,29 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
                         {item.description&&<div style={{fontSize:12,color:C.textMuted,marginTop:2,fontStyle:'italic'}}>{item.description}</div>}
                       </div>
                     </div>
-                    <button style={{...S.btn,...S.btnDanger,fontSize:13,padding:'8px 14px',borderRadius:8,flexShrink:0}} onClick={()=>removeDayItem(editingDay.weekId,item.id)}>Remove</button>
+                    <div style={{display:'flex',gap:6,flexShrink:0}}>
+                      <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'6px 12px',borderRadius:8}} onClick={()=>setEditItemId(editItemId===item.id?null:item.id)}>{editItemId===item.id?'Done':'Edit'}</button>
+                      <button style={{...S.btn,...S.btnDanger,fontSize:12,padding:'6px 12px',borderRadius:8}} onClick={()=>removeDayItem(editingDay.weekId,item.id)}>Remove</button>
+                    </div>
                   </div>
+                  {editItemId===item.id&&(
+                    <div style={{padding:'8px 0',borderTop:`1px solid ${C.borderLight}`}}>
+                      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:6}}>
+                        <div><label style={{fontSize:10,color:C.textMuted}}>Name</label><input style={{...S.input,fontSize:12,padding:'6px 8px'}} value={item.name||''} onChange={e=>updateDayItem(editingDay.weekId,item.id,{name:e.target.value})} /></div>
+                        <div><label style={{fontSize:10,color:C.textMuted}}>Category</label><input style={{...S.input,fontSize:12,padding:'6px 8px'}} value={item.category||''} onChange={e=>updateDayItem(editingDay.weekId,item.id,{category:e.target.value})} /></div>
+                      </div>
+                      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:6}}>
+                        <div><label style={{fontSize:10,color:C.textMuted}}>Type</label><input style={{...S.input,fontSize:12,padding:'6px 8px'}} value={item.type||''} onChange={e=>updateDayItem(editingDay.weekId,item.id,{type:e.target.value})} /></div>
+                        <div><label style={{fontSize:10,color:C.textMuted}}>Description</label><input style={{...S.input,fontSize:12,padding:'6px 8px'}} value={item.description||''} onChange={e=>updateDayItem(editingDay.weekId,item.id,{description:e.target.value})} /></div>
+                      </div>
+                      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6}}>
+                        <div><label style={{fontSize:10,color:C.textMuted}}>Mileage</label><input style={{...S.input,fontSize:12,padding:'6px 8px'}} value={item.mileage||''} onChange={e=>updateDayItem(editingDay.weekId,item.id,{mileage:e.target.value})} /></div>
+                        <div><label style={{fontSize:10,color:C.textMuted}}>Time</label><input style={{...S.input,fontSize:12,padding:'6px 8px'}} value={item.time||''} onChange={e=>updateDayItem(editingDay.weekId,item.id,{time:e.target.value})} /></div>
+                        <div><label style={{fontSize:10,color:C.textMuted}}>Distance</label><input style={{...S.input,fontSize:12,padding:'6px 8px'}} value={item.distance||''} onChange={e=>updateDayItem(editingDay.weekId,item.id,{distance:e.target.value})} /></div>
+                        <div><label style={{fontSize:10,color:C.textMuted}}>Effort</label><input style={{...S.input,fontSize:12,padding:'6px 8px'}} value={item.effort||''} onChange={e=>updateDayItem(editingDay.weekId,item.id,{effort:e.target.value})} /></div>
+                      </div>
+                    </div>
+                  )}
                   {(item.exercises||[]).length>0&&(
                     <div style={{marginTop:6}}>
                       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',padding:'6px 0'}} onClick={e=>{e.stopPropagation();setExpandedItems(prev=>({...prev,[item.id]:!prev[item.id]}));}}>

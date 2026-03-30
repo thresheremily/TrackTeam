@@ -1571,6 +1571,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
   const [dragIdx, setDragIdx] = useState(null);
   const [dragOverIdx, setDragOverIdx] = useState(null);
   const [showRoster, setShowRoster] = useState(false);
+  const [selectedForTimer, setSelectedForTimer] = useState({});
   const meet = data.meets.find(m=>m.id===meetId);
   if(!meet) return <div style={S.card}><p>Meet not found</p><button style={S.backLink} onClick={()=>nav('meets')}>{"<- "}Back to Meets</button></div>;
   const meetType = (data.meetTypes||[]).find(mt=>mt.id===meet.meetTypeId);
@@ -1628,6 +1629,27 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
       nav('raceTimer', { meetId, eventId:me.evt.id, athleteId:athleteIds[0], entries });
     }
   };
+  const goToRecordSelected = (me) => {
+    const sel = selectedForTimer[me.eventId]||{};
+    const selEntries = (me.entries||[]).filter((_,i)=>sel[i]);
+    const athleteIds = selEntries.flatMap(en => en.athletes ? en.athletes.map(a=>a.athleteId) : [en.athleteId]).filter(Boolean);
+    if(!athleteIds.length) return;
+    if(me.evt.eventType === 'Field') {
+      nav('fieldEvent', { meetId, eventId:me.evt.id, athleteIds });
+    } else if(me.evt.entryType === 'Relay' || athleteIds.length > 1) {
+      nav('multiSplit', { meetId, eventId:me.evt.id, athleteIds, entries:selEntries });
+    } else {
+      nav('raceTimer', { meetId, eventId:me.evt.id, athleteId:athleteIds[0], entries:selEntries });
+    }
+  };
+  const toggleSelect = (eventId, idx) => {
+    setSelectedForTimer(prev=>{
+      const cur = {...(prev[eventId]||{})};
+      cur[idx] = !cur[idx];
+      return {...prev, [eventId]:cur};
+    });
+  };
+  const selCount = (eventId) => Object.values(selectedForTimer[eventId]||{}).filter(Boolean).length;
   const activeAthletes = data.athletes.filter(a=>a.active!==false);
   return (
     <div>
@@ -1716,18 +1738,21 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
               </div>
               <div style={{display:'flex',gap:6}}>
                 <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'6px 14px'}} onClick={()=>{setEditEntryIdx(null);setShowEntryModal(me.eventId);}}>+ Entry</button>
-                {hasEntries && <button style={{...S.btn,...S.btnPrimary,fontSize:12,padding:'6px 14px'}} onClick={()=>goToRecord(me)}>Record</button>}
+                {hasEntries && <button style={{...S.btn,...S.btnPrimary,fontSize:12,padding:'6px 14px'}} onClick={()=>goToRecord(me)}>Record All</button>}
+                {selCount(me.eventId)>0 && <button style={{...S.btn,background:C.blue,color:C.white,fontSize:12,padding:'6px 14px'}} onClick={()=>goToRecordSelected(me)}>Record {selCount(me.eventId)}</button>}
               </div>
             </div>
             {hasEntries && (
               <table style={{width:'100%',borderCollapse:'collapse'}}>
-                <thead><tr><th style={S.th}>Athlete</th><th style={S.th}>PR</th><th style={S.th}>Goal</th><th style={{...S.th,width:40}}></th></tr></thead>
+                <thead><tr><th style={{...S.th,width:28}}></th><th style={S.th}>Athlete</th><th style={S.th}>PR</th><th style={S.th}>Goal</th><th style={{...S.th,width:70}}></th></tr></thead>
                 <tbody>
                   {entries.map((en,ei) => {
+                    const isChecked = !!((selectedForTimer[me.eventId]||{})[ei]);
                     if(me.evt.entryType === 'Relay') {
                       return [
                         <tr key={`${ei}-header`} style={{background:C.accentMuted}}>
-                          <td colSpan={3} style={{...S.td,fontWeight:700,fontSize:11,color:C.accent,textTransform:'uppercase',borderBottom:`2px solid ${C.accent}`,padding:'6px 12px'}}>Relay #{ei+1}</td>
+                          <td style={{...S.td,borderBottom:`2px solid ${C.accent}`,padding:'6px 8px'}}><input type="checkbox" checked={isChecked} onChange={()=>toggleSelect(me.eventId,ei)} /></td>
+                          <td colSpan={2} style={{...S.td,fontWeight:700,fontSize:11,color:C.accent,textTransform:'uppercase',borderBottom:`2px solid ${C.accent}`,padding:'6px 12px'}}>Relay #{ei+1}</td>
                           <td style={{...S.td,borderBottom:`2px solid ${C.accent}`,padding:'6px 12px'}}><div style={{display:'flex',gap:4}}><button style={{...S.btn,...S.btnSecondary,fontSize:10,padding:'2px 6px'}} onClick={()=>{setEditEntryIdx(ei);setShowEntryModal(me.eventId);}}>Edit</button><button style={{...S.btn,...S.btnDanger,fontSize:10,padding:'2px 6px'}} onClick={()=>saveEntries(me.eventId,entries.filter((_,i)=>i!==ei))}>✕</button></div></td>
                         </tr>,
                         ...(en.athletes||[]).map((a,ai) => {
@@ -1735,7 +1760,8 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                           const pr = getAthletePR(a.athleteId, me.eventId);
                           return (
                             <tr key={`${ei}-${ai}`}>
-                              <td style={{...S.td,paddingLeft:24}}><span style={{fontSize:10,color:C.textMuted,marginRight:6}}>Leg {ai+1}</span>{ath?athDisplay(ath):'-'}</td>
+                              <td style={S.td}></td>
+                              <td style={{...S.td,paddingLeft:16}}><span style={{fontSize:10,color:C.textMuted,marginRight:6}}>Leg {ai+1}</span>{ath?athDisplay(ath):'-'}</td>
                               <td style={S.td}>{pr ? formatTime(pr.timeMs) : '-'}</td>
                               <td style={S.td}>{a.goalMs ? formatTime(a.goalMs) : '-'}</td>
                               <td style={S.td}></td>
@@ -1748,6 +1774,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                     const pr = getAthletePR(en.athleteId, me.eventId);
                     return (
                       <tr key={ei}>
+                        <td style={{...S.td,padding:'6px 8px'}}><input type="checkbox" checked={isChecked} onChange={()=>toggleSelect(me.eventId,ei)} /></td>
                         <td style={{...S.td,fontWeight:500}}>{ath?athDisplay(ath):'-'}</td>
                         <td style={S.td}>{pr ? (isFieldEvent(me.evt) ? fieldToStr(pr.ft,pr.inch,pr.qtr) : formatTime(pr.timeMs)) : '-'}</td>
                         <td style={S.td}>{en.goalMs ? formatTime(en.goalMs) : '-'}</td>
@@ -2923,6 +2950,7 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
   const [expandedItems, setExpandedItems] = useState({});
   const [dragDay, setDragDay] = useState(null);
   const [dragOverDay, setDragOverDay] = useState(null);
+  const [swapSelect, setSwapSelect] = useState(null);
   const swapDays = (weekId, groupId, level, fromDay, toDay) => {
     if(fromDay===toDay) return;
     save({...data, workoutPlans:(data.workoutPlans||[]).map(w=>{
@@ -3124,16 +3152,29 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
                     const dayMi = items.reduce((t,e)=>{let s=parseFloat(e.mileage)||0;const tm=parseFloat(e.distance)||0;if(tm>0)s+=tm/METERS_PER_MILE;(e.exercises||[]).forEach(ex=>{s+=parseFloat(ex.mileage)||0;const em=parseFloat(ex.distance)||0;if(em>0)s+=em/METERS_PER_MILE;});return t+s;},0);
                     const dayDragKey = `${group.id}|${level}|${day}`;
                     const isDayDragOver = dragOverDay===dayDragKey && dragDay!==dayDragKey;
+                    const isSwapSelected = swapSelect===dayDragKey;
+                    const isSwapTarget = swapSelect && swapSelect!==dayDragKey && swapSelect.split('|')[0]===group.id && swapSelect.split('|')[1]===level;
                     return (<div key={day} draggable
                       onDragStart={e=>{e.stopPropagation();setDragDay(dayDragKey);}}
                       onDragOver={e=>{e.preventDefault();e.stopPropagation();setDragOverDay(dayDragKey);}}
                       onDrop={e=>{e.stopPropagation();if(dragDay&&dragDay!==dayDragKey){const[gid,lv,fromDay]=dragDay.split('|');if(gid===group.id&&lv===level)swapDays(curWeek.id,group.id,level,fromDay,day);}setDragDay(null);setDragOverDay(null);}}
                       onDragEnd={()=>{setDragDay(null);setDragOverDay(null);}}
-                      style={{padding:'6px 8px',borderRadius:6,background:isDayDragOver?C.accentMuted:meet?C.dangerMuted:rest?C.surface2:items.length?C.surface:C.bg,border:`1px solid ${isDayDragOver?C.accent:meet?C.danger+'66':rest?C.border:items.length?C.borderLight:C.border}`,cursor:'pointer',minHeight:60,fontSize:11,opacity:dragDay===dayDragKey?0.4:1,transition:'background 0.1s, opacity 0.1s'}}
-                      onClick={()=>{setEditingDay({weekId:curWeek.id,groupId:group.id,level,day});setShowAddItem(false);setShowCreateNew(false);}}>
+                      style={{padding:'6px 8px',borderRadius:6,background:isSwapSelected?C.accentMuted:isDayDragOver?C.accentMuted:meet?C.dangerMuted:rest?C.surface2:items.length?C.surface:C.bg,border:isSwapSelected?`2px solid ${C.accent}`:isSwapTarget?`2px dashed ${C.accent}`:`1px solid ${isDayDragOver?C.accent:meet?C.danger+'66':rest?C.border:items.length?C.borderLight:C.border}`,cursor:'pointer',minHeight:60,fontSize:11,opacity:dragDay===dayDragKey?0.4:1,transition:'background 0.1s, opacity 0.1s'}}
+                      onClick={()=>{
+                        if(swapSelect && swapSelect!==dayDragKey) {
+                          const[gid,lv,fromDay]=swapSelect.split('|');
+                          if(gid===group.id&&lv===level){swapDays(curWeek.id,group.id,level,fromDay,day);}
+                          setSwapSelect(null);
+                        } else {
+                          setEditingDay({weekId:curWeek.id,groupId:group.id,level,day});setShowAddItem(false);setShowCreateNew(false);
+                        }
+                      }}>
                       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}>
                         <span style={{fontWeight:600,color:C.textMuted,fontSize:10,textTransform:'uppercase'}}>{day}</span>
-                        {dayMi>0&&<span style={{fontSize:9,fontWeight:700,color:C.accent}}>{dayMi.toFixed(1)}mi</span>}
+                        <div style={{display:'flex',alignItems:'center',gap:3}}>
+                          {dayMi>0&&<span style={{fontSize:9,fontWeight:700,color:C.accent}}>{dayMi.toFixed(1)}mi</span>}
+                          <button style={{background:'none',border:'none',color:isSwapSelected?C.accent:C.textMuted,cursor:'pointer',fontSize:10,padding:'0 2px',fontWeight:700}} onClick={e=>{e.stopPropagation();setSwapSelect(isSwapSelected?null:dayDragKey);}} title="Tap to swap">{isSwapSelected?'✕':'⇄'}</button>
+                        </div>
                       </div>
                       {meet&&<div style={{fontSize:9,fontWeight:700,color:C.danger,marginBottom:3,padding:'2px 4px',background:'rgba(197,48,48,0.15)',borderRadius:3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',cursor:'pointer'}} onClick={e=>{e.stopPropagation();nav('meetSub',{meetId:meet.id});}}>{"<> "}{meet.name}</div>}
                       {rest?<div style={{color:C.textMuted,fontStyle:'italic',fontSize:10}}>Rest</div>:

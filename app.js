@@ -119,6 +119,29 @@ const TRACK_DISTANCES = {
   '4x100m':400,'4x200m':800,'4x400m':1600,'4x800m':3200,
 };
 const getDistance = (evt) => TRACK_DISTANCES[(evt||{}).name] || 0;
+const DEFAULT_MEET_ORDER = [
+  {name:'4x800m',gender:'Girl'},{name:'4x800m',gender:'Boy'},
+  {name:'100m Hurdles',gender:'Girl'},{name:'110m Hurdles',gender:'Boy'},
+  {name:'55m Hurdles',gender:'Girl'},{name:'55m Hurdles',gender:'Boy'},
+  {name:'100m',gender:'Girl'},{name:'100m',gender:'Boy'},
+  {name:'55m',gender:'Girl'},{name:'55m',gender:'Boy'},
+  {name:'1500m',gender:'Girl'},{name:'1600m',gender:'Boy'},
+  {name:'1000m',gender:'Girl'},{name:'1000m',gender:'Boy'},
+  {name:'4x200m',gender:'Girl'},{name:'4x200m',gender:'Boy'},
+  {name:'4x100m',gender:'Girl'},{name:'4x100m',gender:'Boy'},
+  {name:'400m',gender:'Girl'},{name:'400m',gender:'Boy'},
+  {name:'400m Hurdles',gender:'Girl'},{name:'400m Hurdles',gender:'Boy'},
+  {name:'800m',gender:'Girl'},{name:'800m',gender:'Boy'},
+  {name:'200m',gender:'Girl'},{name:'200m',gender:'Boy'},
+  {name:'3000m',gender:'Girl'},{name:'3200m',gender:'Boy'},
+  {name:'3200m',gender:'Girl'},
+  {name:'2000m Steeplechase',gender:'Girl'},{name:'3000m Steeplechase',gender:'Boy'},
+  {name:'4x400m',gender:'Girl'},{name:'4x400m',gender:'Boy'},
+];
+const getDefaultOrder = (evt) => {
+  const idx = DEFAULT_MEET_ORDER.findIndex(o=>o.name===evt.name&&o.gender===evt.gender);
+  return idx>=0?idx:500;
+};
 const parseCSV = (text) => {
   const lines = text.trim().split(/\r?\n/);
   if(lines.length < 2) return { headers: [], rows: [] };
@@ -1600,8 +1623,8 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
     if(idxA >= 0 && idxB >= 0) return idxA - idxB;
     if(idxA >= 0) return -1;
     if(idxB >= 0) return 1;
-    const dA = TRACK_DISTANCES[a.evt.name]||99999;
-    const dB = TRACK_DISTANCES[b.evt.name]||99999;
+    const dA = getDefaultOrder(a.evt);
+    const dB = getDefaultOrder(b.evt);
     if(dA !== dB) return dA - dB;
     return a.evt.name.localeCompare(b.evt.name);
   });

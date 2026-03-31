@@ -3208,8 +3208,13 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
   };
   const removeDayItem = (wid,iid) => save({...data, workoutPlans:(data.workoutPlans||[]).map(w=>w.id!==wid?w:{...w,entries:(w.entries||[]).filter(e=>e.id!==iid)})});
   const updateDayItem = (wid,iid,updates) => save({...data, workoutPlans:(data.workoutPlans||[]).map(w=>w.id!==wid?w:{...w,entries:(w.entries||[]).map(e=>e.id===iid?{...e,...updates}:e)})});
-  const [editItemId, setEditItemId] = useState(null);
-  const [editItemForm, setEditItemForm] = useState({});
+  const replaceDayItem = (wid,iid,newWorkout) => {
+    save({...data, workoutPlans:(data.workoutPlans||[]).map(w=>w.id!==wid?w:{...w,entries:(w.entries||[]).map(e=>e.id!==iid?e:{...e,name:newWorkout.name,category:newWorkout.category||(newWorkout.categories||[])[0]||'',type:newWorkout.type||'',description:newWorkout.description||'',exercises:newWorkout.exercises||[],mileage:newWorkout.mileage||'',time:newWorkout.time||'',distance:newWorkout.distance||'',sets:newWorkout.sets||'',reps:newWorkout.reps||'',weight:newWorkout.weight||'',effort:newWorkout.effort||''})})});
+    setReplaceItemId(null);
+    setReplaceSearch('');
+  };
+  const [replaceItemId, setReplaceItemId] = useState(null);
+  const [replaceSearch, setReplaceSearch] = useState('');
   const moveDayItem = (wid,gid,lv,day,fromIdx,toIdx) => {
     const plan = (data.workoutPlans||[]).find(w=>w.id===wid);
     if(!plan) return;
@@ -3447,7 +3452,7 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
                   onTouchEnd={()=>{if(dragIdx!==null&&dragOverIdx!==null&&dragIdx!==dragOverIdx)moveDayItem(editingDay.weekId,editingDay.groupId,editingDay.level,editingDay.day,dragIdx,dragOverIdx);setDragIdx(null);setDragOverIdx(null);}}
                   data-dragidx={itemIdx}
                   style={{padding:'14px 16px',borderRadius:8,background:dragOverIdx===itemIdx&&dragIdx!==itemIdx?C.accentMuted:dragIdx===itemIdx?C.surface2:C.surface,border:`1px solid ${dragOverIdx===itemIdx&&dragIdx!==itemIdx?C.accent:C.borderLight}`,borderLeft:`4px solid ${catColors[item.category]||C.textMuted}`,marginBottom:10,opacity:dragIdx===itemIdx?0.5:1,transition:'background 0.15s, opacity 0.15s'}}>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:(item.exercises||[]).length>0||editItemId===item.id?8:0}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:(item.exercises||[]).length>0||replaceItemId===item.id?8:0}}>
                     <div style={{display:'flex',alignItems:'center',gap:10,flex:1,minWidth:0}}>
                       <span style={{cursor:'grab',fontSize:18,color:C.textMuted,userSelect:'none',flexShrink:0,padding:'0 4px'}} title="Drag to reorder">:::</span>
                       <div style={{flex:1,minWidth:0}}>
@@ -3457,26 +3462,24 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
                       </div>
                     </div>
                     <div style={{display:'flex',gap:6,flexShrink:0}}>
-                      <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'6px 12px',borderRadius:8}} onClick={()=>{if(editItemId===item.id){updateDayItem(editingDay.weekId,item.id,editItemForm);setEditItemId(null);setEditItemForm({});}else{setEditItemId(item.id);setEditItemForm({name:item.name||'',category:item.category||'',type:item.type||'',description:item.description||'',mileage:item.mileage||'',time:item.time||'',distance:item.distance||'',effort:item.effort||'',sets:item.sets||'',reps:item.reps||'',weight:item.weight||''});}}}>{editItemId===item.id?'Save':'Edit'}</button>
-                      {editItemId===item.id&&<button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'6px 12px',borderRadius:8}} onClick={()=>{setEditItemId(null);setEditItemForm({});}}>Cancel</button>}
+                      <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'6px 12px',borderRadius:8}} onClick={()=>{if(replaceItemId===item.id){setReplaceItemId(null);setReplaceSearch('');}else{setReplaceItemId(item.id);setReplaceSearch('');}}}>{replaceItemId===item.id?'Cancel':'Replace'}</button>
                       <button style={{...S.btn,...S.btnDanger,fontSize:12,padding:'6px 12px',borderRadius:8}} onClick={()=>removeDayItem(editingDay.weekId,item.id)}>Remove</button>
                     </div>
                   </div>
-                  {editItemId===item.id&&(
+                  {replaceItemId===item.id&&(
                     <div style={{padding:'8px 0',borderTop:`1px solid ${C.borderLight}`}}>
-                      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:6}}>
-                        <div><label style={{fontSize:10,color:C.textMuted}}>Name</label><input style={{...S.input,fontSize:12,padding:'6px 8px'}} value={editItemForm.name||''} onChange={e=>setEditItemForm(f=>({...f,name:e.target.value}))} /></div>
-                        <div><label style={{fontSize:10,color:C.textMuted}}>Category</label><input style={{...S.input,fontSize:12,padding:'6px 8px'}} value={editItemForm.category||''} onChange={e=>setEditItemForm(f=>({...f,category:e.target.value}))} /></div>
-                      </div>
-                      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:6}}>
-                        <div><label style={{fontSize:10,color:C.textMuted}}>Type</label><input style={{...S.input,fontSize:12,padding:'6px 8px'}} value={editItemForm.type||''} onChange={e=>setEditItemForm(f=>({...f,type:e.target.value}))} /></div>
-                        <div><label style={{fontSize:10,color:C.textMuted}}>Description</label><input style={{...S.input,fontSize:12,padding:'6px 8px'}} value={editItemForm.description||''} onChange={e=>setEditItemForm(f=>({...f,description:e.target.value}))} /></div>
-                      </div>
-                      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6}}>
-                        <div><label style={{fontSize:10,color:C.textMuted}}>Mileage</label><input style={{...S.input,fontSize:12,padding:'6px 8px'}} value={editItemForm.mileage||''} onChange={e=>setEditItemForm(f=>({...f,mileage:e.target.value}))} /></div>
-                        <div><label style={{fontSize:10,color:C.textMuted}}>Time</label><input style={{...S.input,fontSize:12,padding:'6px 8px'}} value={editItemForm.time||''} onChange={e=>setEditItemForm(f=>({...f,time:e.target.value}))} /></div>
-                        <div><label style={{fontSize:10,color:C.textMuted}}>Distance</label><input style={{...S.input,fontSize:12,padding:'6px 8px'}} value={editItemForm.distance||''} onChange={e=>setEditItemForm(f=>({...f,distance:e.target.value}))} /></div>
-                        <div><label style={{fontSize:10,color:C.textMuted}}>Effort</label><input style={{...S.input,fontSize:12,padding:'6px 8px'}} value={editItemForm.effort||''} onChange={e=>setEditItemForm(f=>({...f,effort:e.target.value}))} /></div>
+                      <div style={{fontSize:11,fontWeight:600,color:C.accent,marginBottom:6}}>Replace with library workout:</div>
+                      <input style={{...S.input,fontSize:12,padding:'8px 10px',marginBottom:6}} placeholder="Search workouts..." value={replaceSearch} onChange={e=>setReplaceSearch(e.target.value)} />
+                      <div style={{maxHeight:180,overflowY:'auto',border:`1px solid ${C.borderLight}`,borderRadius:6}}>
+                        {library.filter(w=>!replaceSearch||w.name.toLowerCase().includes(replaceSearch.toLowerCase())||(w.category||'').toLowerCase().includes(replaceSearch.toLowerCase())||(w.type||'').toLowerCase().includes(replaceSearch.toLowerCase())).map(w=>(
+                          <div key={w.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 10px',borderBottom:`1px solid ${C.borderLight}`,cursor:'pointer',fontSize:12}} onClick={()=>replaceDayItem(editingDay.weekId,item.id,w)}>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{fontWeight:600}}>{w.name}</div>
+                              <div style={{fontSize:10,color:C.textMuted}}>{w.category||(w.categories||[])[0]||''}{w.type?' / '+w.type:''}{w.mileage?' - '+w.mileage+'mi':''}</div>
+                            </div>
+                            <span style={{color:C.accent,fontWeight:700,fontSize:14,flexShrink:0,marginLeft:8}}>→</span>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   )}

@@ -1645,6 +1645,91 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
     else updatedMeetEvents.push({eventId, entries:newEntries});
     save({...data, meets:data.meets.map(m=>m.id===meetId?{...m, events:updatedMeetEvents}:m)});
   };
+  const printMeet = (view) => {
+    const w = window.open('','_blank','width=800,height=600');
+    if(!w) return;
+    const header = `<div style="text-align:center;margin-bottom:16px;border-bottom:2px solid #333;padding-bottom:8px"><h1 style="margin:0;font-size:20px">${meet.name}</h1><p style="margin:4px 0 0;font-size:12px;color:#666">${meet.startDate||''}${meet.endDate?' - '+meet.endDate:''} &mdash; ${meet.trackType}${meet.venue?' &mdash; '+meet.venue:''}${meet.city?', '+meet.city:''}${meet.state?' '+meet.state:''}</p></div>`;
+    const css = `<style>body{font-family:-apple-system,sans-serif;font-size:12px;padding:20px;color:#1a1a1a;max-width:750px;margin:0 auto}table{width:100%;border-collapse:collapse}th{text-align:left;font-size:10px;color:#666;text-transform:uppercase;letter-spacing:0.04em;border-bottom:1px solid #ccc;padding:4px 6px}td{padding:4px 6px;border-bottom:1px solid #eee;font-size:12px}.evt-header{font-size:14px;font-weight:700;border-bottom:2px solid #333;padding:6px 0;margin-top:16px}.evt-sub{font-size:11px;color:#666;font-weight:400;margin-left:8px}.relay-hdr{font-size:11px;font-weight:600;color:#444;padding:3px 6px;background:#f5f5f5}.alt{font-style:italic;color:#999;font-size:11px}.result-line{border-bottom:1px solid #999;min-width:60px;display:inline-block}&nbsp;.heat-line{border-bottom:1px solid #999;width:30px;display:inline-block}@media print{body{padding:10px}}</style>`;
+    let body = '';
+    if(view==='events') {
+      const sorted = [...meetEvents].sort((a,b)=>{const oa=meet.eventOrder||[];const ia=oa.indexOf(a.eventId);const ib=oa.indexOf(b.eventId);if(ia>=0&&ib>=0)return ia-ib;if(ia>=0)return -1;if(ib>=0)return 1;return getDefaultOrder(a.evt)-getDefaultOrder(b.evt);});
+      sorted.forEach(me=>{
+        if(!me.entries.length) return;
+        const isField = isFieldEvent(me.evt);
+        body += `<div class="evt-header">${getEventLabel(me.evt)}<span class="evt-sub">${me.evt.eventType} &mdash; ${me.evt.entryType}</span></div>`;
+        body += '<table><thead><tr><th>#</th><th>Athlete</th>';
+        if(!isField) body += '<th>Heat</th>';
+        body += '<th style="text-align:right">PR</th>';
+        if(!isField) body += '<th style="text-align:right">Goal</th>';
+        body += '<th style="text-align:right">Result</th></tr></thead><tbody>';
+        let num = 1;
+        me.entries.forEach((en,ei) => {
+          if(me.evt.entryType==='Relay') {
+            body += `<tr><td colspan="99" class="relay-hdr">Relay #${ei+1}</td></tr>`;
+            (en.athletes||[]).forEach((a,ai) => {
+              const ath = data.athletes.find(at=>at.id===a.athleteId);
+              const pr = getAthletePR(a.athleteId, me.eventId);
+              const prStr = pr ? formatTime(pr.timeMs) : '-';
+              const goalStr = a.goalMs ? formatTime(a.goalMs) : '-';
+              body += `<tr><td>${ai+1}</td><td>${ath?athDisplay(ath,true):'-'}</td><td style="text-align:right">${prStr}</td><td style="text-align:right">${goalStr}</td><td style="text-align:right"><span class="result-line">&nbsp;</span></td></tr>`;
+            });
+            if((en.alternates||[]).length) {
+              (en.alternates||[]).forEach(a => {
+                const ath = data.athletes.find(at=>at.id===a.athleteId);
+                body += `<tr><td></td><td class="alt">Alt: ${ath?athDisplay(ath,true):'-'}</td><td colspan="3"></td></tr>`;
+              });
+            }
+          } else {
+            const ath = data.athletes.find(a=>a.id===en.athleteId);
+            const pr = getAthletePR(en.athleteId, me.eventId);
+            const prStr = pr ? (isField ? fieldToStr(pr.ft,pr.inch,pr.qtr) : formatTime(pr.timeMs)) : '-';
+            const goalStr = en.goalMs ? formatTime(en.goalMs) : '-';
+            body += `<tr><td>${num}</td><td>${ath?athDisplay(ath,true):'-'}</td>`;
+            if(!isField) body += `<td><span class="heat-line">&nbsp;</span></td>`;
+            body += `<td style="text-align:right">${prStr}</td>`;
+            if(!isField) body += `<td style="text-align:right">${goalStr}</td>`;
+            body += `<td style="text-align:right"><span class="result-line">&nbsp;</span></td></tr>`;
+            num++;
+          }
+        });
+        body += '</tbody></table>';
+      });
+    } else {
+      const np = meet.notParticipating||[];
+      const athMap = {};
+      meetEvents.forEach(me=>{
+        (me.entries||[]).forEach((en,ei)=>{
+          if(me.evt.entryType==='Relay') {
+            (en.athletes||[]).forEach(a=>{if(a.athleteId){if(!athMap[a.athleteId])athMap[a.athleteId]=[];athMap[a.athleteId].push({evt:me.evt,role:'R'});}});
+            (en.alternates||[]).forEach(a=>{if(a.athleteId){if(!athMap[a.athleteId])athMap[a.athleteId]=[];athMap[a.athleteId].push({evt:me.evt,role:'Alt'});}});
+          } else {
+            if(en.athleteId){if(!athMap[en.athleteId])athMap[en.athleteId]=[];athMap[en.athleteId].push({evt:me.evt,role:''});}
+          }
+        });
+      });
+      const activeAth = data.athletes.filter(a=>a.active!==false&&!np.includes(a.id)).sort((a,b)=>athLast(a).localeCompare(athLast(b)));
+      body += '<table><thead><tr><th>Athlete</th><th>Yr</th><th>G</th><th>Events</th><th style="text-align:right">PRs</th></tr></thead><tbody>';
+      let totalEntries = 0;
+      activeAth.forEach(a => {
+        const evts = athMap[a.id]||[];
+        totalEntries += evts.length;
+        const evtStr = evts.map(e=>getEventLabel(e.evt)+(e.role?' ('+e.role+')':'')).join(', ')||'<span style="color:#c53030;font-style:italic">None</span>';
+        const prStrs = [];
+        const seen = new Set();
+        evts.forEach(e=>{
+          if(seen.has(e.evt.id)) return; seen.add(e.evt.id);
+          const pr = getAthletePR(a.id, e.evt.id);
+          if(pr) prStrs.push(isFieldEvent(e.evt)?fieldToStr(pr.ft,pr.inch,pr.qtr):formatTime(pr.timeMs));
+        });
+        body += `<tr><td style="font-weight:600">${athDisplay(a,true)}</td><td>${a.gradYear?("'"+(''+a.gradYear).slice(-2)):'-'}</td><td>${a.gender==='M'?'B':'G'}</td><td>${evtStr}</td><td style="text-align:right;color:#666">${prStrs.join(' / ')||'-'}</td></tr>`;
+      });
+      body += '</tbody></table>';
+      body += `<div style="margin-top:12px;padding-top:8px;border-top:1px solid #ccc;font-size:11px;color:#666;display:flex;justify-content:space-between"><span>${activeAth.length} athletes &mdash; ${totalEntries} entries</span><span>Not participating: ${np.length}</span></div>`;
+    }
+    w.document.write(`<!DOCTYPE html><html><head><title>${meet.name} - ${view==='events'?'By Event':'By Athlete'}</title>${css}</head><body>${header}${body}</body></html>`);
+    w.document.close();
+    setTimeout(()=>w.print(),300);
+  };
   const goToRecord = (me) => {
     const entries = me.entries || [];
     const athleteIds = entries.flatMap(en => en.athletes ? en.athletes.map(a=>a.athleteId) : [en.athleteId]).filter(Boolean);
@@ -1687,10 +1772,11 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
         {meet.venue && ` - ${meet.venue}`}{meet.city && `, ${meet.city}`}{meet.state && ` ${meet.state}`}
         {meetType && <span style={{marginLeft:8,color:meetType.qualifying?C.success:C.textMuted,fontWeight:600}}>({meetType.name})</span>}
       </p>
-      <div style={{display:'flex',gap:0,marginBottom:12,borderBottom:`2px solid ${C.border}`}}>
+      <div style={{display:'flex',gap:0,marginBottom:12,borderBottom:`2px solid ${C.border}`,alignItems:'center'}}>
         {['events','athletes'].map(t=>(
           <button key={t} style={{padding:'10px 20px',fontSize:13,fontWeight:600,border:'none',borderBottom:meetTab===t?`3px solid ${C.accent}`:'3px solid transparent',background:'none',color:meetTab===t?C.accent:C.textMuted,cursor:'pointer',textTransform:'uppercase',letterSpacing:'0.04em'}} onClick={()=>setMeetTab(t)}>{t==='events'?'By Event':'By Athlete'}</button>
         ))}
+        <button style={{marginLeft:'auto',background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 14px',fontSize:12,fontWeight:600,color:C.textSecondary,cursor:'pointer'}} onClick={()=>printMeet(meetTab)}>Print</button>
       </div>
       {meetTab==='events' && (<>
       <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap'}}>

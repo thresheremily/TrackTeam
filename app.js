@@ -3308,11 +3308,58 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
     save({...data,workoutPlans:(data.workoutPlans||[]).map(w=>w.id!==wid?w:{...w,entries:(w.entries||[]).filter(e=>!(e.groupId===gid&&e.level===lv&&e.day===day)),restDays:(w.restDays||[]).filter(rd=>!(rd.groupId===gid&&rd.level===lv&&rd.day===day))})});
   };
   const addDayItem = (wid,gid,lv,day,item) => {
+    const synced = isSynced(wid,gid,lv,day);
+    if(synced) {
+      const syncSrc = getSyncSource(gid,lv);
+      const w = (data.workoutPlans||[]).find(w2=>w2.id===wid);
+      if(w&&syncSrc) {
+        const srcItems = (w.entries||[]).filter(e=>e.groupId===gid&&e.level===syncSrc&&e.day===day);
+        const copied = srcItems.map(e=>({...e,id:uid(),level:lv}));
+        save({...data, workoutPlans:(data.workoutPlans||[]).map(w2=>w2.id!==wid?w2:{...w2,entries:[...(w2.entries||[]),...copied,{id:uid(),groupId:gid,level:lv,day,...item}]})});
+        return;
+      }
+    }
     save({...data, workoutPlans:(data.workoutPlans||[]).map(w=>w.id!==wid?w:{...w,entries:[...(w.entries||[]),{id:uid(),groupId:gid,level:lv,day,...item}]})});
   };
-  const removeDayItem = (wid,iid) => save({...data, workoutPlans:(data.workoutPlans||[]).map(w=>w.id!==wid?w:{...w,entries:(w.entries||[]).filter(e=>e.id!==iid)})});
+  const removeDayItem = (wid,iid) => {
+    if(editingDay) {
+      const {groupId,level,day} = editingDay;
+      const synced = isSynced(wid,groupId,level,day);
+      if(synced) {
+        const syncSrc = getSyncSource(groupId,level);
+        const w = (data.workoutPlans||[]).find(w2=>w2.id===wid);
+        if(w&&syncSrc) {
+          const srcItems = (w.entries||[]).filter(e=>e.groupId===groupId&&e.level===syncSrc&&e.day===day);
+          const copied = srcItems.filter(e=>e.id!==iid).map(e=>({...e,id:uid(),level}));
+          save({...data, workoutPlans:(data.workoutPlans||[]).map(w2=>w2.id!==wid?w2:{...w2,entries:[...(w2.entries||[]),...copied]})});
+          return;
+        }
+      }
+    }
+    save({...data, workoutPlans:(data.workoutPlans||[]).map(w=>w.id!==wid?w:{...w,entries:(w.entries||[]).filter(e=>e.id!==iid)})});
+  };
   const updateDayItem = (wid,iid,updates) => save({...data, workoutPlans:(data.workoutPlans||[]).map(w=>w.id!==wid?w:{...w,entries:(w.entries||[]).map(e=>e.id===iid?{...e,...updates}:e)})});
   const replaceDayItem = (wid,iid,newWorkout) => {
+    if(editingDay) {
+      const {groupId,level,day} = editingDay;
+      const synced = isSynced(wid,groupId,level,day);
+      if(synced) {
+        const syncSrc = getSyncSource(groupId,level);
+        const w = (data.workoutPlans||[]).find(w2=>w2.id===wid);
+        if(w && syncSrc) {
+          const srcItems = (w.entries||[]).filter(e=>e.groupId===groupId&&e.level===syncSrc&&e.day===day);
+          const newEntries = srcItems.map(e=>{
+            const newId = uid();
+            if(e.id===iid) return {...e,id:newId,level,name:newWorkout.name,category:newWorkout.category||(newWorkout.categories||[])[0]||'',type:newWorkout.type||'',description:newWorkout.description||'',exercises:newWorkout.exercises||[],mileage:newWorkout.mileage||'',time:newWorkout.time||'',distance:newWorkout.distance||'',sets:newWorkout.sets||'',reps:newWorkout.reps||'',weight:newWorkout.weight||'',effort:newWorkout.effort||''};
+            return {...e,id:newId,level};
+          });
+          save({...data, workoutPlans:(data.workoutPlans||[]).map(w2=>w2.id!==wid?w2:{...w2,entries:[...(w2.entries||[]),...newEntries]})});
+          setReplaceItemId(null);
+          setReplaceSearch('');
+          return;
+        }
+      }
+    }
     save({...data, workoutPlans:(data.workoutPlans||[]).map(w=>w.id!==wid?w:{...w,entries:(w.entries||[]).map(e=>e.id!==iid?e:{...e,name:newWorkout.name,category:newWorkout.category||(newWorkout.categories||[])[0]||'',type:newWorkout.type||'',description:newWorkout.description||'',exercises:newWorkout.exercises||[],mileage:newWorkout.mileage||'',time:newWorkout.time||'',distance:newWorkout.distance||'',sets:newWorkout.sets||'',reps:newWorkout.reps||'',weight:newWorkout.weight||'',effort:newWorkout.effort||''})})});
     setReplaceItemId(null);
     setReplaceSearch('');
@@ -3335,16 +3382,18 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
   const applyDefaults = (wid,gid,lv,day) => library.filter(l=>l.isDefault).forEach(d=>addDayItem(wid,gid,lv,day,{category:d.category||(d.categories||[])[0]||defaultCat,type:d.type||'',name:d.name,exercises:d.exercises||[]}));
   const METERS_PER_MILE = 1609.34;
   const getWeekMileage = (wid,gid,lv) => {
-    const items=(((data.workoutPlans||[]).find(w=>w.id===wid)||{}).entries||[]).filter(e=>e.groupId===gid&&e.level===lv);
     let total = 0;
-    items.forEach(e => {
-      total += parseFloat(e.mileage) || 0;
-      const topMeters = parseFloat(e.distance) || 0;
-      if(topMeters > 0) total += topMeters / METERS_PER_MILE;
-      (e.exercises||[]).forEach(ex => {
-        total += parseFloat(ex.mileage) || 0;
-        const exMeters = parseFloat(ex.distance) || 0;
-        if(exMeters > 0) total += exMeters / METERS_PER_MILE;
+    DAYS.forEach(day => {
+      const items = getDayItems(wid,gid,lv,day);
+      items.forEach(e => {
+        total += parseFloat(e.mileage) || 0;
+        const topMeters = parseFloat(e.distance) || 0;
+        if(topMeters > 0) total += topMeters / METERS_PER_MILE;
+        (e.exercises||[]).forEach(ex => {
+          total += parseFloat(ex.mileage) || 0;
+          const exMeters = parseFloat(ex.distance) || 0;
+          if(exMeters > 0) total += exMeters / METERS_PER_MILE;
+        });
       });
     });
     return total;

@@ -2975,6 +2975,7 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
   );
 }
 function DailyPracticeView({ data, nav, date }) {
+  const [expandedWorkouts, setExpandedWorkouts] = useState({});
   const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const dateObj = new Date((date||new Date().toISOString().split('T')[0])+'T12:00:00');
   const dayName = dayNames[dateObj.getDay()];
@@ -3039,24 +3040,37 @@ function DailyPracticeView({ data, nav, date }) {
                               {item.description&&<div style={{fontSize:12,color:C.textMuted,marginTop:4,fontStyle:'italic'}}>{item.description}</div>}
                             </div>
                           </div>
-                          {exercises.length > 0 && (
-                            <div style={{overflowX:'auto'}}>
-                              <table style={{width:'100%',borderCollapse:'collapse'}}>
-                                <thead><tr>
-                                  <th style={{...S.th,padding:'6px 8px',width:36}}>Set</th>
-                                  {EXERCISE_COLUMNS.map(col=>(<th key={col.key} style={{...S.th,padding:'6px 8px'}}>{col.label}</th>))}
-                                </tr></thead>
-                                <tbody>{exercises.map((ex,i)=>(
-                                  <tr key={i}>
-                                    <td style={{...S.td,padding:'6px 8px',textAlign:'center',fontWeight:600,color:C.textMuted}}>{i+1}</td>
-                                    {EXERCISE_COLUMNS.map(col=>(
-                                      <td key={col.key} style={{...S.td,padding:'6px 8px',fontSize:13}}>{ex[col.key]||<span style={{color:C.border}}>-</span>}</td>
-                                    ))}
-                                  </tr>
-                                ))}</tbody>
-                              </table>
-                            </div>
-                          )}
+                          {exercises.length > 0 && (()=>{
+                            const isExp = expandedWorkouts[item.id];
+                            const summary = exercises.map(ex=>ex.exercise).filter(Boolean).join(', ');
+                            return (<div>
+                              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',padding:'4px 0'}} onClick={()=>setExpandedWorkouts(p=>({...p,[item.id]:!p[item.id]}))}>
+                                <div style={{fontSize:11,color:C.textSecondary}}>
+                                  <span style={{fontWeight:600}}>{exercises.length} exercise{exercises.length!==1?'s':''}</span>
+                                  {!isExp&&summary&&<span style={{marginLeft:6,color:C.textMuted}}>{summary.length>60?summary.slice(0,60)+'...':summary}</span>}
+                                </div>
+                                <span style={{fontSize:11,color:C.accent,fontWeight:600}}>{isExp?'^ Hide':'v Show'}</span>
+                              </div>
+                              {isExp&&(
+                                <div style={{overflowX:'auto',marginTop:4}}>
+                                  <table style={{width:'100%',borderCollapse:'collapse'}}>
+                                    <thead><tr>
+                                      <th style={{...S.th,padding:'6px 8px',width:36}}>Set</th>
+                                      {EXERCISE_COLUMNS.map(col=>(<th key={col.key} style={{...S.th,padding:'6px 8px'}}>{col.label}</th>))}
+                                    </tr></thead>
+                                    <tbody>{exercises.map((ex,i)=>(
+                                      <tr key={i}>
+                                        <td style={{...S.td,padding:'6px 8px',textAlign:'center',fontWeight:600,color:C.textMuted}}>{i+1}</td>
+                                        {EXERCISE_COLUMNS.map(col=>(
+                                          <td key={col.key} style={{...S.td,padding:'6px 8px',fontSize:13}}>{ex[col.key]||<span style={{color:C.border}}>-</span>}</td>
+                                        ))}
+                                      </tr>
+                                    ))}</tbody>
+                                  </table>
+                                </div>
+                              )}
+                            </div>);
+                          })()}
                           {exercises.length===0&&(item.mileage||item.time||item.distance||item.sets||item.reps||item.weight||item.effort)&&(
                             <div style={{display:'flex',gap:12,flexWrap:'wrap',marginTop:8}}>
                               {item.mileage&&<div style={{fontSize:13}}><span style={{color:C.textMuted}}>Mileage:</span> <span style={{fontWeight:600,color:C.accent}}>{item.mileage} mi</span></div>}

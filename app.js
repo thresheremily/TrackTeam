@@ -856,7 +856,7 @@ function App() {
     meets: () => <MeetsPage data={data} save={save} nav={nav} events={events} />,
     meetSub: () => <MeetSubPage data={data} save={save} nav={nav} meetId={pageParams.meetId} events={events} getAthletePR={getAthletePR} checkQualifying={checkQualifying} />,
     athletes: () => <AthletesPage data={data} save={save} nav={nav} />,
-    athleteSub: () => <AthleteSubPage data={data} save={save} nav={nav} athleteId={pageParams.athleteId} events={events} getAthletePR={getAthletePR} checkRecord={checkRecord} checkQualifying={checkQualifying} season={season} />,
+    athleteSub: () => <AthleteSubPage data={data} save={save} nav={nav} athleteId={pageParams.athleteId} athFilter={pageParams.athFilter} events={events} getAthletePR={getAthletePR} checkRecord={checkRecord} checkQualifying={checkQualifying} season={season} />,
     eventsPage: () => <EventsPage data={data} save={save} nav={nav} />,
     tools: () => <ToolsPage data={data} save={save} nav={nav} events={events} addResult={addResult} getAthletePR={getAthletePR} checkRecord={checkRecord} checkQualifying={checkQualifying} preset={pageParams} />,
     raceTimer: () => <RaceTimer data={data} save={save} nav={nav} events={events} addResult={addResult} getAthletePR={getAthletePR} checkRecord={checkRecord} checkQualifying={checkQualifying} preset={pageParams} />,
@@ -1027,6 +1027,8 @@ function Dashboard({ data, save, nav, season, team, events, activeAthletes, feat
       
       {(()=>{
         const followUps = (data.medicalNotes||[]).filter(n=>n.needFollowUp&&!n.followUpResolution);
+        const today2 = new Date().toISOString().split('T')[0];
+        const upcomingAbsences = (data.medicalNotes||[]).filter(n=>n.type==='Planned Absence'&&n.absenceEnd&&n.absenceEnd>=today2);
         if(followUps.length===0) return null;
         return (
           <div style={{...S.card, padding:'12px 14px', borderLeft:`4px solid ${C.danger}`}}>
@@ -1186,9 +1188,14 @@ function DailyAttendancePage({ data, save, nav, activeAthletes }) {
   const [sortBy, setSortBy] = useState('lastName');
   const [sortDir, setSortDir] = useState('asc');
   const groups = data.workoutGroups || [];
+  const getAbsence = (athleteId, date) => {
+    return (data.medicalNotes||[]).find(n=>n.athleteId===athleteId && n.type==='Planned Absence' && n.effectiveDate && n.absenceEnd && date>=n.effectiveDate && date<=n.absenceEnd);
+  };
   const getStatus = (athleteId) => {
     const att = (data.attendance||[]).find(r=>r.athleteId===athleteId && r.date===today);
-    return (att||{}).status || null;
+    if((att||{}).status) return att.status;
+    if(getAbsence(athleteId, today)) return 'excused';
+    return null;
   };
   const setStatus = (athleteId, status) => {
     const existing = (data.attendance||[]).filter(r=>!(r.athleteId===athleteId && r.date===today));
@@ -1290,6 +1297,7 @@ function DailyAttendancePage({ data, save, nav, activeAthletes }) {
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontSize:15,fontWeight:600,color:C.text}}>{athName}</div>
               <div style={{fontSize:11,color:C.textMuted}}>{[a.gradYear?`'${(a.gradYear+'').slice(-2)}`:'',grpNames].filter(Boolean).join(' - ')}</div>
+              {(()=>{const ab=getAbsence(a.id,today);const hasManual=(data.attendance||[]).find(r=>r.athleteId===a.id&&r.date===today);return ab&&!hasManual?<div style={{fontSize:10,color:'#6b46c1',fontWeight:600,marginTop:2}}>Planned absence: {ab.details||'Away'}{ab.absenceEnd?' (until '+ab.absenceEnd+')':''}</div>:null;})()}
             </div>
             <div style={{display:'flex',gap:4}}>
               {ATTENDANCE_STATUSES.map(s=>{
@@ -2251,7 +2259,7 @@ function AthletesPage({ data, save, nav }) {
             {athletes.map(a => {
               const athleteGroups = (a.groups||[]).map(ag=>(groups.find(g=>g.id===ag.groupId)||{}).name).filter(Boolean).join(', ') || ((groups.find(g=>g.id===a.trainingGroup)||{}).name || '-');
               return (
-                <tr key={a.id} style={{cursor:'pointer'}} onClick={()=>nav('athleteSub',{athleteId:a.id})}>
+                <tr key={a.id} style={{cursor:'pointer'}} onClick={()=>nav('athleteSub',{athleteId:a.id,athFilter:{search,genderFilter,groupFilter,showInactive,sortCol,sortDir}})}>
                   <td style={{...S.td,fontWeight:500}}>{athDisplay(a,true)}{a.preferredName&&<span style={{color:C.textMuted,fontWeight:400,marginLeft:4,fontSize:12}}>({a.preferredName})</span>}</td>
                   <td style={S.td}>{a.gradYear||'-'}</td>
                   <td style={S.td}>{a.gender==='M'?'B':a.gender==='F'?'G':'-'}</td>
@@ -2313,14 +2321,14 @@ function AthletesPage({ data, save, nav }) {
     </div>
   );
 }
-function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, checkRecord, checkQualifying, season }) {
+function AthleteSubPage({ data, save, nav, athleteId, athFilter, events, getAthletePR, checkRecord, checkQualifying, season }) {
   const [showEditInfo, setShowEditInfo] = useState(false);
   const [showAddNote, setShowAddNote] = useState(false);
   const [editNoteId, setEditNoteId] = useState(null);
   const [showResolved, setShowResolved] = useState(false);
   const [expandedNotes, setExpandedNotes] = useState({});
   const [progressForm, setProgressForm] = useState({});
-  const [noteForm, setNoteForm] = useState({ type:'Other', effectiveDate:'', details:'', painScale:'', trainerCheckIn:false, trainerDate:'', trainerDetails:'', needFollowUp:false, followUpName:'', followUpContact:'', followUpLastDate:'', followUpResolution:'' });
+  const [noteForm, setNoteForm] = useState({ type:'Other', effectiveDate:'', absenceEnd:'', details:'', painScale:'', trainerCheckIn:false, trainerDate:'', trainerDetails:'', needFollowUp:false, followUpName:'', followUpContact:'', followUpLastDate:'', followUpResolution:'' });
   const [editForm, setEditForm] = useState({});
   const [editPracticeDay, setEditPracticeDay] = useState(null);
   const [practiceEditItems, setPracticeEditItems] = useState([]);
@@ -2375,10 +2383,10 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
     }
     setShowAddNote(false);
     setEditNoteId(null);
-    setNoteForm({ type:'Other', effectiveDate:'', details:'', painScale:'', trainerCheckIn:false, trainerDate:'', trainerDetails:'', needFollowUp:false, followUpName:'', followUpContact:'', followUpLastDate:'', followUpResolution:'' });
+    setNoteForm({ type:'Other', effectiveDate:'', absenceEnd:'', details:'', painScale:'', trainerCheckIn:false, trainerDate:'', trainerDetails:'', needFollowUp:false, followUpName:'', followUpContact:'', followUpLastDate:'', followUpResolution:'' });
   };
   const startEditNote = (n) => {
-    setNoteForm({type:n.type||'Other',effectiveDate:n.effectiveDate||'',details:n.details||'',painScale:n.painScale||'',trainerCheckIn:!!n.trainerCheckIn,trainerDate:n.trainerDate||'',trainerDetails:n.trainerDetails||'',needFollowUp:!!n.needFollowUp,followUpName:n.followUpName||'',followUpContact:n.followUpContact||'',followUpLastDate:n.followUpLastDate||'',followUpResolution:n.followUpResolution||''});
+    setNoteForm({type:n.type||'Other',effectiveDate:n.effectiveDate||'',absenceEnd:n.absenceEnd||'',details:n.details||'',painScale:n.painScale||'',trainerCheckIn:!!n.trainerCheckIn,trainerDate:n.trainerDate||'',trainerDetails:n.trainerDetails||'',needFollowUp:!!n.needFollowUp,followUpName:n.followUpName||'',followUpContact:n.followUpContact||'',followUpLastDate:n.followUpLastDate||'',followUpResolution:n.followUpResolution||''});
     setEditNoteId(n.id);
     setShowAddNote(true);
   };
@@ -2395,20 +2403,42 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
     save({ ...data, athletes:data.athletes.map(a=>a.id===athleteId?{...a,...editForm,name,active:editForm.active}:a) });
     setShowEditInfo(false);
   };
-  const sortedAthletes = data.athletes.filter(a=>a.active!==false).sort((a,b)=>athLast(a).localeCompare(athLast(b))||athFirst(a).localeCompare(athFirst(b)));
+  const af = athFilter||{};
+  const sortedAthletes = data.athletes.filter(a=>{
+    if(!af.showInactive && a.active===false) return false;
+    if(af.search && !athSearch(a, af.search)) return false;
+    if(af.genderFilter && a.gender!==af.genderFilter) return false;
+    if(af.groupFilter && !(a.groups||[]).some(g=>g.groupId===af.groupFilter) && a.trainingGroup!==af.groupFilter) return false;
+    return true;
+  }).sort((a,b)=>{
+    const sc=af.sortCol||'name';const sd=af.sortDir||'asc';
+    let av,bv;
+    switch(sc){
+      case 'name':av=athLast(a).toLowerCase();bv=athLast(b).toLowerCase();break;
+      case 'gradYear':av=a.gradYear||'';bv=b.gradYear||'';break;
+      case 'gender':av=a.gender||'';bv=b.gender||'';break;
+      case 'group':av=(a.groups||[]).map(ag=>(groups.find(g=>g.id===ag.groupId)||{}).name||'').join(',')||'';bv=(b.groups||[]).map(ag=>(groups.find(g=>g.id===ag.groupId)||{}).name||'').join(',')||'';break;
+      default:av=athLast(a).toLowerCase();bv=athLast(b).toLowerCase();
+    }
+    if(av<bv)return sd==='asc'?-1:1;if(av>bv)return sd==='asc'?1:-1;return 0;
+  });
   const curIdx = sortedAthletes.findIndex(a=>a.id===athleteId);
   const prevAthlete = curIdx > 0 ? sortedAthletes[curIdx-1] : null;
   const nextAthlete = curIdx < sortedAthletes.length-1 ? sortedAthletes[curIdx+1] : null;
+  const filterLabel = [af.search,af.genderFilter==='M'?'Boys':af.genderFilter==='F'?'Girls':'',af.groupFilter?(groups.find(g=>g.id===af.groupFilter)||{}).name||'':''].filter(Boolean).join(', ');
   return (
     <div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
         <button style={S.backLink} onClick={()=>nav('athletes')}>{"<- All Athletes"}</button>
         <div style={{display:'flex',gap:8,alignItems:'center'}}>
-          <button style={{...S.btn,...S.btnSecondary,fontSize:13,padding:'8px 16px',borderRadius:8,opacity:prevAthlete?1:0.3,display:'flex',flexDirection:'column',alignItems:'center',lineHeight:1.2}} disabled={!prevAthlete} onClick={()=>prevAthlete&&nav('athleteSub',{athleteId:prevAthlete.id})}>
+          <button style={{...S.btn,...S.btnSecondary,fontSize:13,padding:'8px 16px',borderRadius:8,opacity:prevAthlete?1:0.3,display:'flex',flexDirection:'column',alignItems:'center',lineHeight:1.2}} disabled={!prevAthlete} onClick={()=>prevAthlete&&nav('athleteSub',{athleteId:prevAthlete.id,athFilter:af})}>
             {"<- Prev"}{prevAthlete&&<span style={{fontSize:10,fontWeight:400,textTransform:'none',letterSpacing:0}}>{athDisplay(prevAthlete)}</span>}
           </button>
-          <span style={{fontSize:12,color:C.textMuted,fontWeight:600,minWidth:50,textAlign:'center'}}>{curIdx+1} / {sortedAthletes.length}</span>
-          <button style={{...S.btn,...S.btnSecondary,fontSize:13,padding:'8px 16px',borderRadius:8,opacity:nextAthlete?1:0.3,display:'flex',flexDirection:'column',alignItems:'center',lineHeight:1.2}} disabled={!nextAthlete} onClick={()=>nextAthlete&&nav('athleteSub',{athleteId:nextAthlete.id})}>
+          <div style={{display:'flex',flexDirection:'column',alignItems:'center'}}>
+            <span style={{fontSize:12,color:C.textMuted,fontWeight:600,minWidth:50,textAlign:'center'}}>{curIdx+1} / {sortedAthletes.length}</span>
+            {filterLabel&&<span style={{fontSize:9,color:C.accent,textAlign:'center',marginTop:2}}>{filterLabel}</span>}
+          </div>
+          <button style={{...S.btn,...S.btnSecondary,fontSize:13,padding:'8px 16px',borderRadius:8,opacity:nextAthlete?1:0.3,display:'flex',flexDirection:'column',alignItems:'center',lineHeight:1.2}} disabled={!nextAthlete} onClick={()=>nextAthlete&&nav('athleteSub',{athleteId:nextAthlete.id,athFilter:af})}>
             {"Next ->"}{nextAthlete&&<span style={{fontSize:10,fontWeight:400,textTransform:'none',letterSpacing:0}}>{athDisplay(nextAthlete)}</span>}
           </button>
         </div>
@@ -2456,7 +2486,7 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
         const resolved = medicalNotes.filter(n=>n.needFollowUp && n.followUpResolution);
         const hasActive = active.some(n=>n.needFollowUp && !n.followUpResolution);
         const renderNote = (n) => {
-          const typeColor = n.type==='Injury'?C.danger:n.type==='Illness'?'#b8860b':n.type==='Medical Clearance'?C.success:C.blue;
+          const typeColor = n.type==='Injury'?C.danger:n.type==='Illness'?'#b8860b':n.type==='Medical Clearance'?C.success:n.type==='Planned Absence'?'#6b46c1':C.blue;
           const progs = n.progressNotes||[];
           const isExpanded = expandedNotes[n.id];
           const pf = progressForm[n.id]||'';
@@ -2467,7 +2497,7 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
                     <span style={{fontSize:11,fontWeight:700,color:typeColor,textTransform:'uppercase',background:typeColor+'15',padding:'2px 8px',borderRadius:4}}>{n.type}</span>
-                    <span style={{fontSize:11,color:C.textMuted}}>{n.effectiveDate||n.entryDate}</span>
+                    <span style={{fontSize:11,color:C.textMuted}}>{n.effectiveDate||n.entryDate}{n.type==='Planned Absence'&&n.absenceEnd?' to '+n.absenceEnd:''}</span>
                     {needsAction && <span style={{fontSize:10,fontWeight:700,color:C.danger,textTransform:'uppercase'}}>Needs Follow-Up</span>}
                   </div>
                   <div style={{fontSize:13,color:C.text,lineHeight:'1.5'}}>{n.details}</div>
@@ -2521,10 +2551,11 @@ function AthleteSubPage({ data, save, nav, athleteId, events, getAthletePR, chec
             <div style={{display:'flex',flexDirection:'column',gap:10}}>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
                 <div><label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Type</label><select style={{...S.select,width:'100%'}} value={noteForm.type} onChange={e=>setNoteForm({...noteForm,type:e.target.value})}>
-                  <option>Injury</option><option>Illness</option><option>Medical Clearance</option><option>Other</option>
+                  <option>Injury</option><option>Illness</option><option>Medical Clearance</option><option>Planned Absence</option><option>Other</option>
                 </select></div>
-                <div><label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Effective Date</label><input style={S.input} type="date" value={noteForm.effectiveDate} onChange={e=>setNoteForm({...noteForm,effectiveDate:e.target.value})} /></div>
+                <div><label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>{noteForm.type==='Planned Absence'?'Start Date':'Effective Date'}</label><input style={S.input} type="date" value={noteForm.effectiveDate} onChange={e=>setNoteForm({...noteForm,effectiveDate:e.target.value})} /></div>
               </div>
+              {noteForm.type==='Planned Absence'&&<div><label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>End Date</label><input style={S.input} type="date" value={noteForm.absenceEnd} onChange={e=>setNoteForm({...noteForm,absenceEnd:e.target.value})} /></div>}
               {(noteForm.type==='Injury'||noteForm.type==='Illness')&&<div><label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Pain Scale (1-10)</label><div style={{display:'flex',gap:4}}>{[1,2,3,4,5,6,7,8,9,10].map(v=><button key={v} style={{width:28,height:28,borderRadius:6,border:`1px solid ${noteForm.painScale==v?(v>=7?C.danger:v>=4?'#b8860b':C.success):C.border}`,background:noteForm.painScale==v?(v>=7?C.danger+'20':v>=4?'#b8860b20':C.success+'20'):C.bg,color:noteForm.painScale==v?(v>=7?C.danger:v>=4?'#b8860b':C.success):C.textMuted,fontWeight:noteForm.painScale==v?700:400,fontSize:11,cursor:'pointer'}} onClick={()=>setNoteForm({...noteForm,painScale:v})}>{v}</button>)}</div></div>}
               <div><label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Details</label><textarea style={{...S.input,height:80,resize:'vertical'}} placeholder="Describe the issue, symptoms, or note..." value={noteForm.details} onChange={e=>setNoteForm({...noteForm,details:e.target.value})} /></div>
               <label style={{display:'flex',alignItems:'center',gap:8,fontSize:13,cursor:'pointer',padding:'4px 0'}}><input type="checkbox" checked={noteForm.trainerCheckIn} onChange={e=>setNoteForm({...noteForm,trainerCheckIn:e.target.checked})} /> Trainer Check-In</label>

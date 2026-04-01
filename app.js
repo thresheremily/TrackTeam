@@ -3640,7 +3640,7 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
                       </div>
                     </div>
                     <div style={{display:'flex',gap:6,flexShrink:0}}>
-                      <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'6px 12px',borderRadius:8}} onClick={()=>{setReplaceItemId(null);setReplaceSearch('');if(editItemId===item.id){saveEditItem();}else{setEditItemId(item.id);setEditItemForm({mileage:item.mileage||'',time:item.time||'',distance:item.distance||'',sets:item.sets||'',reps:item.reps||'',weight:item.weight||'',effort:item.effort||''});}}}>{editItemId===item.id?'Save':'Edit'}</button>
+                      <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'6px 12px',borderRadius:8}} onClick={()=>{setReplaceItemId(null);setReplaceSearch('');if(editItemId===item.id){saveEditItem();}else{setEditItemId(item.id);setEditItemForm({mileage:item.mileage||'',time:item.time||'',distance:item.distance||'',sets:item.sets||'',reps:item.reps||'',weight:item.weight||'',effort:item.effort||'',exercises:(item.exercises||[]).map(ex=>({...ex}))});}}}>{editItemId===item.id?'Save':'Edit'}</button>
                       {editItemId===item.id&&<button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'6px 12px',borderRadius:8}} onClick={()=>{setEditItemId(null);setEditItemForm({});}}>Cancel</button>}
                       <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'6px 12px',borderRadius:8}} onClick={()=>{setEditItemId(null);setEditItemForm({});if(replaceItemId===item.id){setReplaceItemId(null);setReplaceSearch('');}else{setReplaceItemId(item.id);setReplaceSearch('');}}}>{replaceItemId===item.id?'Cancel':'Replace'}</button>
                       <button style={{...S.btn,...S.btnDanger,fontSize:12,padding:'6px 12px',borderRadius:8}} onClick={()=>removeDayItem(editingDay.weekId,item.id)}>Remove</button>
@@ -3648,11 +3648,21 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
                   </div>
                   {editItemId===item.id&&(
                     <div style={{padding:'8px 0',borderTop:`1px solid ${C.borderLight}`}}>
-                      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(90px,1fr))',gap:6}}>
+                      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(90px,1fr))',gap:6,marginBottom:8}}>
                         {[{key:'mileage',label:'Mileage (mi)'},{key:'time',label:'Time'},{key:'distance',label:'Distance (m)'},{key:'sets',label:'Sets'},{key:'reps',label:'Reps'},{key:'weight',label:'Weight'},{key:'effort',label:'Effort (%)'}].map(f=>(
                           <div key={f.key}><label style={{fontSize:10,color:C.textMuted,display:'block',marginBottom:2}}>{f.label}</label><input style={{...S.input,fontSize:12,padding:'6px 8px'}} value={editItemForm[f.key]||''} onChange={e=>setEditItemForm(p=>({...p,[f.key]:e.target.value}))} /></div>
                         ))}
                       </div>
+                      {(editItemForm.exercises||[]).length>0&&(
+                        <div style={{marginTop:4}}>
+                          <div style={{fontSize:11,fontWeight:600,color:C.textSecondary,marginBottom:4}}>Exercises</div>
+                          <ExerciseTable exercises={editItemForm.exercises} onChange={ex=>setEditItemForm(p=>({...p,exercises:ex}))} library={library} />
+                          <button style={{...S.btn,...S.btnSecondary,fontSize:10,padding:'4px 10px',marginTop:4}} onClick={()=>setEditItemForm(p=>({...p,exercises:[...(p.exercises||[]),{exercise:'',type:'',time:'',mileage:'',distance:'',reps:'',weight:'',effort:''}]}))}>+ Row</button>
+                        </div>
+                      )}
+                      {(editItemForm.exercises||[]).length===0&&(
+                        <button style={{...S.btn,...S.btnSecondary,fontSize:10,padding:'4px 10px',marginTop:4}} onClick={()=>setEditItemForm(p=>({...p,exercises:[{exercise:'',type:'',time:'',mileage:'',distance:'',reps:'',weight:'',effort:''}]}))}>+ Add Exercises</button>
+                      )}
                     </div>
                   )}
                   {replaceItemId===item.id&&(
@@ -3672,7 +3682,7 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
                       </div>
                     </div>
                   )}
-                  {(item.exercises||[]).length>0&&(
+                  {(item.exercises||[]).length>0&&editItemId!==item.id&&(
                     <div style={{marginTop:6}}>
                       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',padding:'6px 0'}} onClick={e=>{e.stopPropagation();setExpandedItems(prev=>({...prev,[item.id]:!prev[item.id]}));}}>
                         <div style={{fontSize:11,color:C.textSecondary}}>
@@ -3685,7 +3695,7 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
                       {expandedItems[item.id]&&<ExerciseTable exercises={item.exercises} readOnly />}
                     </div>
                   )}
-                  {(item.exercises||[]).length===0&&(item.mileage||item.time||item.distance||item.sets||item.reps||item.weight||item.effort)&&(
+                  {(item.exercises||[]).length===0&&editItemId!==item.id&&(item.mileage||item.time||item.distance||item.sets||item.reps||item.weight||item.effort)&&(
                     <div style={{display:'flex',gap:10,flexWrap:'wrap',marginTop:6}}>
                       {item.mileage&&<span style={{fontSize:12,color:C.accent,fontWeight:600}}>{item.mileage} mi</span>}
                       {item.time&&<span style={{fontSize:12,color:C.textSecondary}}>T: {item.time}</span>}

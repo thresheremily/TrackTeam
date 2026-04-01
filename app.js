@@ -861,6 +861,7 @@ function App() {
     tools: () => <ToolsPage data={data} save={save} nav={nav} events={events} addResult={addResult} getAthletePR={getAthletePR} checkRecord={checkRecord} checkQualifying={checkQualifying} preset={pageParams} />,
     raceTimer: () => <RaceTimer data={data} save={save} nav={nav} events={events} addResult={addResult} getAthletePR={getAthletePR} checkRecord={checkRecord} checkQualifying={checkQualifying} preset={pageParams} />,
     multiSplit: () => <MultiSplitTimer data={data} save={save} nav={nav} events={events} addResult={addResult} getAthletePR={getAthletePR} checkRecord={checkRecord} preset={pageParams} />,
+    relayTimer: () => <RelayTimer data={data} save={save} nav={nav} events={events} addResult={addResult} getAthletePR={getAthletePR} preset={pageParams} />,
     fieldEvent: () => <FieldEventPage data={data} save={save} nav={nav} events={events} addResult={addResult} getAthletePR={getAthletePR} checkRecord={checkRecord} checkQualifying={checkQualifying} preset={pageParams} />,
     settings: () => <SettingsPage data={data} save={save} team={team} updateTeam={teamHook.updateTeam} user={user} signOut={authHook.signOut} nav={nav} />,
   };
@@ -1748,7 +1749,9 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
     const athleteIds = entries.flatMap(en => en.athletes ? en.athletes.map(a=>a.athleteId) : [en.athleteId]).filter(Boolean);
     if(me.evt.eventType === 'Field') {
       nav('fieldEvent', { meetId, eventId:me.evt.id, athleteIds });
-    } else if(me.evt.entryType === 'Relay' || athleteIds.length > 1) {
+    } else if(me.evt.entryType === 'Relay') {
+      nav('relayTimer', { meetId, eventId:me.evt.id, athleteIds, entries });
+    } else if(athleteIds.length > 1) {
       nav('multiSplit', { meetId, eventId:me.evt.id, athleteIds, entries });
     } else {
       nav('raceTimer', { meetId, eventId:me.evt.id, athleteId:athleteIds[0], entries });
@@ -1761,7 +1764,9 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
     if(!athleteIds.length) return;
     if(me.evt.eventType === 'Field') {
       nav('fieldEvent', { meetId, eventId:me.evt.id, athleteIds });
-    } else if(me.evt.entryType === 'Relay' || athleteIds.length > 1) {
+    } else if(me.evt.entryType === 'Relay') {
+      nav('relayTimer', { meetId, eventId:me.evt.id, athleteIds, entries:selEntries });
+    } else if(athleteIds.length > 1) {
       nav('multiSplit', { meetId, eventId:me.evt.id, athleteIds, entries:selEntries });
     } else {
       nav('raceTimer', { meetId, eventId:me.evt.id, athleteId:athleteIds[0], entries:selEntries });
@@ -4306,6 +4311,7 @@ function ToolsPage({ data, save, nav, events, addResult, getAthletePR, checkReco
   const tools = [
     { key:'raceTimer', label:'Race Timer', desc:'Single athlete, single event. Lap splits with pace tracking.', icon:'⏱️', color:C.accent },
     { key:'multiSplit', label:'Multi-Split Timer', desc:'Multiple athletes simultaneously. Target times and live pace.', icon:'⏱️', color:C.blue },
+    { key:'relayTimer', label:'Relay Timer', desc:'Sequential legs. Each split starts when the previous leg finishes.', icon:'⏱️', color:'#6b46c1' },
     { key:'fieldEvent', label:'Field Event Entry', desc:'Record attempts for jumps, throws, and pole vault.', icon:'📏', color:C.success },
   ];
   return (
@@ -4638,6 +4644,172 @@ function FieldEventPage({ data, save, nav, events, addResult, getAthletePR, chec
           {saved && <SavedIndicator saved={true} />}
         </div>
       </div>
+    </div>
+  );
+}
+function RelayTimer({ data, save, nav, events, addResult, getAthletePR, preset }) {
+  const [meetId, setMeetId] = useState((preset||{}).meetId||'');
+  const [eventId, setEventId] = useState((preset||{}).eventId||'');
+  const [trackType, setTrackType] = useState('Outdoor');
+  const [legs, setLegs] = useState(()=>{
+    const entries = (preset||{}).entries||[];
+    const relay = entries.find(e=>e.athletes);
+    if(relay) return relay.athletes.map(a=>({id:uid(),athleteId:a.athleteId,goalMs:a.goalMs||0,splitMs:null,cumMs:null}));
+    const ids = (preset||{}).athleteIds||[];
+    if(ids.length>0) return ids.map(id=>({id:uid(),athleteId:id,goalMs:0,splitMs:null,cumMs:null}));
+    return [{id:uid(),athleteId:'',goalMs:0,splitMs:null,cumMs:null},{id:uid(),athleteId:'',goalMs:0,splitMs:null,cumMs:null},{id:uid(),athleteId:'',goalMs:0,splitMs:null,cumMs:null},{id:uid(),athleteId:'',goalMs:0,splitMs:null,cumMs:null}];
+  });
+  const [running, setRunning] = useState(false);
+  const [startTime, setStartTime] = useState(null);
+  const [elapsed, setElapsed] = useState(0);
+  const [activeLeg, setActiveLeg] = useState(0);
+  const [finished, setFinished] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  const [saved2, setSaved2] = useState(false);
+  const timerRef = useRef(null);
+  const evt = events.find(e=>e.id===eventId);
+  const lapDist = trackType==='Indoor'?INDOOR_LAP:OUTDOOR_LAP;
+  const totalDist = getDistance(evt);
+  const totalLaps = totalDist>0?Math.ceil(totalDist/lapDist):4;
+  const lapsPerLeg = Math.ceil(totalLaps/legs.length);
+  const COLORS = ['#2b6cb0','#c96a1f','#25763b','#c53030','#6b46c1','#b8860b'];
+  const activeAthletes = data.athletes.filter(a=>a.active!==false);
+  const trackEvents = events.filter(e=>isTrackEvent(e)&&e.entryType==='Relay');
+  const gender = (evt||{}).gender;
+  useEffect(()=>{
+    if(running&&startTime){timerRef.current=setInterval(()=>setElapsed(Date.now()-startTime),10);return()=>clearInterval(timerRef.current);}
+    return()=>clearInterval(timerRef.current);
+  },[running,startTime]);
+  const handleStart = ()=>{setStartTime(Date.now());setRunning(true);setElapsed(0);setActiveLeg(0);setFinished(false);setSaved2(false);setCollapsed(true);setLegs(l=>l.map(lg=>({...lg,splitMs:null,cumMs:null})));};
+  const handleSplit = ()=>{
+    if(!running) return;
+    const now=Date.now();const cumMs=now-startTime;
+    const prevCum=activeLeg>0?legs[activeLeg-1].cumMs||0:0;
+    const splitMs=cumMs-prevCum;
+    setLegs(prev=>{const c=[...prev];c[activeLeg]={...c[activeLeg],splitMs,cumMs};return c;});
+    if(activeLeg>=legs.length-1){clearInterval(timerRef.current);setRunning(false);setElapsed(cumMs);setFinished(true);}
+    else{setActiveLeg(activeLeg+1);}
+  };
+  const handleStop = ()=>{clearInterval(timerRef.current);setRunning(false);setFinished(true);};
+  const handleReset = ()=>{clearInterval(timerRef.current);setRunning(false);setElapsed(0);setActiveLeg(0);setFinished(false);setSaved2(false);setCollapsed(false);setLegs(l=>l.map(lg=>({...lg,splitMs:null,cumMs:null})));};
+  const handleSave = ()=>{
+    const isPractice=meetId==='practice'||meetId==='practice-custom';
+    const meet2=isPractice?null:data.meets.find(m=>m.id===meetId);
+    const raceDate=isPractice?(meetId==='practice-custom'?(document.getElementById('relayPracticeDate')||{}).value||new Date().toISOString().split('T')[0]:new Date().toISOString().split('T')[0]):(meet2||{}).startDate||(meet2||{}).date||new Date().toISOString().split('T')[0];
+    const saveMeetId=isPractice?null:meetId;
+    const relayAthleteIds=[];
+    const allSplits=[];
+    legs.forEach((lg,i)=>{
+      if(!lg.athleteId||lg.splitMs===null) return;
+      addResult({id:uid(),athleteId:lg.athleteId,eventId,meetId:saveMeetId,date:raceDate,timeMs:lg.splitMs,splits:[{lap:i+1,split:lg.splitMs,cumulative:lg.cumMs}],isPractice});
+      relayAthleteIds.push(lg.athleteId);
+      allSplits.push({lap:i+1,split:lg.splitMs,cumulative:lg.cumMs});
+    });
+    if(relayAthleteIds.length>0){
+      const totalTime=legs.filter(l=>l.cumMs!==null).reduce((m,l)=>Math.max(m,l.cumMs),0);
+      addResult({id:uid(),eventId,meetId:saveMeetId,date:raceDate,timeMs:totalTime,isRelay:true,relayAthletes:relayAthleteIds,splits:allSplits,isPractice});
+    }
+    setSaved2(true);
+  };
+  const totalGoal = legs.reduce((s,l)=>s+(l.goalMs||0),0);
+  return (
+    <div>
+      <button style={S.backLink} onClick={()=>(preset||{}).meetId?nav('meetSub',{meetId:preset.meetId}):nav('tools')}>{"<- "}Back</button>
+      <h1 style={S.h1}>Relay Timer</h1>
+      {!collapsed && (
+        <div style={S.card}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+            <div><label style={{fontSize:12,color:C.textSecondary}}>Meet</label><select style={{...S.select,width:'100%'}} value={meetId} onChange={e=>setMeetId(e.target.value)}><option value="">Select</option><option value="practice">Practice (Today)</option><option value="practice-custom">Practice (Custom Date)</option>{data.meets.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select></div>
+            <div><label style={{fontSize:12,color:C.textSecondary}}>Event</label><select style={{...S.select,width:'100%'}} value={eventId} onChange={e=>setEventId(e.target.value)}><option value="">Select</option>{trackEvents.map(e=><option key={e.id} value={e.id}>{getEventLabel(e)}</option>)}</select></div>
+            <div><label style={{fontSize:12,color:C.textSecondary}}>Track</label><select style={{...S.select,width:'100%'}} value={trackType} onChange={e=>setTrackType(e.target.value)}><option>Indoor</option><option>Outdoor</option></select></div>
+            {meetId==='practice-custom'&&<div><label style={{fontSize:12,color:C.textSecondary}}>Date</label><input style={S.input} type="date" id="relayPracticeDate" defaultValue={new Date().toISOString().split('T')[0]} /></div>}
+          </div>
+          <div style={{marginTop:16}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+              <span style={{fontSize:14,fontWeight:600,color:C.textSecondary}}>Legs</span>
+              <div style={{display:'flex',gap:6}}>
+                <button style={{...S.btn,...S.btnSecondary,padding:'4px 12px',fontSize:12}} onClick={()=>setLegs(l=>[...l,{id:uid(),athleteId:'',goalMs:0,splitMs:null,cumMs:null}])}>+ Leg</button>
+                <button style={{...S.btn,...S.btnDanger,padding:'4px 12px',fontSize:11}} onClick={()=>setLegs([{id:uid(),athleteId:'',goalMs:0,splitMs:null,cumMs:null},{id:uid(),athleteId:'',goalMs:0,splitMs:null,cumMs:null},{id:uid(),athleteId:'',goalMs:0,splitMs:null,cumMs:null},{id:uid(),athleteId:'',goalMs:0,splitMs:null,cumMs:null}])}>Reset</button>
+              </div>
+            </div>
+            {legs.map((lg,i)=>(
+              <div key={lg.id} style={{display:'flex',gap:8,marginBottom:8,alignItems:'center',flexWrap:'wrap'}}>
+                <div style={{width:8,height:32,borderRadius:4,background:COLORS[i%COLORS.length],flexShrink:0}} />
+                <span style={{fontSize:12,fontWeight:700,color:COLORS[i%COLORS.length],minWidth:40}}>Leg {i+1}</span>
+                <select style={{...S.select,flex:1,minWidth:100}} value={lg.athleteId} onChange={e=>{const c=[...legs];c[i]={...c[i],athleteId:e.target.value};setLegs(c);}}>
+                  <option value="">Select athlete</option>
+                  {activeAthletes.filter(a=>!gender||gender==='Mixed'||a.gender===(gender==='Boy'?'M':'F')).map(a=><option key={a.id} value={a.id}>{athDisplay(a)}</option>)}
+                </select>
+                <div style={{display:'flex',alignItems:'center',gap:4}}>
+                  <span style={{fontSize:10,color:C.textMuted}}>Goal</span>
+                  <select style={{...S.select,width:50,padding:'4px 2px',fontSize:12}} value={Math.floor((lg.goalMs||0)/60000)} onChange={e=>{const c=[...legs];const oldSec=((lg.goalMs||0)%60000)/1000;c[i]={...c[i],goalMs:(parseInt(e.target.value)*60+oldSec)*1000};setLegs(c);}}>
+                    {Array.from({length:31},(_,n)=><option key={n} value={n}>{n}</option>)}
+                  </select>
+                  <span style={{fontSize:12,color:C.textMuted}}>:</span>
+                  <select style={{...S.select,width:60,padding:'4px 2px',fontSize:12}} value={(((lg.goalMs||0)%60000)/1000).toFixed(2)} onChange={e=>{const c=[...legs];const min=Math.floor((lg.goalMs||0)/60000);c[i]={...c[i],goalMs:(min*60+parseFloat(e.target.value))*1000};setLegs(c);}}>
+                    {Array.from({length:60},(_,n)=><option key={n} value={n.toFixed(2)}>{String(n).padStart(2,'0')}</option>)}
+                  </select>
+                </div>
+                {legs.length>2&&<button style={{background:'none',border:'none',color:C.danger,cursor:'pointer'}} onClick={()=>setLegs(l=>l.filter((_,j)=>j!==i))}>✕</button>}
+              </div>
+            ))}
+            {!!totalGoal&&<div style={{fontSize:12,color:C.textMuted,marginTop:4}}>Total target: {formatTime(totalGoal)}</div>}
+          </div>
+        </div>
+      )}
+      {collapsed && (
+        <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:8,alignItems:'center'}}>
+          {evt && <span style={{...S.pill(false),fontSize:11}}>{getEventLabel(evt)}</span>}
+          <span style={{...S.pill(false),fontSize:11}}>{trackType}</span>
+          {!!totalGoal&&<span style={{...S.pill(false),fontSize:11}}>Target: {formatTime(totalGoal)}</span>}
+          <button style={{background:'none',border:'none',color:C.textSecondary,cursor:'pointer',fontSize:12}} onClick={()=>setCollapsed(false)}>v Expand</button>
+        </div>
+      )}
+      <div style={{textAlign:'center',padding:'16px 0'}}>
+        <div style={{fontSize:40,fontWeight:600,fontVariantNumeric:'tabular-nums',color:running?C.accent:C.text}}>{formatTime(elapsed)}</div>
+        {running&&activeLeg<legs.length&&(()=>{
+          const lg=legs[activeLeg];const prevCum=activeLeg>0?legs[activeLeg-1].cumMs||0:0;const legElapsed=elapsed-prevCum;
+          const ath=data.athletes.find(a=>a.id===lg.athleteId);
+          return <div style={{fontSize:14,color:COLORS[activeLeg%COLORS.length],fontWeight:600,marginTop:4}}>Leg {activeLeg+1}: {ath?athDisplay(ath):'?'} — {formatTime(legElapsed)}</div>;
+        })()}
+      </div>
+      <div style={{display:'flex',gap:12,justifyContent:'center',flexWrap:'wrap',marginBottom:16}}>
+        {!running&&!finished&&<button style={{...S.btn,...S.btnPrimary,fontSize:18,padding:'14px 40px'}} onClick={handleStart}> Start</button>}
+        {running&&<>
+          <button style={{...S.btn,background:COLORS[activeLeg%COLORS.length],color:C.white,fontSize:16,padding:'16px 32px',minWidth:200}} onClick={handleSplit}>
+            {(()=>{const ath=data.athletes.find(a=>a.id===legs[activeLeg].athleteId);return ath?athDisplay(ath):`Leg ${activeLeg+1}`;})()}
+            {activeLeg<legs.length-1?' — Split':' — Finish'}
+          </button>
+          <button style={{...S.btn,...S.btnDanger,fontSize:14,padding:'12px 20px'}} onClick={handleStop}>Stop</button>
+        </>}
+        {finished&&<>{!saved2&&<button style={{...S.btn,...S.btnSuccess}} onClick={handleSave}>Save All</button>}<button style={{...S.btn,...S.btnDanger}} onClick={handleReset}>Reset</button></>}
+        {saved2&&<SavedIndicator saved={true} />}
+      </div>
+      {legs.some(l=>l.splitMs!==null)&&(
+        <div style={S.card}>
+          <table style={{width:'100%',borderCollapse:'collapse'}}>
+            <thead><tr><th style={S.th}>Leg</th><th style={S.th}>Athlete</th><th style={S.th}>Split</th><th style={S.th}>Cumulative</th><th style={S.th}>vs Goal</th></tr></thead>
+            <tbody>{legs.map((lg,i)=>{
+              if(lg.splitMs===null) return null;
+              const ath=data.athletes.find(a=>a.id===lg.athleteId);
+              const goalDiff=lg.goalMs?lg.splitMs-lg.goalMs:0;
+              const cumGoal=legs.slice(0,i+1).reduce((s,l)=>s+(l.goalMs||0),0);
+              const cumDiff=cumGoal?lg.cumMs-cumGoal:0;
+              const prevSplit=i>0&&legs[i-1].splitMs!==null?legs[i-1].splitMs:null;
+              const faster=prevSplit!==null&&lg.splitMs<prevSplit;
+              const slower=prevSplit!==null&&lg.splitMs>prevSplit;
+              return (<tr key={i}>
+                <td style={S.td}><span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',minWidth:28,padding:'2px 8px',borderRadius:20,fontSize:12,fontWeight:700,background:C.white,color:COLORS[i%COLORS.length],border:`2px solid ${COLORS[i%COLORS.length]}`}}>{i+1}</span></td>
+                <td style={{...S.td,fontWeight:500}}>{ath?athDisplay(ath):'-'}</td>
+                <td style={S.td}>{formatTime(lg.splitMs)}{prevSplit!==null&&<span style={{fontSize:10,fontWeight:600,color:faster?C.success:slower?C.danger:C.textMuted,marginLeft:6}}>{faster?'\u25BC':'\u25B2'}{formatDiff(lg.splitMs-prevSplit)}</span>}</td>
+                <td style={S.td}>{formatTime(lg.cumMs)}</td>
+                <td style={S.td}>{lg.goalMs?<span style={{fontWeight:600,color:goalDiff<=0?C.success:C.danger}}>{formatDiff(goalDiff)}</span>:'-'}</td>
+              </tr>);
+            })}</tbody>
+          </table>
+          {finished&&!!totalGoal&&(()=>{const finalTime=legs.filter(l=>l.cumMs!==null).reduce((m,l)=>Math.max(m,l.cumMs),0);const diff=finalTime-totalGoal;return <div style={{textAlign:'center',padding:'8px 0',fontSize:14,fontWeight:600,color:diff<=0?C.success:C.danger}}>Final: {formatTime(finalTime)} ({formatDiff(diff)} vs target)</div>;})()}
+        </div>
+      )}
     </div>
   );
 }

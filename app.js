@@ -3366,6 +3366,29 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
   };
   const [replaceItemId, setReplaceItemId] = useState(null);
   const [replaceSearch, setReplaceSearch] = useState('');
+  const [editItemId, setEditItemId] = useState(null);
+  const [editItemForm, setEditItemForm] = useState({});
+  const saveEditItem = () => {
+    if(!editItemId||!editingDay) return;
+    const {weekId,groupId,level,day} = editingDay;
+    const synced = isSynced(weekId,groupId,level,day);
+    if(synced) {
+      const syncSrc = getSyncSource(groupId,level);
+      const w = (data.workoutPlans||[]).find(w2=>w2.id===weekId);
+      if(w&&syncSrc) {
+        const srcItems = (w.entries||[]).filter(e=>e.groupId===groupId&&e.level===syncSrc&&e.day===day);
+        const newEntries = srcItems.map(e=>{
+          const nid=uid();
+          if(e.id===editItemId) return {...e,id:nid,level,...editItemForm};
+          return {...e,id:nid,level};
+        });
+        save({...data,workoutPlans:(data.workoutPlans||[]).map(w2=>w2.id!==weekId?w2:{...w2,entries:[...(w2.entries||[]),...newEntries]})});
+        setEditItemId(null);setEditItemForm({});return;
+      }
+    }
+    updateDayItem(weekId,editItemId,editItemForm);
+    setEditItemId(null);setEditItemForm({});
+  };
   const moveDayItem = (wid,gid,lv,day,fromIdx,toIdx) => {
     const plan = (data.workoutPlans||[]).find(w=>w.id===wid);
     if(!plan) return;
@@ -3491,22 +3514,24 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
         {curWeek ? (<div>
           <h2 style={{...S.h2,marginBottom:8}}>{weekLabel(curWeek.startDate)}</h2>
           {groups.map(group=>{
-            const groupTotalMi = group.levels.reduce((s,lv)=>s+getWeekMileage(curWeek.id,group.id,lv),0);
             const prevWeek = curWeekIdx>0 ? plans[curWeekIdx-1] : null;
-            const prevMi = prevWeek ? group.levels.reduce((s,lv)=>s+getWeekMileage(prevWeek.id,group.id,lv),0) : 0;
-            const pctDiff = prevMi>0 ? ((groupTotalMi-prevMi)/prevMi)*100 : null;
             return (<div key={group.id} style={{marginBottom:16}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
               <h3 style={{fontSize:14,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:'0.04em',margin:0,fontFamily:HEADING_FONT}}>{group.name}</h3>
-              <div style={{display:'flex',alignItems:'center',gap:6}}>
-                {groupTotalMi>0&&<span style={{fontSize:13,color:C.accent,fontWeight:700,background:C.accentMuted,padding:'3px 10px',borderRadius:12}}>{groupTotalMi.toFixed(2)} mi</span>}
-                {groupTotalMi>0&&pctDiff!==null&&<span style={{fontSize:11,fontWeight:600,color:pctDiff>0?C.success:pctDiff<0?C.danger:C.textMuted,padding:'2px 8px',borderRadius:10,background:pctDiff>0?C.successMuted:pctDiff<0?C.dangerMuted:C.surface2}}>{pctDiff>0?'^':pctDiff<0?'v':'='} {Math.abs(pctDiff).toFixed(0)}%</span>}
-              </div>
             </div>
             {group.levels.map(level=>{
               const mi=getWeekMileage(curWeek.id,group.id,level);
+              const prevMi=prevWeek?getWeekMileage(prevWeek.id,group.id,level):0;
+              const pctDiff=prevMi>0?((mi-prevMi)/prevMi)*100:null;
               return (<div key={level} style={{...S.card,padding:'12px 16px',marginBottom:6}}>
-                {group.levels.length>1&&<div style={{display:'flex',justifyContent:'space-between',marginBottom:8}}><span style={{fontSize:12,fontWeight:600}}>{level}</span>{mi>0&&<span style={{fontSize:11,color:C.accent,fontWeight:600}}>{mi.toFixed(2)} mi</span>}</div>}
+                <div style={{display:'flex',justifyContent:'space-between',marginBottom:8,alignItems:'center'}}>
+                  {group.levels.length>1&&<span style={{fontSize:12,fontWeight:600}}>{level}</span>}
+                  <div style={{display:'flex',alignItems:'center',gap:6,marginLeft:'auto'}}>
+                    {mi>0&&<span style={{fontSize:12,color:C.accent,fontWeight:700,background:C.accentMuted,padding:'2px 8px',borderRadius:10}}>{mi.toFixed(1)} mi</span>}
+                    {mi>0&&pctDiff!==null&&<span style={{fontSize:11,fontWeight:600,color:pctDiff>0?C.success:pctDiff<0?C.danger:C.textMuted,padding:'2px 8px',borderRadius:10,background:pctDiff>0?C.successMuted:pctDiff<0?C.dangerMuted:C.surface2}}>{pctDiff>0?'^':pctDiff<0?'v':'='} {Math.abs(pctDiff).toFixed(0)}% vs prev</span>}
+                    {mi>0&&prevMi>0&&<span style={{fontSize:10,color:C.textMuted}}>({prevMi.toFixed(1)}mi)</span>}
+                  </div>
+                </div>
                 <div style={{overflowX:'auto',WebkitOverflowScrolling:'touch',margin:'0 -4px',padding:'0 4px'}}>
                 <div style={{display:'grid',gridTemplateColumns:`repeat(${DAYS.length},minmax(85px,1fr))`,gap:4}}>
                   {DAYS.map((day,dayIdx)=>{
@@ -3615,10 +3640,21 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
                       </div>
                     </div>
                     <div style={{display:'flex',gap:6,flexShrink:0}}>
-                      <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'6px 12px',borderRadius:8}} onClick={()=>{if(replaceItemId===item.id){setReplaceItemId(null);setReplaceSearch('');}else{setReplaceItemId(item.id);setReplaceSearch('');}}}>{replaceItemId===item.id?'Cancel':'Replace'}</button>
+                      <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'6px 12px',borderRadius:8}} onClick={()=>{setReplaceItemId(null);setReplaceSearch('');if(editItemId===item.id){saveEditItem();}else{setEditItemId(item.id);setEditItemForm({mileage:item.mileage||'',time:item.time||'',distance:item.distance||'',sets:item.sets||'',reps:item.reps||'',weight:item.weight||'',effort:item.effort||''});}}}>{editItemId===item.id?'Save':'Edit'}</button>
+                      {editItemId===item.id&&<button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'6px 12px',borderRadius:8}} onClick={()=>{setEditItemId(null);setEditItemForm({});}}>Cancel</button>}
+                      <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'6px 12px',borderRadius:8}} onClick={()=>{setEditItemId(null);setEditItemForm({});if(replaceItemId===item.id){setReplaceItemId(null);setReplaceSearch('');}else{setReplaceItemId(item.id);setReplaceSearch('');}}}>{replaceItemId===item.id?'Cancel':'Replace'}</button>
                       <button style={{...S.btn,...S.btnDanger,fontSize:12,padding:'6px 12px',borderRadius:8}} onClick={()=>removeDayItem(editingDay.weekId,item.id)}>Remove</button>
                     </div>
                   </div>
+                  {editItemId===item.id&&(
+                    <div style={{padding:'8px 0',borderTop:`1px solid ${C.borderLight}`}}>
+                      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(90px,1fr))',gap:6}}>
+                        {[{key:'mileage',label:'Mileage (mi)'},{key:'time',label:'Time'},{key:'distance',label:'Distance (m)'},{key:'sets',label:'Sets'},{key:'reps',label:'Reps'},{key:'weight',label:'Weight'},{key:'effort',label:'Effort (%)'}].map(f=>(
+                          <div key={f.key}><label style={{fontSize:10,color:C.textMuted,display:'block',marginBottom:2}}>{f.label}</label><input style={{...S.input,fontSize:12,padding:'6px 8px'}} value={editItemForm[f.key]||''} onChange={e=>setEditItemForm(p=>({...p,[f.key]:e.target.value}))} /></div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {replaceItemId===item.id&&(
                     <div style={{padding:'8px 0',borderTop:`1px solid ${C.borderLight}`}}>
                       <div style={{fontSize:11,fontWeight:600,color:C.accent,marginBottom:6}}>Replace with library workout:</div>

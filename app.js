@@ -1633,6 +1633,11 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
   const [meetTab, setMeetTab] = useState('events');
   const [showManageEvents, setShowManageEvents] = useState(false);
   const [newEventForm, setNewEventForm] = useState({ name:'', gender:'Boy', eventType:'Track', entryType:'Individual', measurableType:'Time' });
+  const [athViewSearch, setAthViewSearch] = useState('');
+  const [athViewGender, setAthViewGender] = useState('');
+  const [athViewSort, setAthViewSort] = useState('name');
+  const meet = data.meets.find(m=>m.id===meetId);
+  if(!meet) return <div style={S.card}><p>Meet not found</p><button style={S.backLink} onClick={()=>nav('meets')}>{"<- "}Back to Meets</button></div>;
   const maxEventsPerAthlete = meet.maxEventsPerAthlete || 0;
   const maxEntriesPerEvent = meet.maxEntriesPerEvent || 0;
   const athleteEventCounts = (()=>{
@@ -1652,11 +1657,6 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
     return m;
   })();
   const eventsOverLimit = maxEntriesPerEvent>0 ? Object.entries(eventEntryCounts).filter(([,n])=>n>maxEntriesPerEvent).map(([id])=>id) : [];
-  const [athViewSearch, setAthViewSearch] = useState('');
-  const [athViewGender, setAthViewGender] = useState('');
-  const [athViewSort, setAthViewSort] = useState('name');
-  const meet = data.meets.find(m=>m.id===meetId);
-  if(!meet) return <div style={S.card}><p>Meet not found</p><button style={S.backLink} onClick={()=>nav('meets')}>{"<- "}Back to Meets</button></div>;
   const meetType = (data.meetTypes||[]).find(mt=>mt.id===meet.meetTypeId);
   const excludedEvents = meet.excludedEvents || [];
   const customEventIds = meet.customEventIds || [];

@@ -1445,7 +1445,33 @@ function MeetFormModal({ editId, initial, meetTypes, onSave, onClose }) {
             </select>
           </div>
         </div>
-        <button style={{...S.btn,...S.btnPrimary}} onClick={()=>{if(!f.name||!f.startDate)return;onSave({...f,startDate:padDate(f.startDate),endDate:padDate(f.endDate)});}}>{editId?'Save Changes':'Create Meet'}</button>
+        <div style={{padding:'10px 12px',background:C.bg,borderRadius:6,border:`1px solid ${C.borderLight}`}}>
+          <div style={{fontSize:12,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',marginBottom:8}}>Entry Restrictions</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+            <div>
+              <label style={{fontSize:11,color:C.textMuted,display:'block',marginBottom:2}}>Max entries per event</label>
+              <div style={{display:'flex',gap:4,alignItems:'center'}}>
+                <input style={{...S.input,fontSize:13,padding:'6px 8px'}} type="number" min="1" placeholder="Unlimited" value={f.maxEntriesPerEvent||''} onChange={e=>setF({...f,maxEntriesPerEvent:e.target.value?parseInt(e.target.value):''})} disabled={f.maxEntriesPerEventUnlimited!==false&&!f.maxEntriesPerEvent} />
+                <label style={{display:'flex',alignItems:'center',gap:4,fontSize:11,color:C.textMuted,cursor:'pointer',whiteSpace:'nowrap'}}>
+                  <input type="checkbox" checked={f.maxEntriesPerEventUnlimited!==false&&!f.maxEntriesPerEvent} onChange={e=>setF({...f,maxEntriesPerEvent:e.target.checked?'':f.maxEntriesPerEvent,maxEntriesPerEventUnlimited:e.target.checked})} />
+                  Unlimited
+                </label>
+              </div>
+            </div>
+            <div>
+              <label style={{fontSize:11,color:C.textMuted,display:'block',marginBottom:2}}>Max events per athlete</label>
+              <div style={{display:'flex',gap:4,alignItems:'center'}}>
+                <input style={{...S.input,fontSize:13,padding:'6px 8px'}} type="number" min="1" placeholder="Unlimited" value={f.maxEventsPerAthlete||''} onChange={e=>setF({...f,maxEventsPerAthlete:e.target.value?parseInt(e.target.value):''})} disabled={f.maxEventsPerAthleteUnlimited!==false&&!f.maxEventsPerAthlete} />
+                <label style={{display:'flex',alignItems:'center',gap:4,fontSize:11,color:C.textMuted,cursor:'pointer',whiteSpace:'nowrap'}}>
+                  <input type="checkbox" checked={f.maxEventsPerAthleteUnlimited!==false&&!f.maxEventsPerAthlete} onChange={e=>setF({...f,maxEventsPerAthlete:e.target.checked?'':f.maxEventsPerAthlete,maxEventsPerAthleteUnlimited:e.target.checked})} />
+                  Unlimited
+                </label>
+              </div>
+            </div>
+          </div>
+          <div style={{fontSize:10,color:C.textMuted,marginTop:6,fontStyle:'italic'}}>Relay alternates don't count toward either limit. Relay entries count as one event toward the athlete's total.</div>
+        </div>
+        <button style={{...S.btn,...S.btnPrimary}} onClick={()=>{if(!f.name||!f.startDate)return;onSave({...f,startDate:padDate(f.startDate),endDate:padDate(f.endDate),maxEntriesPerEvent:f.maxEntriesPerEvent||null,maxEventsPerAthlete:f.maxEventsPerAthlete||null});}}>{editId?'Save Changes':'Create Meet'}</button>
       </div>
     </Modal>
   );
@@ -1571,7 +1597,7 @@ function MeetsPage({ data, save, nav, events }) {
       {showAdd && <MeetFormModal
         key={openCount}
         editId={(editMeet||{}).id}
-        initial={editMeet ? {name:editMeet.name||'',startDate:(editMeet.startDate||editMeet.date||'').split('T')[0],endDate:(editMeet.endDate||'').split('T')[0],venue:editMeet.venue||'',city:editMeet.city||'',state:editMeet.state||'',trackType:editMeet.trackType||'Outdoor',meetTypeId:editMeet.meetTypeId||''} : {name:'',startDate:'',endDate:'',venue:'',city:'',state:'',trackType:'Outdoor',meetTypeId:''}}
+        initial={editMeet ? {name:editMeet.name||'',startDate:(editMeet.startDate||editMeet.date||'').split('T')[0],endDate:(editMeet.endDate||'').split('T')[0],venue:editMeet.venue||'',city:editMeet.city||'',state:editMeet.state||'',trackType:editMeet.trackType||'Outdoor',meetTypeId:editMeet.meetTypeId||'',maxEntriesPerEvent:editMeet.maxEntriesPerEvent||'',maxEventsPerAthlete:editMeet.maxEventsPerAthlete||''} : {name:'',startDate:'',endDate:'',venue:'',city:'',state:'',trackType:'Outdoor',meetTypeId:'',maxEntriesPerEvent:'',maxEventsPerAthlete:''}}
         meetTypes={meetTypes}
         onSave={(f)=>{
           if((editMeet||{}).id) { save({...data, meets:data.meets.map(m=>m.id===editMeet.id?{...m,...f}:m)}); }
@@ -1607,6 +1633,25 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
   const [meetTab, setMeetTab] = useState('events');
   const [showManageEvents, setShowManageEvents] = useState(false);
   const [newEventForm, setNewEventForm] = useState({ name:'', gender:'Boy', eventType:'Track', entryType:'Individual', measurableType:'Time' });
+  const maxEventsPerAthlete = meet.maxEventsPerAthlete || 0;
+  const maxEntriesPerEvent = meet.maxEntriesPerEvent || 0;
+  const athleteEventCounts = (()=>{
+    const m = {};
+    (meet.events||[]).forEach(me=>{
+      (me.entries||[]).forEach(en=>{
+        if(en.athletes) en.athletes.forEach(a=>{if(a.athleteId){m[a.athleteId]=(m[a.athleteId]||0)+1;}});
+        else if(en.athleteId) m[en.athleteId]=(m[en.athleteId]||0)+1;
+      });
+    });
+    return m;
+  })();
+  const athletesOverLimit = maxEventsPerAthlete>0 ? Object.entries(athleteEventCounts).filter(([,n])=>n>maxEventsPerAthlete).map(([id])=>id) : [];
+  const eventEntryCounts = (()=>{
+    const m = {};
+    (meet.events||[]).forEach(me=>{m[me.eventId]=(me.entries||[]).length;});
+    return m;
+  })();
+  const eventsOverLimit = maxEntriesPerEvent>0 ? Object.entries(eventEntryCounts).filter(([,n])=>n>maxEntriesPerEvent).map(([id])=>id) : [];
   const [athViewSearch, setAthViewSearch] = useState('');
   const [athViewGender, setAthViewGender] = useState('');
   const [athViewSort, setAthViewSort] = useState('name');
@@ -1836,6 +1881,12 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
         {meet.venue && ` - ${meet.venue}`}{meet.city && `, ${meet.city}`}{meet.state && ` ${meet.state}`}
         {meetType && <span style={{marginLeft:8,color:meetType.qualifying?C.success:C.textMuted,fontWeight:600}}>({meetType.name})</span>}
       </p>
+      {(meet.maxEntriesPerEvent||meet.maxEventsPerAthlete)&&(
+        <div style={{display:'flex',gap:6,marginBottom:10,flexWrap:'wrap'}}>
+          {meet.maxEntriesPerEvent&&<span style={{fontSize:11,fontWeight:600,color:C.accent,padding:'3px 10px',borderRadius:10,background:C.accentMuted,border:`1px solid ${C.accent}`}}>Max {meet.maxEntriesPerEvent} per event</span>}
+          {meet.maxEventsPerAthlete&&<span style={{fontSize:11,fontWeight:600,color:C.accent,padding:'3px 10px',borderRadius:10,background:C.accentMuted,border:`1px solid ${C.accent}`}}>Max {meet.maxEventsPerAthlete} events per athlete</span>}
+        </div>
+      )}
       <div style={{display:'flex',gap:0,marginBottom:12,borderBottom:`2px solid ${C.border}`,alignItems:'center'}}>
         {['events','athletes'].map(t=>(
           <button key={t} style={{padding:'10px 20px',fontSize:13,fontWeight:600,border:'none',borderBottom:meetTab===t?`3px solid ${C.accent}`:'3px solid transparent',background:'none',color:meetTab===t?C.accent:C.textMuted,cursor:'pointer',textTransform:'uppercase',letterSpacing:'0.04em'}} onClick={()=>setMeetTab(t)}>{t==='events'?'By Event':'By Athlete'}</button>
@@ -1843,6 +1894,13 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
         <button style={{marginLeft:'auto',background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 14px',fontSize:12,fontWeight:600,color:C.textSecondary,cursor:'pointer'}} onClick={()=>setShowManageEvents(true)}>Manage Events</button>
         <button style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 14px',fontSize:12,fontWeight:600,color:C.textSecondary,cursor:'pointer'}} onClick={()=>printMeet(meetTab)}>Print</button>
       </div>
+      {(meet.maxEventsPerAthlete||meet.maxEntriesPerEvent)&&(athletesOverLimit.length>0||eventsOverLimit.length>0)&&(
+        <div style={{padding:'10px 14px',marginBottom:12,borderRadius:8,background:C.dangerMuted,border:`1px solid ${C.danger}`,fontSize:12}}>
+          <div style={{fontWeight:700,color:C.danger,marginBottom:4}}>⚠ Entry Limit Violations</div>
+          {athletesOverLimit.length>0&&<div style={{color:C.danger,marginBottom:2}}>Over max events ({maxEventsPerAthlete}): {athletesOverLimit.map(id=>{const a=data.athletes.find(at=>at.id===id);return a?`${athDisplay(a)} (${athleteEventCounts[id]})`:'';}).filter(Boolean).join(', ')}</div>}
+          {eventsOverLimit.length>0&&<div style={{color:C.danger}}>Over max entries ({maxEntriesPerEvent}): {eventsOverLimit.map(id=>{const e=events.find(ev=>ev.id===id);return e?`${getEventLabel(e)} (${eventEntryCounts[id]})`:'';}).filter(Boolean).join(', ')}</div>}
+        </div>
+      )}
       {meetTab==='events' && (<>
       <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap'}}>
         <input style={{...S.input,maxWidth:200}} placeholder="Search events..." value={filter} onChange={e=>setFilter(e.target.value)} />
@@ -1919,6 +1977,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                 <span style={{cursor:'grab',fontSize:16,color:C.textMuted,userSelect:'none',marginRight:4}}>:::</span>
                 <span style={{fontWeight:700,fontSize:15}}>{getEventLabel(me.evt)}</span>
                 <span style={{fontSize:10,color:C.textMuted}}>{me.evt.eventType} - {me.evt.entryType}</span>
+                {me.entries.length>0&&(()=>{const over=maxEntriesPerEvent>0&&me.entries.length>maxEntriesPerEvent;return <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,fontWeight:700,background:over?C.dangerMuted:C.surface2,color:over?C.danger:C.textSecondary,border:over?`1px solid ${C.danger}`:'none'}}>{me.entries.length}{maxEntriesPerEvent>0?`/${maxEntriesPerEvent}`:''}{over?' ⚠':''}</span>;})()}
               </div>
               <div style={{display:'flex',gap:6}}>
                 <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'6px 14px'}} onClick={()=>{setEditEntryIdx(null);setShowEntryModal(me.eventId);}}>+ Entry</button>
@@ -2036,7 +2095,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                     {a.gradYear&&<span style={{color:C.textMuted,fontSize:12,marginLeft:6}}>'{(a.gradYear+'').slice(-2)}</span>}
                     <span style={{fontSize:11,color:a.gender==='M'?C.blue:'#d53f8c',marginLeft:6}}>{a.gender==='M'?'B':'G'}</span>
                   </div>
-                  <span style={{fontSize:12,fontWeight:700,color:myEvents.length>0?C.success:C.textMuted}}>{myEvents.length} event{myEvents.length!==1?'s':''}</span>
+                  <span style={{fontSize:12,fontWeight:700,color:maxEventsPerAthlete>0&&myEvents.length>maxEventsPerAthlete?C.danger:myEvents.length>0?C.success:C.textMuted}}>{myEvents.length} event{myEvents.length!==1?'s':''}{maxEventsPerAthlete>0&&myEvents.length>maxEventsPerAthlete?' ⚠':''}</span>
                 </div>
                 {myEvents.length>0 && (
                   <div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:6}}>
@@ -2054,6 +2113,20 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
       <Modal open={showManageEvents} onClose={()=>setShowManageEvents(false)} width={640}>
         <h2 style={S.h2}>Manage Events for this Meet</h2>
         <p style={{fontSize:12,color:C.textMuted,marginTop:4,marginBottom:12}}>Uncheck events to hide them. Add meet-specific events (they'll be saved to the library but won't appear in other meets unless added).</p>
+        <div style={{padding:'10px 14px',marginBottom:16,background:C.bg,borderRadius:8,border:`1px solid ${C.borderLight}`}}>
+          <div style={{fontSize:12,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',marginBottom:8}}>Entry Limits (optional)</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+            <div>
+              <label style={{fontSize:11,color:C.textMuted,display:'block',marginBottom:2}}>Max events per athlete</label>
+              <input style={{...S.input,fontSize:13}} type="number" min="0" placeholder="No limit" value={meet.maxEventsPerAthlete||''} onChange={e=>{const v=parseInt(e.target.value)||0;save({...data,meets:data.meets.map(m=>m.id===meetId?{...m,maxEventsPerAthlete:v}:m)});}} />
+            </div>
+            <div>
+              <label style={{fontSize:11,color:C.textMuted,display:'block',marginBottom:2}}>Max entries per event</label>
+              <input style={{...S.input,fontSize:13}} type="number" min="0" placeholder="No limit" value={meet.maxEntriesPerEvent||''} onChange={e=>{const v=parseInt(e.target.value)||0;save({...data,meets:data.meets.map(m=>m.id===meetId?{...m,maxEntriesPerEvent:v}:m)});}} />
+            </div>
+          </div>
+          <p style={{fontSize:10,color:C.textMuted,marginTop:6,marginBottom:0}}>Set to 0 or leave blank for no limit. Violations show as warnings on the meet page.</p>
+        </div>
         <div style={{marginBottom:16}}>
           <div style={{fontSize:12,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',marginBottom:6}}>Default events ({defaultApplicable.length})</div>
           <div style={{maxHeight:240,overflowY:'auto',border:`1px solid ${C.borderLight}`,borderRadius:6}}>
@@ -2136,6 +2209,37 @@ function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, ge
   const meet = data.meets.find(m=>m.id===meetId);
   const me = ((meet||{}).events||[]).find(e=>e.eventId===eventId);
   const existingEntries = (me||{}).entries || [];
+  const maxEntries = (meet||{}).maxEntriesPerEvent || null;
+  const maxEvents = (meet||{}).maxEventsPerAthlete || null;
+  const countAthleteEvents = (athleteId, excludeEventId, excludeEntryIdx) => {
+    let count = 0;
+    ((meet||{}).events||[]).forEach(mev => {
+      (mev.entries||[]).forEach((en, idx) => {
+        if(excludeEventId===mev.eventId && excludeEntryIdx===idx) return;
+        if(en.athletes) {
+          if((en.athletes||[]).some(a=>a.athleteId===athleteId)) count++;
+        } else if(en.athleteId===athleteId) count++;
+      });
+    });
+    return count;
+  };
+  const validateRestrictions = (newAthleteIds, isRelayEntry) => {
+    const errors = [];
+    if(maxEntries) {
+      const currentCount = existingEntries.length - (isEditing ? 1 : 0);
+      if(currentCount + 1 > maxEntries) errors.push(`Max ${maxEntries} entries per event for this meet (${currentCount} already entered)`);
+    }
+    if(maxEvents) {
+      newAthleteIds.forEach(aid => {
+        const existing = countAthleteEvents(aid, isEditing?eventId:null, isEditing?editEntryIdx:null);
+        if(existing + 1 > maxEvents) {
+          const ath = data.athletes.find(a=>a.id===aid);
+          errors.push(`${ath?athDisplay(ath):'Athlete'} would exceed max ${maxEvents} events (${existing} already)`);
+        }
+      });
+    }
+    return errors;
+  };
   const isEditing = editEntryIdx != null && editEntryIdx >= 0 && editEntryIdx < existingEntries.length;
   const editKey = eventId+'-'+editEntryIdx;
   if(initRef.current !== editKey) {
@@ -2166,9 +2270,27 @@ function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, ge
   const activeAthletes = data.athletes.filter(a=>a.active!==false);
   const genderMatch = activeAthletes.filter(a=>!evt.gender || evt.gender==='Mixed' || a.gender===(evt.gender==='Boy'?'M':'F'));
   const athName = (a) => athDisplay(a);
+  const [restrictionError, setRestrictionError] = useState('');
   const saveIndividuals = () => {
     const valid = entries.filter(en=>en.athleteId);
     if(!valid.length) return;
+    const ids = valid.map(en=>en.athleteId);
+    if(maxEntries) {
+      const currentCount = existingEntries.length - (isEditing ? 1 : 0);
+      if(currentCount + valid.length > maxEntries) { setRestrictionError(`Max ${maxEntries} entries per event for this meet. Currently ${currentCount} entered, trying to add ${valid.length}.`); return; }
+    }
+    if(maxEvents) {
+      const errors = [];
+      ids.forEach(aid => {
+        const existing = countAthleteEvents(aid, isEditing?eventId:null, isEditing?editEntryIdx:null);
+        if(existing + 1 > maxEvents) {
+          const ath = data.athletes.find(a=>a.id===aid);
+          errors.push(`${ath?athDisplay(ath):'Athlete'} would exceed max ${maxEvents} events (${existing} already)`);
+        }
+      });
+      if(errors.length) { setRestrictionError(errors.join('. ')); return; }
+    }
+    setRestrictionError('');
     const newEntries = valid.map(en=>({ athleteId:en.athleteId, goalMs:parseTimeToMs(en.goalMin, en.goalSec) }));
     if(isEditing) {
       const updated = [...existingEntries]; updated[editEntryIdx] = newEntries[0];
@@ -2184,6 +2306,22 @@ function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, ge
     const athletes = relayAthletes.filter(a=>a.athleteId).map(a=>({ athleteId:a.athleteId, goalMs:parseTimeToMs(a.goalMin,a.goalSec) }));
     const alternates = relayAlternates.filter(a=>a.athleteId).map(a=>({ athleteId:a.athleteId }));
     if(!athletes.length) return;
+    if(maxEntries) {
+      const currentCount = existingEntries.length - (isEditing ? 1 : 0);
+      if(currentCount + 1 > maxEntries) { setRestrictionError(`Max ${maxEntries} relay entries per event for this meet.`); return; }
+    }
+    if(maxEvents) {
+      const errors = [];
+      athletes.forEach(a => {
+        const existing = countAthleteEvents(a.athleteId, isEditing?eventId:null, isEditing?editEntryIdx:null);
+        if(existing + 1 > maxEvents) {
+          const ath = data.athletes.find(at=>at.id===a.athleteId);
+          errors.push(`${ath?athDisplay(ath):'Athlete'} would exceed max ${maxEvents} events (${existing} already)`);
+        }
+      });
+      if(errors.length) { setRestrictionError(errors.join('. ')); return; }
+    }
+    setRestrictionError('');
     if(isEditing) {
       const updated = [...existingEntries]; updated[editEntryIdx] = { athletes, alternates };
       saveEntries(eventId, updated);
@@ -2235,7 +2373,14 @@ function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, ge
   return (
     <Modal open={open} onClose={()=>{initRef.current=null;onClose();}} width={550}>
       <h2 style={S.h2}>{isEditing?'Edit':'Add'} - {getEventLabel(evt)}</h2>
-      <p style={{fontSize:13,color:C.textSecondary,marginBottom:16}}>{(meet||{}).name}</p>
+      <p style={{fontSize:13,color:C.textSecondary,marginBottom:8}}>{(meet||{}).name}</p>
+      {(maxEntries||maxEvents)&&(
+        <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
+          {maxEntries&&<span style={{fontSize:10,fontWeight:600,color:existingEntries.length>=maxEntries?C.danger:C.textSecondary,padding:'3px 8px',borderRadius:10,background:existingEntries.length>=maxEntries?C.dangerMuted:C.surface2,border:`1px solid ${existingEntries.length>=maxEntries?C.danger:C.border}`}}>{existingEntries.length}/{maxEntries} entries</span>}
+          {maxEvents&&<span style={{fontSize:10,fontWeight:600,color:C.textSecondary,padding:'3px 8px',borderRadius:10,background:C.surface2,border:`1px solid ${C.border}`}}>Max {maxEvents} events/athlete</span>}
+        </div>
+      )}
+      {restrictionError&&<div style={{padding:'8px 12px',background:C.dangerMuted,border:`1px solid ${C.danger}`,borderRadius:6,fontSize:12,color:C.danger,marginBottom:12,fontWeight:500}}>{restrictionError}</div>}
       {evt.entryType === 'Relay' ? (
         <div>
           <div style={{fontSize:13,fontWeight:600,color:C.textSecondary,marginBottom:10}}>{isEditing?'Edit Relay':'New Relay Entry'}</div>

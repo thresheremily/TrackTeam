@@ -1605,13 +1605,19 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
   const [showRoster, setShowRoster] = useState(false);
   const [selectedForTimer, setSelectedForTimer] = useState({});
   const [meetTab, setMeetTab] = useState('events');
+  const [showManageEvents, setShowManageEvents] = useState(false);
+  const [newEventForm, setNewEventForm] = useState({ name:'', gender:'Boy', eventType:'Track', entryType:'Individual', measurableType:'Time' });
   const [athViewSearch, setAthViewSearch] = useState('');
   const [athViewGender, setAthViewGender] = useState('');
   const [athViewSort, setAthViewSort] = useState('name');
   const meet = data.meets.find(m=>m.id===meetId);
   if(!meet) return <div style={S.card}><p>Meet not found</p><button style={S.backLink} onClick={()=>nav('meets')}>{"<- "}Back to Meets</button></div>;
   const meetType = (data.meetTypes||[]).find(mt=>mt.id===meet.meetTypeId);
-  const applicableEvents = events.filter(e => e.trackType === meet.trackType || e.trackType === 'Both');
+  const excludedEvents = meet.excludedEvents || [];
+  const customEventIds = meet.customEventIds || [];
+  const defaultApplicable = events.filter(e => (e.trackType === meet.trackType || e.trackType === 'Both') && !e.meetSpecific);
+  const customEvents = events.filter(e => customEventIds.includes(e.id));
+  const applicableEvents = [...defaultApplicable, ...customEvents.filter(ce => !defaultApplicable.some(de => de.id === ce.id))].filter(e => !excludedEvents.includes(e.id));
   const storedEntries = {};
   (meet.events||[]).forEach(me => { storedEntries[me.eventId] = me.entries || []; });
   const meetEvents = applicableEvents.map(evt => ({
@@ -1653,6 +1659,38 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
     if(idx>=0) updatedMeetEvents[idx] = {...updatedMeetEvents[idx], entries:newEntries};
     else updatedMeetEvents.push({eventId, entries:newEntries});
     save({...data, meets:data.meets.map(m=>m.id===meetId?{...m, events:updatedMeetEvents}:m)});
+  };
+  const toggleExcludeEvent = (eventId) => {
+    const cur = meet.excludedEvents || [];
+    const next = cur.includes(eventId) ? cur.filter(id=>id!==eventId) : [...cur, eventId];
+    save({...data, meets:data.meets.map(m=>m.id===meetId?{...m, excludedEvents:next}:m)});
+  };
+  const addCustomEventToMeet = (eventId) => {
+    const cur = meet.customEventIds || [];
+    if(cur.includes(eventId)) return;
+    const excl = (meet.excludedEvents||[]).filter(id=>id!==eventId);
+    save({...data, meets:data.meets.map(m=>m.id===meetId?{...m, customEventIds:[...cur, eventId], excludedEvents:excl}:m)});
+  };
+  const removeCustomEventFromMeet = (eventId) => {
+    save({...data, meets:data.meets.map(m=>m.id===meetId?{...m, customEventIds:(m.customEventIds||[]).filter(id=>id!==eventId)}:m)});
+  };
+  const createAndAddEvent = () => {
+    if(!newEventForm.name.trim()) return;
+    const newEvt = {
+      id: uid(),
+      name: newEventForm.name.trim(),
+      gender: newEventForm.gender,
+      eventType: newEventForm.eventType,
+      entryType: newEventForm.entryType,
+      trackType: meet.trackType || 'Both',
+      measurableType: newEventForm.measurableType,
+      meetSpecific: true,
+      qualifyingStandards: [],
+      schoolRecords: [],
+    };
+    const newEvents = [...(data.events||[]), newEvt];
+    save({...data, events:newEvents, meets:data.meets.map(m=>m.id===meetId?{...m, customEventIds:[...(m.customEventIds||[]), newEvt.id]}:m)});
+    setNewEventForm({ name:'', gender:'Boy', eventType:'Track', entryType:'Individual', measurableType:'Time' });
   };
   const printMeet = (view) => {
     const w = window.open('','_blank','width=1000,height=700');
@@ -1802,7 +1840,8 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
         {['events','athletes'].map(t=>(
           <button key={t} style={{padding:'10px 20px',fontSize:13,fontWeight:600,border:'none',borderBottom:meetTab===t?`3px solid ${C.accent}`:'3px solid transparent',background:'none',color:meetTab===t?C.accent:C.textMuted,cursor:'pointer',textTransform:'uppercase',letterSpacing:'0.04em'}} onClick={()=>setMeetTab(t)}>{t==='events'?'By Event':'By Athlete'}</button>
         ))}
-        <button style={{marginLeft:'auto',background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 14px',fontSize:12,fontWeight:600,color:C.textSecondary,cursor:'pointer'}} onClick={()=>printMeet(meetTab)}>Print</button>
+        <button style={{marginLeft:'auto',background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 14px',fontSize:12,fontWeight:600,color:C.textSecondary,cursor:'pointer'}} onClick={()=>setShowManageEvents(true)}>Manage Events</button>
+        <button style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 14px',fontSize:12,fontWeight:600,color:C.textSecondary,cursor:'pointer'}} onClick={()=>printMeet(meetTab)}>Print</button>
       </div>
       {meetTab==='events' && (<>
       <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap'}}>
@@ -2012,6 +2051,70 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
           })}
         </div>);
       })()}
+      <Modal open={showManageEvents} onClose={()=>setShowManageEvents(false)} width={640}>
+        <h2 style={S.h2}>Manage Events for this Meet</h2>
+        <p style={{fontSize:12,color:C.textMuted,marginTop:4,marginBottom:12}}>Uncheck events to hide them. Add meet-specific events (they'll be saved to the library but won't appear in other meets unless added).</p>
+        <div style={{marginBottom:16}}>
+          <div style={{fontSize:12,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',marginBottom:6}}>Default events ({defaultApplicable.length})</div>
+          <div style={{maxHeight:240,overflowY:'auto',border:`1px solid ${C.borderLight}`,borderRadius:6}}>
+            {defaultApplicable.sort((a,b)=>getDefaultOrder(a)-getDefaultOrder(b)).map(e=>{
+              const excluded = excludedEvents.includes(e.id);
+              return (
+                <label key={e.id} style={{display:'flex',alignItems:'center',gap:10,padding:'6px 10px',borderBottom:`1px solid ${C.borderLight}`,cursor:'pointer',background:excluded?C.surface2:'transparent'}}>
+                  <input type="checkbox" checked={!excluded} onChange={()=>toggleExcludeEvent(e.id)} />
+                  <span style={{flex:1,fontSize:13,opacity:excluded?0.5:1,textDecoration:excluded?'line-through':'none'}}>{getEventLabel(e)}</span>
+                  <span style={{fontSize:10,color:C.textMuted}}>{e.eventType} / {e.entryType}</span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+        {customEvents.length>0&&(
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:12,fontWeight:700,color:C.accent,textTransform:'uppercase',marginBottom:6}}>Meet-specific events ({customEvents.length})</div>
+            <div style={{border:`1px solid ${C.accent}33`,borderRadius:6}}>
+              {customEvents.map(e=>(
+                <div key={e.id} style={{display:'flex',alignItems:'center',gap:10,padding:'6px 10px',borderBottom:`1px solid ${C.borderLight}`}}>
+                  <span style={{flex:1,fontSize:13,fontWeight:500}}>{getEventLabel(e)}</span>
+                  <span style={{fontSize:10,color:C.textMuted}}>{e.eventType} / {e.entryType}</span>
+                  <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12}} onClick={()=>removeCustomEventFromMeet(e.id)}>Remove</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {(()=>{
+          const libAvailable = (data.events||[]).filter(e=>e.meetSpecific&&!customEventIds.includes(e.id)&&(e.trackType===meet.trackType||e.trackType==='Both'));
+          return libAvailable.length>0&&(
+            <div style={{marginBottom:16}}>
+              <div style={{fontSize:12,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',marginBottom:6}}>Available from library</div>
+              <div style={{maxHeight:150,overflowY:'auto',border:`1px solid ${C.borderLight}`,borderRadius:6}}>
+                {libAvailable.map(e=>(
+                  <div key={e.id} style={{display:'flex',alignItems:'center',gap:10,padding:'6px 10px',borderBottom:`1px solid ${C.borderLight}`}}>
+                    <span style={{flex:1,fontSize:13}}>{getEventLabel(e)}</span>
+                    <span style={{fontSize:10,color:C.textMuted}}>{e.eventType} / {e.entryType}</span>
+                    <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'4px 10px'}} onClick={()=>addCustomEventToMeet(e.id)}>+ Add</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+        <div style={{padding:12,background:C.bg,borderRadius:6,border:`1px solid ${C.borderLight}`}}>
+          <div style={{fontSize:12,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',marginBottom:8}}>+ Create new meet-specific event</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+            <div><label style={{fontSize:11,color:C.textMuted}}>Name</label><input style={{...S.input,fontSize:12}} placeholder="e.g. 2000m Racewalk" value={newEventForm.name} onChange={e=>setNewEventForm({...newEventForm,name:e.target.value})} /></div>
+            <div><label style={{fontSize:11,color:C.textMuted}}>Gender</label><select style={{...S.select,fontSize:12}} value={newEventForm.gender} onChange={e=>setNewEventForm({...newEventForm,gender:e.target.value})}><option>Boy</option><option>Girl</option><option>Mixed</option></select></div>
+            <div><label style={{fontSize:11,color:C.textMuted}}>Event Type</label><select style={{...S.select,fontSize:12}} value={newEventForm.eventType} onChange={e=>setNewEventForm({...newEventForm,eventType:e.target.value})}><option>Track</option><option>Field</option></select></div>
+            <div><label style={{fontSize:11,color:C.textMuted}}>Entry Type</label><select style={{...S.select,fontSize:12}} value={newEventForm.entryType} onChange={e=>setNewEventForm({...newEventForm,entryType:e.target.value})}><option>Individual</option><option>Relay</option></select></div>
+            <div><label style={{fontSize:11,color:C.textMuted}}>Measured As</label><select style={{...S.select,fontSize:12}} value={newEventForm.measurableType} onChange={e=>setNewEventForm({...newEventForm,measurableType:e.target.value})}><option>Time</option><option>Length</option><option>Height</option></select></div>
+          </div>
+          <button style={{...S.btn,...S.btnPrimary,fontSize:12,padding:'6px 14px'}} onClick={createAndAddEvent} disabled={!newEventForm.name.trim()}>Create & Add to Meet</button>
+        </div>
+        <div style={{display:'flex',justifyContent:'flex-end',marginTop:12}}>
+          <button style={{...S.btn,...S.btnSecondary}} onClick={()=>setShowManageEvents(false)}>Done</button>
+        </div>
+      </Modal>
       <MeetEntryModal data={data} save={save} meetId={meetId} eventId={showEntryModal} events={events} open={!!showEntryModal} onClose={()=>{setShowEntryModal(null);setEditEntryIdx(null);}} getAthletePR={getAthletePR} saveEntries={saveEntries} editEntryIdx={editEntryIdx} />
     </div>
   );

@@ -2196,6 +2196,7 @@ function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, ge
   const [entries, setEntries] = useState([{ athleteId:'', search:'', goalMin:0, goalSec:0 }]);
   const [relayAthletes, setRelayAthletes] = useState([{ athleteId:'', search:'', goalMin:0, goalSec:0 },{ athleteId:'', search:'', goalMin:0, goalSec:0 },{ athleteId:'', search:'', goalMin:0, goalSec:0 },{ athleteId:'', search:'', goalMin:0, goalSec:0 }]);
   const [relayAlternates, setRelayAlternates] = useState([]);
+  const [restrictionError, setRestrictionError] = useState('');
   const [focusField, setFocusField] = useState('');
   const [dragLeg, setDragLeg] = useState(null);
   const [dragOverLeg, setDragOverLeg] = useState(null);
@@ -2270,7 +2271,6 @@ function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, ge
   const activeAthletes = data.athletes.filter(a=>a.active!==false);
   const genderMatch = activeAthletes.filter(a=>!evt.gender || evt.gender==='Mixed' || a.gender===(evt.gender==='Boy'?'M':'F'));
   const athName = (a) => athDisplay(a);
-  const [restrictionError, setRestrictionError] = useState('');
   const saveIndividuals = () => {
     const valid = entries.filter(en=>en.athleteId);
     if(!valid.length) return;

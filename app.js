@@ -836,6 +836,7 @@ function App() {
     return { status:null, standard:stds[0] };
   };
   const addResult = (result) => { save({ ...data, results: [...data.results, result] }); };
+  const addResults = (results) => { save({ ...data, results: [...data.results, ...results] }); };
   const updateResult = (id, updates) => { save({ ...data, results: data.results.map(r => r.id === id ? {...r,...updates} : r) }); };
   const activeAthletes = data.athletes.filter(a => a.active !== false);
   const currentMeet = data.meets.find(m => today >= (m.startDate||m.date) && today <= (m.endDate||m.startDate||m.date));
@@ -860,8 +861,8 @@ function App() {
     eventsPage: () => <EventsPage data={data} save={save} nav={nav} />,
     tools: () => <ToolsPage data={data} save={save} nav={nav} events={events} addResult={addResult} getAthletePR={getAthletePR} checkRecord={checkRecord} checkQualifying={checkQualifying} preset={pageParams} />,
     raceTimer: () => <RaceTimer data={data} save={save} nav={nav} events={events} addResult={addResult} getAthletePR={getAthletePR} checkRecord={checkRecord} checkQualifying={checkQualifying} preset={pageParams} />,
-    multiSplit: () => <MultiSplitTimer data={data} save={save} nav={nav} events={events} addResult={addResult} getAthletePR={getAthletePR} checkRecord={checkRecord} preset={pageParams} />,
-    relayTimer: () => <RelayTimer data={data} save={save} nav={nav} events={events} addResult={addResult} getAthletePR={getAthletePR} preset={pageParams} />,
+    multiSplit: () => <MultiSplitTimer data={data} save={save} nav={nav} events={events} addResult={addResult} addResults={addResults} getAthletePR={getAthletePR} checkRecord={checkRecord} preset={pageParams} />,
+    relayTimer: () => <RelayTimer data={data} save={save} nav={nav} events={events} addResult={addResult} addResults={addResults} getAthletePR={getAthletePR} preset={pageParams} />,
     fieldEvent: () => <FieldEventPage data={data} save={save} nav={nav} events={events} addResult={addResult} getAthletePR={getAthletePR} checkRecord={checkRecord} checkQualifying={checkQualifying} preset={pageParams} />,
     settings: () => <SettingsPage data={data} save={save} team={team} updateTeam={teamHook.updateTeam} user={user} signOut={authHook.signOut} nav={nav} />,
   };
@@ -1318,6 +1319,7 @@ function DailyAttendancePage({ data, save, nav, activeAthletes }) {
   );
 }
 function AttendancePage({ data, save, nav, season, activeAthletes }) {
+  const [attSortBy, setAttSortBy] = useState('lastName');
   const today = new Date().toISOString().split('T')[0];
   const todayObj = new Date(today+'T12:00:00');
   const [weekOffset, setWeekOffset] = useState(0);
@@ -1360,11 +1362,17 @@ function AttendancePage({ data, save, nav, season, activeAthletes }) {
         ))}
       </div>
       
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12,flexWrap:'wrap',gap:8}}>
         <button style={{...S.btn,...S.btnSecondary,padding:'4px 12px'}} onClick={()=>setWeekOffset(w=>w-1)}>{"<- "}Prev</button>
         <span style={{fontSize:13,fontWeight:600,color:C.text}}>
           {new Date(weekDates[0]+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})} - {new Date(weekDates[5]+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}
         </span>
+        <select style={{...S.select,fontSize:11,padding:'4px 8px'}} value={attSortBy} onChange={e=>setAttSortBy(e.target.value)}>
+          <option value="lastName">Sort: Last Name</option>
+          <option value="firstName">Sort: First Name</option>
+          <option value="gradYear">Sort: Grad Year</option>
+          <option value="gender">Sort: Gender</option>
+        </select>
         <button style={{...S.btn,...S.btnSecondary,padding:'4px 12px'}} onClick={()=>setWeekOffset(w=>w+1)}>Next -></button>
       </div>
       
@@ -1383,7 +1391,18 @@ function AttendancePage({ data, save, nav, season, activeAthletes }) {
             </tr>
           </thead>
           <tbody>
-            {activeAthletes.sort((a,b)=>athLast(a).localeCompare(athLast(b))).map(a => {
+            {activeAthletes.slice().sort((a,b)=>{
+              let av,bv;
+              switch(attSortBy){
+                case 'firstName': av=athPreferred(a).toLowerCase(); bv=athPreferred(b).toLowerCase(); break;
+                case 'gradYear': av=a.gradYear||9999; bv=b.gradYear||9999; break;
+                case 'gender': av=a.gender||''; bv=b.gender||''; break;
+                default: av=athLast(a).toLowerCase(); bv=athLast(b).toLowerCase();
+              }
+              if(av<bv) return -1;
+              if(av>bv) return 1;
+              return athLast(a).localeCompare(athLast(b));
+            }).map(a => {
               const weekStatuses = weekDates.map(d => getStatus(a.id,d));
               const attended = weekStatuses.filter(s => s === 'present' || s === 'late' || s === 'signedout').length;
               const total = weekStatuses.filter(s => s !== null).length;
@@ -1636,24 +1655,41 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
   const [athViewSearch, setAthViewSearch] = useState('');
   const [athViewGender, setAthViewGender] = useState('');
   const [athViewSort, setAthViewSort] = useState('name');
+  const [resSearch, setResSearch] = useState('');
+  const [resGender, setResGender] = useState('');
+  const [resGroup, setResGroup] = useState('');
+  const [resGradYear, setResGradYear] = useState('');
+  const [resEventFilter, setResEventFilter] = useState('');
+  const [resSort, setResSort] = useState('name');
+  const [resSortDir, setResSortDir] = useState('asc');
   const meet = data.meets.find(m=>m.id===meetId);
   if(!meet) return <div style={S.card}><p>Meet not found</p><button style={S.backLink} onClick={()=>nav('meets')}>{"<- "}Back to Meets</button></div>;
   const maxEventsPerAthlete = meet.maxEventsPerAthlete || 0;
   const maxEntriesPerEvent = meet.maxEntriesPerEvent || 0;
+  const _excludedEventsSet = new Set(meet.excludedEvents || []);
   const athleteEventCounts = (()=>{
-    const m = {};
+    const eventSetByAthlete = {};
     (meet.events||[]).forEach(me=>{
+      if(_excludedEventsSet.has(me.eventId)) return;
       (me.entries||[]).forEach(en=>{
-        if(en.athletes) en.athletes.forEach(a=>{if(a.athleteId){m[a.athleteId]=(m[a.athleteId]||0)+1;}});
-        else if(en.athleteId) m[en.athleteId]=(m[en.athleteId]||0)+1;
+        const ids = new Set();
+        if(en.athletes) en.athletes.forEach(a=>{if(a.athleteId) ids.add(a.athleteId);});
+        else if(en.athleteId) ids.add(en.athleteId);
+        ids.forEach(aid=>{
+          if(!eventSetByAthlete[aid]) eventSetByAthlete[aid] = 0;
+          eventSetByAthlete[aid]++;
+        });
       });
     });
-    return m;
+    return eventSetByAthlete;
   })();
   const athletesOverLimit = maxEventsPerAthlete>0 ? Object.entries(athleteEventCounts).filter(([,n])=>n>maxEventsPerAthlete).map(([id])=>id) : [];
   const eventEntryCounts = (()=>{
     const m = {};
-    (meet.events||[]).forEach(me=>{m[me.eventId]=(me.entries||[]).length;});
+    (meet.events||[]).forEach(me=>{
+      if(_excludedEventsSet.has(me.eventId)) return;
+      m[me.eventId]=(me.entries||[]).length;
+    });
     return m;
   })();
   const eventsOverLimit = maxEntriesPerEvent>0 ? Object.entries(eventEntryCounts).filter(([,n])=>n>maxEntriesPerEvent).map(([id])=>id) : [];
@@ -1838,31 +1874,26 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
   const goToRecord = (me) => {
     const entries = me.entries || [];
     const athleteIds = entries.flatMap(en => en.athletes ? en.athletes.map(a=>a.athleteId) : [en.athleteId]).filter(Boolean);
+    const sortedEvents = filtered.filter(m=>m.entries && m.entries.length>0);
+    const curIdx = sortedEvents.findIndex(m=>m.eventId===me.eventId);
+    const nextEvent = curIdx>=0 && curIdx < sortedEvents.length-1 ? sortedEvents[curIdx+1] : null;
+    const prevEvent = curIdx>0 ? sortedEvents[curIdx-1] : null;
+    const navParams = {
+      meetId, eventId:me.evt.id, athleteIds, entries,
+      nextEventId: nextEvent ? nextEvent.evt.id : null,
+      nextEventLabel: nextEvent ? getEventLabel(nextEvent.evt) : null,
+      prevEventId: prevEvent ? prevEvent.evt.id : null,
+      prevEventLabel: prevEvent ? getEventLabel(prevEvent.evt) : null,
+    };
     if(me.evt.eventType === 'Field') {
-      nav('fieldEvent', { meetId, eventId:me.evt.id, athleteIds });
+      nav('fieldEvent', navParams);
     } else if(me.evt.entryType === 'Relay') {
-      nav('relayTimer', { meetId, eventId:me.evt.id, athleteIds, entries });
-    } else if(athleteIds.length > 1) {
-      nav('multiSplit', { meetId, eventId:me.evt.id, athleteIds, entries });
+      nav('relayTimer', navParams);
     } else {
-      nav('raceTimer', { meetId, eventId:me.evt.id, athleteId:athleteIds[0], entries });
+      nav('multiSplit', navParams);
     }
   };
-  const goToRecordSelected = (me) => {
-    const sel = selectedForTimer[me.eventId]||{};
-    const selEntries = (me.entries||[]).filter((_,i)=>sel[i]);
-    const athleteIds = selEntries.flatMap(en => en.athletes ? en.athletes.map(a=>a.athleteId) : [en.athleteId]).filter(Boolean);
-    if(!athleteIds.length) return;
-    if(me.evt.eventType === 'Field') {
-      nav('fieldEvent', { meetId, eventId:me.evt.id, athleteIds });
-    } else if(me.evt.entryType === 'Relay') {
-      nav('relayTimer', { meetId, eventId:me.evt.id, athleteIds, entries:selEntries });
-    } else if(athleteIds.length > 1) {
-      nav('multiSplit', { meetId, eventId:me.evt.id, athleteIds, entries:selEntries });
-    } else {
-      nav('raceTimer', { meetId, eventId:me.evt.id, athleteId:athleteIds[0], entries:selEntries });
-    }
-  };
+  const goToRecordSelected = goToRecord;
   const toggleSelect = (eventId, idx) => {
     setSelectedForTimer(prev=>{
       const cur = {...(prev[eventId]||{})};
@@ -1888,8 +1919,8 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
         </div>
       )}
       <div style={{display:'flex',gap:0,marginBottom:12,borderBottom:`2px solid ${C.border}`,alignItems:'center'}}>
-        {['events','athletes'].map(t=>(
-          <button key={t} style={{padding:'10px 20px',fontSize:13,fontWeight:600,border:'none',borderBottom:meetTab===t?`3px solid ${C.accent}`:'3px solid transparent',background:'none',color:meetTab===t?C.accent:C.textMuted,cursor:'pointer',textTransform:'uppercase',letterSpacing:'0.04em'}} onClick={()=>setMeetTab(t)}>{t==='events'?'By Event':'By Athlete'}</button>
+        {['events','athletes','results'].map(t=>(
+          <button key={t} style={{padding:'10px 20px',fontSize:13,fontWeight:600,border:'none',borderBottom:meetTab===t?`3px solid ${C.accent}`:'3px solid transparent',background:'none',color:meetTab===t?C.accent:C.textMuted,cursor:'pointer',textTransform:'uppercase',letterSpacing:'0.04em'}} onClick={()=>setMeetTab(t)}>{t==='events'?'By Event':t==='athletes'?'By Athlete':'Results'}</button>
         ))}
         <button style={{marginLeft:'auto',background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 14px',fontSize:12,fontWeight:600,color:C.textSecondary,cursor:'pointer'}} onClick={()=>setShowManageEvents(true)}>Manage Events</button>
         <button style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 14px',fontSize:12,fontWeight:600,color:C.textSecondary,cursor:'pointer'}} onClick={()=>printMeet(meetTab)}>Print</button>
@@ -1981,21 +2012,19 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
               </div>
               <div style={{display:'flex',gap:6}}>
                 <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'6px 14px'}} onClick={()=>{setEditEntryIdx(null);setShowEntryModal(me.eventId);}}>+ Entry</button>
-                {hasEntries && <button style={{...S.btn,...S.btnPrimary,fontSize:12,padding:'6px 14px'}} onClick={()=>goToRecord(me)}>Record All</button>}
-                {selCount(me.eventId)>0 && <button style={{...S.btn,background:C.blue,color:C.white,fontSize:12,padding:'6px 14px'}} onClick={()=>goToRecordSelected(me)}>Record {selCount(me.eventId)}</button>}
+                {hasEntries && <button style={{...S.btn,...S.btnPrimary,fontSize:12,padding:'6px 14px'}} onClick={()=>goToRecord(me)}>Record</button>}
               </div>
             </div>
             {hasEntries && (
               <table style={{width:'100%',borderCollapse:'collapse'}}>
-                <thead><tr><th style={{...S.th,width:28}}></th><th style={S.th}>Athlete</th><th style={S.th}>PR</th><th style={S.th}>Goal</th><th style={{...S.th,width:70}}></th></tr></thead>
+                <thead><tr><th style={S.th}>Athlete</th><th style={S.th}>PR</th><th style={S.th}>Goal</th><th style={{...S.th,width:70}}></th></tr></thead>
                 <tbody>
                   {entries.map((en,ei) => {
-                    const isChecked = !!((selectedForTimer[me.eventId]||{})[ei]);
                     if(me.evt.entryType === 'Relay') {
                       return [
                         <tr key={`${ei}-header`} style={{background:C.accentMuted}}>
-                          <td style={{...S.td,borderBottom:`2px solid ${C.accent}`,padding:'6px 8px'}}><input type="checkbox" checked={isChecked} onChange={()=>toggleSelect(me.eventId,ei)} /></td>
                           <td colSpan={2} style={{...S.td,fontWeight:700,fontSize:11,color:C.accent,textTransform:'uppercase',borderBottom:`2px solid ${C.accent}`,padding:'6px 12px'}}>Relay #{ei+1}</td>
+                          <td style={{...S.td,borderBottom:`2px solid ${C.accent}`,padding:'6px 12px'}}></td>
                           <td style={{...S.td,borderBottom:`2px solid ${C.accent}`,padding:'6px 12px'}}><div style={{display:'flex',gap:4}}><button style={{...S.btn,...S.btnSecondary,fontSize:10,padding:'2px 6px'}} onClick={()=>{setEditEntryIdx(ei);setShowEntryModal(me.eventId);}}>Edit</button><button style={{...S.btn,...S.btnDanger,fontSize:10,padding:'2px 6px'}} onClick={()=>saveEntries(me.eventId,entries.filter((_,i)=>i!==ei))}>✕</button></div></td>
                         </tr>,
                         ...(en.athletes||[]).map((a,ai) => {
@@ -2003,7 +2032,6 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                           const pr = getAthletePR(a.athleteId, me.eventId);
                           return (
                             <tr key={`${ei}-${ai}`}>
-                              <td style={S.td}></td>
                               <td style={{...S.td,paddingLeft:16}}><span style={{fontSize:10,color:C.textMuted,marginRight:6}}>Leg {ai+1}</span>{ath?athDisplay(ath):'-'}</td>
                               <td style={S.td}>{pr ? formatTime(pr.timeMs) : '-'}</td>
                               <td style={S.td}>{a.goalMs ? formatTime(a.goalMs) : '-'}</td>
@@ -2012,10 +2040,10 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                           );
                         }),
                         ...((en.alternates||[]).length>0 ? [
-                          <tr key={`${ei}-alt-header`}><td style={S.td}></td><td colSpan={4} style={{...S.td,fontSize:10,fontWeight:600,color:C.textMuted,fontStyle:'italic',padding:'4px 12px'}}>Alternates</td></tr>,
+                          <tr key={`${ei}-alt-header`}><td colSpan={4} style={{...S.td,fontSize:10,fontWeight:600,color:C.textMuted,fontStyle:'italic',padding:'4px 12px'}}>Alternates</td></tr>,
                           ...(en.alternates||[]).map((a,ai) => {
                             const ath = data.athletes.find(at=>at.id===a.athleteId);
-                            return (<tr key={`${ei}-alt-${ai}`} style={{opacity:0.6}}><td style={S.td}></td><td style={{...S.td,paddingLeft:16,fontStyle:'italic'}}>{ath?athDisplay(ath):'-'}</td><td style={S.td}></td><td style={S.td}></td><td style={S.td}></td></tr>);
+                            return (<tr key={`${ei}-alt-${ai}`} style={{opacity:0.6}}><td style={{...S.td,paddingLeft:16,fontStyle:'italic'}}>{ath?athDisplay(ath):'-'}</td><td style={S.td}></td><td style={S.td}></td><td style={S.td}></td></tr>);
                           })
                         ] : [])
                       ];
@@ -2024,7 +2052,6 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                     const pr = getAthletePR(en.athleteId, me.eventId);
                     return (
                       <tr key={ei}>
-                        <td style={{...S.td,padding:'6px 8px'}}><input type="checkbox" checked={isChecked} onChange={()=>toggleSelect(me.eventId,ei)} /></td>
                         <td style={{...S.td,fontWeight:500}}>{ath?athDisplay(ath):'-'}</td>
                         <td style={S.td}>{pr ? (isFieldEvent(me.evt) ? fieldToStr(pr.ft,pr.inch,pr.qtr) : formatTime(pr.timeMs)) : '-'}</td>
                         <td style={S.td}>{en.goalMs ? formatTime(en.goalMs) : '-'}</td>
@@ -2105,6 +2132,144 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                   </div>
                 )}
                 {myEvents.length===0 && <div style={{fontSize:11,color:C.danger,marginTop:4,fontStyle:'italic'}}>No events assigned</div>}
+              </div>
+            );
+          })}
+        </div>);
+      })()}
+      {meetTab==='results' && (()=>{
+        const meetResults = (data.results||[]).filter(r=>r.meetId===meetId&&!r.isRelay);
+        const allGroups = data.workoutGroups||[];
+        const allGradYears = [...new Set(data.athletes.map(a=>a.gradYear).filter(Boolean))].sort((a,b)=>b-a);
+        const isPR = (r) => {
+          const ath = data.athletes.find(a=>a.id===r.athleteId);
+          if(!ath) return false;
+          const evt = events.find(e=>e.id===r.eventId);
+          if(!evt) return false;
+          const allResultsForAth = (data.results||[]).filter(rs=>rs.athleteId===r.athleteId&&rs.eventId===r.eventId&&!rs.isRelay);
+          if(isFieldEvent(evt)) {
+            const myVal = (r.ft||0)*12 + (r.inch||0) + (r.qtr||0);
+            return !allResultsForAth.some(rs=>rs.id!==r.id && rs.date<=r.date && ((rs.ft||0)*12+(rs.inch||0)+(rs.qtr||0)) > myVal);
+          } else {
+            if(!r.timeMs) return false;
+            return !allResultsForAth.some(rs=>rs.id!==r.id && rs.date<=r.date && rs.timeMs && rs.timeMs < r.timeMs);
+          }
+        };
+        const isQualifying = (r) => {
+          const evt = events.find(e=>e.id===r.eventId);
+          if(!evt || !(evt.qualifyingStandards||[]).length) return null;
+          const ath = data.athletes.find(a=>a.id===r.athleteId);
+          if(!ath) return null;
+          if(isFieldEvent(evt)) {
+            const myVal = (r.ft||0)*12 + (r.inch||0) + (r.qtr||0);
+            return (evt.qualifyingStandards||[]).find(s=>{
+              const sVal = (s.ft||0)*12+(s.inch||0)+(s.qtr||0);
+              return sVal>0 && myVal>=sVal;
+            });
+          } else {
+            if(!r.timeMs) return null;
+            return (evt.qualifyingStandards||[]).find(s=>s.timeMs>0 && r.timeMs<=s.timeMs);
+          }
+        };
+        const resultsByAthlete = {};
+        meetResults.forEach(r=>{
+          if(!resultsByAthlete[r.athleteId]) resultsByAthlete[r.athleteId]=[];
+          resultsByAthlete[r.athleteId].push(r);
+        });
+        const athletesWithResults = Object.keys(resultsByAthlete).map(id=>data.athletes.find(a=>a.id===id)).filter(Boolean);
+        let filteredAthletes = athletesWithResults.filter(a=>{
+          if(resSearch && !athSearch(a, resSearch)) return false;
+          if(resGender && a.gender!==resGender) return false;
+          if(resGradYear && String(a.gradYear)!==String(resGradYear)) return false;
+          if(resGroup && !(a.groups||[]).some(g=>g.groupId===resGroup) && a.trainingGroup!==resGroup) return false;
+          if(resEventFilter && !(resultsByAthlete[a.id]||[]).some(r=>r.eventId===resEventFilter)) return false;
+          return true;
+        });
+        filteredAthletes.sort((a,b)=>{
+          let av,bv;
+          switch(resSort){
+            case 'name': av=athLast(a).toLowerCase(); bv=athLast(b).toLowerCase(); break;
+            case 'gradYear': av=a.gradYear||0; bv=b.gradYear||0; break;
+            case 'gender': av=a.gender||''; bv=b.gender||''; break;
+            case 'group': av=((a.groups||[])[0]||{}).groupId||a.trainingGroup||''; bv=((b.groups||[])[0]||{}).groupId||b.trainingGroup||''; break;
+            case 'eventCount': av=(resultsByAthlete[a.id]||[]).length; bv=(resultsByAthlete[b.id]||[]).length; break;
+            default: av=athLast(a).toLowerCase(); bv=athLast(b).toLowerCase();
+          }
+          if(av<bv) return resSortDir==='asc'?-1:1;
+          if(av>bv) return resSortDir==='asc'?1:-1;
+          return 0;
+        });
+        const allEventIds = [...new Set(meetResults.map(r=>r.eventId))];
+        const eventsForFilter = allEventIds.map(id=>events.find(e=>e.id===id)).filter(Boolean);
+        return (<div>
+          <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
+            <input style={{...S.input,maxWidth:180}} placeholder="Search athletes..." value={resSearch} onChange={e=>setResSearch(e.target.value)} />
+            <select style={S.select} value={resGender} onChange={e=>setResGender(e.target.value)}>
+              <option value="">All Genders</option><option value="M">Boys</option><option value="F">Girls</option>
+            </select>
+            <select style={S.select} value={resGradYear} onChange={e=>setResGradYear(e.target.value)}>
+              <option value="">All Years</option>
+              {allGradYears.map(y=><option key={y} value={y}>'{(y+'').slice(-2)}</option>)}
+            </select>
+            <select style={S.select} value={resGroup} onChange={e=>setResGroup(e.target.value)}>
+              <option value="">All Groups</option>
+              {allGroups.map(g=><option key={g.id} value={g.id}>{g.name}</option>)}
+            </select>
+            <select style={S.select} value={resEventFilter} onChange={e=>setResEventFilter(e.target.value)}>
+              <option value="">All Events</option>
+              {eventsForFilter.map(e=><option key={e.id} value={e.id}>{getEventLabel(e)}</option>)}
+            </select>
+            <select style={S.select} value={resSort} onChange={e=>setResSort(e.target.value)}>
+              <option value="name">Sort: Name</option>
+              <option value="gradYear">Sort: Grad Year</option>
+              <option value="gender">Sort: Gender</option>
+              <option value="group">Sort: Group</option>
+              <option value="eventCount">Sort: # Results</option>
+            </select>
+            <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'4px 10px'}} onClick={()=>setResSortDir(d=>d==='asc'?'desc':'asc')}>{resSortDir==='asc'?'A→Z':'Z→A'}</button>
+            {(resSearch||resGender||resGroup||resGradYear||resEventFilter)&&<button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'4px 10px'}} onClick={()=>{setResSearch('');setResGender('');setResGroup('');setResGradYear('');setResEventFilter('');}}>Clear</button>}
+            <span style={{fontSize:12,color:C.textMuted,marginLeft:'auto'}}>{filteredAthletes.length} athletes · {meetResults.length} results</span>
+          </div>
+          {filteredAthletes.length===0 && <div style={{...S.card,textAlign:'center',padding:30,color:C.textMuted}}>No results match your filters.</div>}
+          {filteredAthletes.map(a=>{
+            const myResults = (resultsByAthlete[a.id]||[]).filter(r=>!resEventFilter||r.eventId===resEventFilter).sort((a,b)=>{const ea=events.find(e=>e.id===a.eventId);const eb=events.find(e=>e.id===b.eventId);return (ea?getDefaultOrder(ea):999)-(eb?getDefaultOrder(eb):999);});
+            const grpName = ((data.workoutGroups||[]).find(g=>((a.groups||[])[0]||{}).groupId===g.id||a.trainingGroup===g.id)||{}).name||'';
+            return (
+              <div key={a.id} style={{...S.card,padding:'10px 14px',marginBottom:8,borderLeft:`3px solid ${a.gender==='M'?C.blue:'#d53f8c'}`}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+                  <div style={{cursor:'pointer'}} onClick={()=>nav('athleteSub',{athleteId:a.id})}>
+                    <span style={{fontWeight:600,fontSize:14,color:C.text}}>{athDisplay(a)}</span>
+                    {a.gradYear&&<span style={{color:C.textMuted,fontSize:12,marginLeft:6}}>'{(a.gradYear+'').slice(-2)}</span>}
+                    <span style={{fontSize:11,color:a.gender==='M'?C.blue:'#d53f8c',marginLeft:6}}>{a.gender==='M'?'B':'G'}</span>
+                    {grpName&&<span style={{fontSize:11,color:C.textMuted,marginLeft:6}}>· {grpName}</span>}
+                  </div>
+                  <span style={{fontSize:11,color:C.textMuted}}>{myResults.length} result{myResults.length!==1?'s':''}</span>
+                </div>
+                <table style={{width:'100%',borderCollapse:'collapse'}}>
+                  <thead><tr><th style={{...S.th,padding:'4px 6px'}}>Event</th><th style={{...S.th,padding:'4px 6px'}}>Time/Mark</th><th style={{...S.th,padding:'4px 6px',width:90}}></th></tr></thead>
+                  <tbody>
+                    {myResults.map(r=>{
+                      const evt = events.find(e=>e.id===r.eventId);
+                      if(!evt) return null;
+                      const isField = isFieldEvent(evt);
+                      const valStr = isField ? fieldToStr(r.ft,r.inch,r.qtr) : formatTime(r.timeMs);
+                      const pr = isPR(r);
+                      const qual = isQualifying(r);
+                      return (
+                        <tr key={r.id}>
+                          <td style={{...S.td,padding:'4px 6px',fontSize:12}}>{getEventLabel(evt)}</td>
+                          <td style={{...S.td,padding:'4px 6px',fontWeight:600,fontSize:13}}>{valStr}</td>
+                          <td style={{...S.td,padding:'4px 6px'}}>
+                            <div style={{display:'flex',gap:3,flexWrap:'wrap'}}>
+                              {pr && <span style={{fontSize:9,fontWeight:700,padding:'2px 6px',borderRadius:8,background:C.successMuted,color:C.success,border:`1px solid ${C.success}`}}>PR</span>}
+                              {qual && <span style={{fontSize:9,fontWeight:700,padding:'2px 6px',borderRadius:8,background:C.accentMuted,color:C.accent,border:`1px solid ${C.accent}`}} title={qual.name}>Q</span>}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             );
           })}
@@ -4792,7 +4957,7 @@ function RaceTimer({ data, save, nav, events, addResult, getAthletePR, checkReco
     </div>
   );
 }
-function MultiSplitTimer({ data, save, nav, events, addResult, getAthletePR, checkRecord, preset }) {
+function MultiSplitTimer({ data, save, nav, events, addResult, addResults, getAthletePR, checkRecord, preset }) {
   const [meetId, setMeetId] = useState((preset||{}).meetId||'');
   const [eventId, setEventId] = useState((preset||{}).eventId||'');
   const [trackType, setTrackType] = useState('Outdoor');
@@ -4801,6 +4966,15 @@ function MultiSplitTimer({ data, save, nav, events, addResult, getAthletePR, che
     const entries = (preset||{}).entries||[];
     if(ids.length>0) return ids.map(id=>{const en=entries.find(e=>e.athleteId===id||(e.athletes||[]).some(a=>a.athleteId===id));const goalMs=(en||{}).goalMs||(((en||{}).athletes||[]).find(a=>a.athleteId===id)||{}).goalMs||0;return{id:uid(),athleteId:id,laps:[],goalMs};});
     return [{id:uid(),athleteId:'',laps:[],goalMs:0},{id:uid(),athleteId:'',laps:[],goalMs:0}];
+  });
+  const [selectedIds, setSelectedIds] = useState(()=>{
+    const ids = (preset||{}).athleteIds||[];
+    const set = {};
+    ids.forEach(id=>{
+      const hasResult = (data.results||[]).some(r=>r.athleteId===id&&r.eventId===(preset||{}).eventId&&r.meetId===(preset||{}).meetId&&!r.isRelay);
+      if(!hasResult) set[id] = true;
+    });
+    return set;
   });
   const [running, setRunning] = useState(false);
   const [startTime, setStartTime] = useState(null);
@@ -4841,17 +5015,23 @@ function MultiSplitTimer({ data, save, nav, events, addResult, getAthletePR, che
     const meet=isPractice?null:data.meets.find(m=>m.id===meetId);
     const raceDate=isPractice?(meetId==='practice-custom'?(document.getElementById('practiceDate')||{}).value||new Date().toISOString().split('T')[0]:new Date().toISOString().split('T')[0]):(meet||{}).startDate||(meet||{}).date||new Date().toISOString().split('T')[0];
     const saveMeetId=isPractice?null:meetId;
+    const newResults=[];
     const relayAthleteIds=[];
     athletes.forEach(at=>{
       if(!at.athleteId||at.laps.length===0) return;
+      if(!selectedIds[at.athleteId]) return;
       const finalTime=at.laps[at.laps.length-1].cumulative;
-      addResult({id:uid(),athleteId:at.athleteId,eventId,meetId:saveMeetId,date:raceDate,timeMs:finalTime,splits:at.laps,isPractice:isPractice});
+      newResults.push({id:uid(),athleteId:at.athleteId,eventId,meetId:saveMeetId,date:raceDate,timeMs:finalTime,splits:at.laps,isPractice:isPractice});
       relayAthleteIds.push(at.athleteId);
     });
     if(isRelayEvt&&relayAthleteIds.length>0){
-      const allLaps=athletes.filter(a=>a.athleteId&&a.laps.length>0).flatMap(a=>a.laps);
+      const allLaps=athletes.filter(a=>a.athleteId&&a.laps.length>0&&selectedIds[a.athleteId]).flatMap(a=>a.laps);
       const totalTime=Math.max(...allLaps.map(l=>l.cumulative));
-      addResult({id:uid(),eventId,meetId:saveMeetId,date:raceDate,timeMs:totalTime,isRelay:true,relayAthletes:relayAthleteIds,splits:allLaps,isPractice:isPractice});
+      newResults.push({id:uid(),eventId,meetId:saveMeetId,date:raceDate,timeMs:totalTime,isRelay:true,relayAthletes:relayAthleteIds,splits:allLaps,isPractice:isPractice});
+    }
+    if(newResults.length>0) {
+      if(addResults) addResults(newResults);
+      else newResults.forEach(r=>addResult(r));
     }
     setSaved(true);
   };
@@ -4860,7 +5040,45 @@ function MultiSplitTimer({ data, save, nav, events, addResult, getAthletePR, che
   const gender = (evt||{}).gender;
   return (
     <div>
-      <button style={S.backLink} onClick={()=>(preset||{}).meetId?nav('meetSub',{meetId:preset.meetId}):nav('tools')}>{"<- "}Back</button>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8,flexWrap:'wrap',gap:8}}>
+        <button style={S.backLink} onClick={()=>(preset||{}).meetId?nav('meetSub',{meetId:preset.meetId}):nav('tools')}>{"<- "}Back to Meet</button>
+        {(preset||{}).meetId&&((preset||{}).prevEventId||(preset||{}).nextEventId)&&(
+          <div style={{display:'flex',gap:6}}>
+            {(preset||{}).prevEventId&&<button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'6px 12px'}} onClick={()=>{
+              const prevMe = ((data.meets.find(m=>m.id===preset.meetId)||{}).events||[]).find(e=>e.eventId===preset.prevEventId);
+              const prevEvt = events.find(e=>e.id===preset.prevEventId);
+              if(!prevMe||!prevEvt) return;
+              const prevAthIds = (prevMe.entries||[]).flatMap(en=>en.athletes?en.athletes.map(a=>a.athleteId):[en.athleteId]).filter(Boolean);
+              const all = ((data.meets.find(m=>m.id===preset.meetId)||{}).events||[]).filter(m=>m.entries&&m.entries.length>0);
+              const idx = all.findIndex(m=>m.eventId===preset.prevEventId);
+              const next = idx>=0&&idx<all.length-1 ? all[idx+1] : null;
+              const prev = idx>0 ? all[idx-1] : null;
+              const navParams = {meetId:preset.meetId, eventId:preset.prevEventId, athleteIds:prevAthIds, entries:prevMe.entries,
+                nextEventId: next?next.eventId:null, nextEventLabel: next?getEventLabel(events.find(e=>e.id===next.eventId)||{}):null,
+                prevEventId: prev?prev.eventId:null, prevEventLabel: prev?getEventLabel(events.find(e=>e.id===prev.eventId)||{}):null};
+              if(prevEvt.eventType==='Field') nav('fieldEvent', navParams);
+              else if(prevEvt.entryType==='Relay') nav('relayTimer', navParams);
+              else nav('multiSplit', navParams);
+            }}>← {preset.prevEventLabel}</button>}
+            {(preset||{}).nextEventId&&<button style={{...S.btn,...S.btnPrimary,fontSize:11,padding:'6px 12px'}} onClick={()=>{
+              const nextMe = ((data.meets.find(m=>m.id===preset.meetId)||{}).events||[]).find(e=>e.eventId===preset.nextEventId);
+              const nextEvt = events.find(e=>e.id===preset.nextEventId);
+              if(!nextMe||!nextEvt) return;
+              const nextAthIds = (nextMe.entries||[]).flatMap(en=>en.athletes?en.athletes.map(a=>a.athleteId):[en.athleteId]).filter(Boolean);
+              const all = ((data.meets.find(m=>m.id===preset.meetId)||{}).events||[]).filter(m=>m.entries&&m.entries.length>0);
+              const idx = all.findIndex(m=>m.eventId===preset.nextEventId);
+              const next = idx>=0&&idx<all.length-1 ? all[idx+1] : null;
+              const prev = idx>0 ? all[idx-1] : null;
+              const navParams = {meetId:preset.meetId, eventId:preset.nextEventId, athleteIds:nextAthIds, entries:nextMe.entries,
+                nextEventId: next?next.eventId:null, nextEventLabel: next?getEventLabel(events.find(e=>e.id===next.eventId)||{}):null,
+                prevEventId: prev?prev.eventId:null, prevEventLabel: prev?getEventLabel(events.find(e=>e.id===prev.eventId)||{}):null};
+              if(nextEvt.eventType==='Field') nav('fieldEvent', navParams);
+              else if(nextEvt.entryType==='Relay') nav('relayTimer', navParams);
+              else nav('multiSplit', navParams);
+            }}>{preset.nextEventLabel} →</button>}
+          </div>
+        )}
+      </div>
       <h1 style={S.h1}>Multi-Split Timer</h1>
       {!collapsed && (
         <div style={S.card}>
@@ -4875,14 +5093,20 @@ function MultiSplitTimer({ data, save, nav, events, addResult, getAthletePR, che
               <span style={{fontSize:14,fontWeight:600,color:C.textSecondary}}>Athletes</span>
               <button style={{...S.btn,...S.btnSecondary,padding:'4px 12px',fontSize:12}} onClick={()=>setAthletes(a=>[...a,{id:uid(),athleteId:'',laps:[],goalMs:0}])}>+ Add</button>
             </div>
-            {athletes.map((at,i)=>(
-              <div key={at.id} style={{display:'flex',gap:8,marginBottom:8,alignItems:'center',flexWrap:'wrap'}}>
+            {athletes.map((at,i)=>{
+              const hasResult = at.athleteId && (data.results||[]).some(r=>r.athleteId===at.athleteId&&r.eventId===eventId&&r.meetId===meetId&&!r.isRelay);
+              const isSelected = at.athleteId ? !!selectedIds[at.athleteId] : true;
+              return (
+              <div key={at.id} style={{display:'flex',gap:8,marginBottom:8,alignItems:'center',flexWrap:'wrap',opacity:hasResult?0.5:1,background:hasResult?C.surface2:'transparent',padding:hasResult?'4px 6px':0,borderRadius:hasResult?6:0}}>
+                {at.athleteId&&!hasResult&&<input type="checkbox" checked={isSelected} onChange={()=>setSelectedIds(p=>({...p,[at.athleteId]:!p[at.athleteId]}))} title="Include in this heat" />}
+                {hasResult&&<span style={{fontSize:10,fontWeight:700,color:C.success,minWidth:20,textAlign:'center'}}>✓</span>}
                 <div style={{width:8,height:32,borderRadius:4,background:COLORS[i%COLORS.length],flexShrink:0}} />
-                <select style={{...S.select,flex:1,minWidth:120}} value={at.athleteId} onChange={e=>{const c=[...athletes];c[i]={...c[i],athleteId:e.target.value};setAthletes(c);}}>
+                <select style={{...S.select,flex:1,minWidth:120}} value={at.athleteId} onChange={e=>{const c=[...athletes];c[i]={...c[i],athleteId:e.target.value};setAthletes(c);if(e.target.value)setSelectedIds(p=>({...p,[e.target.value]:true}));}} disabled={hasResult}>
                   <option value="">Athlete {i+1}</option>
                   {activeAthletes.filter(a=>!gender||gender==='Mixed'||a.gender===(gender==='Boy'?'M':'F')).map(a=><option key={a.id} value={a.id}>{athDisplay(a)}</option>)}
                 </select>
-                <div style={{display:'flex',alignItems:'center',gap:4}}>
+                {hasResult&&<span style={{fontSize:10,color:C.success,fontWeight:600}}>Already recorded</span>}
+                {!hasResult&&<div style={{display:'flex',alignItems:'center',gap:4}}>
                   <span style={{fontSize:10,color:C.textMuted}}>Target</span>
                   <select style={{...S.select,width:50,padding:'4px 2px',fontSize:12}} value={Math.floor((at.goalMs||0)/60000)} onChange={e=>{const c=[...athletes];const oldSec=((at.goalMs||0)%60000)/1000;c[i]={...c[i],goalMs:(parseInt(e.target.value)*60+oldSec)*1000};setAthletes(c);}}>
                     {Array.from({length:31},(_,n)=><option key={n} value={n}>{n}</option>)}
@@ -4891,10 +5115,10 @@ function MultiSplitTimer({ data, save, nav, events, addResult, getAthletePR, che
                   <select style={{...S.select,width:60,padding:'4px 2px',fontSize:12}} value={(((at.goalMs||0)%60000)/1000).toFixed(2)} onChange={e=>{const c=[...athletes];const min=Math.floor((at.goalMs||0)/60000);c[i]={...c[i],goalMs:(min*60+parseFloat(e.target.value))*1000};setAthletes(c);}}>
                     {Array.from({length:60},(_,n)=><option key={n} value={n.toFixed(2)}>{String(n).padStart(2,'0')}</option>)}
                   </select>
-                </div>
+                </div>}
                 {athletes.length>1&&<button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',flexShrink:0}} onClick={()=>setAthletes(a=>a.filter((_,j)=>j!==i))}>✕</button>}
-              </div>
-            ))}
+              </div>);
+            })}
             <div style={{display:'flex',justifyContent:'flex-end',marginTop:4}}>
               <button style={{...S.btn,...S.btnDanger,padding:'4px 12px',fontSize:11}} onClick={()=>setAthletes([{id:uid(),athleteId:'',laps:[],goalMs:0},{id:uid(),athleteId:'',laps:[],goalMs:0}])}>Reset Setup</button>
             </div>
@@ -4911,24 +5135,25 @@ function MultiSplitTimer({ data, save, nav, events, addResult, getAthletePR, che
       <div style={{textAlign:'center',padding:'20px 0'}}>
         <div style={{fontSize:40,fontWeight:600,fontVariantNumeric:'tabular-nums',color:running?C.accent:C.text}}>{formatTime(elapsed)}</div>
       </div>
-      <div style={{display:'flex',gap:12,justifyContent:'center',flexWrap:'wrap',marginBottom:16}}>
-        {!running&&!finished&&<button style={{...S.btn,...S.btnPrimary,fontSize:18,padding:'14px 40px'}} onClick={handleStart}>> Start</button>}
+      <div style={{display:'grid',gridTemplateColumns:running?'repeat(auto-fit,minmax(260px,1fr))':'auto',gap:18,marginBottom:16,alignItems:'stretch'}}>
+        {!running&&!finished&&<button style={{...S.btn,...S.btnPrimary,fontSize:22,padding:'20px 60px',justifySelf:'center',fontWeight:700}} onClick={handleStart}>▶ Start</button>}
         {running&&<>
-          {athletes.map((at,i)=>{
+          {athletes.filter(at=>!at.athleteId||selectedIds[at.athleteId]).map((at,i)=>{
             const athObj=data.athletes.find(a=>a.id===at.athleteId);
             const done=at.laps.length>=(isRelayEvt?legsPerAthlete:totalLaps);
             const currentLap=at.laps.length;
+            const realIdx=athletes.findIndex(a=>a.id===at.id);
             let paceLabel='';
             if(at.goalMs&&totalLaps>0&&totalLaps<999&&currentLap>0){const targetPerLap=at.goalMs/totalLaps;const diff=at.laps[currentLap-1].cumulative-targetPerLap*currentLap;paceLabel=` ${formatDiff(diff)}`;}
-            return (<button key={at.id} disabled={done} style={{...S.btn,background:done?C.surface2:COLORS[i%COLORS.length],color:C.white,fontSize:14,padding:'12px 20px',opacity:done?0.5:1,display:'flex',flexDirection:'column',alignItems:'center',gap:2}} onClick={()=>handleLap(i)}>
-              <span>{(athObj||{}).name||`Ath ${i+1}`} (Lap {at.laps.length+1})</span>
-              {paceLabel&&<span style={{fontSize:11,opacity:0.9}}>{paceLabel}</span>}
+            return (<button key={at.id} disabled={done} style={{...S.btn,background:done?C.surface2:COLORS[realIdx%COLORS.length],color:done?C.textMuted:C.white,fontSize:24,padding:'36px 20px',minHeight:140,opacity:done?0.4:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:10,fontWeight:700,lineHeight:1.15,textAlign:'center',border:'none',borderRadius:14,boxShadow:done?'none':'0 2px 6px rgba(0,0,0,0.15)',touchAction:'manipulation',userSelect:'none'}} onClick={()=>handleLap(realIdx)}>
+              <span style={{fontSize:24,fontWeight:800,letterSpacing:'0.01em'}}>{athObj?athDisplay(athObj):`Ath ${realIdx+1}`}</span>
+              <span style={{fontSize:17,opacity:0.95,fontWeight:600}}>Lap {at.laps.length+1}{done?' ✓ DONE':''}</span>
+              {paceLabel&&<span style={{fontSize:15,opacity:0.95,fontWeight:600}}>{paceLabel}</span>}
             </button>);
           })}
-          <button style={{...S.btn,...S.btnDanger,fontSize:14,padding:'12px 20px'}} onClick={handleStop}>[] Stop</button>
+          <button style={{...S.btn,...S.btnDanger,fontSize:20,padding:'36px 20px',minHeight:140,fontWeight:700,borderRadius:14,touchAction:'manipulation'}} onClick={handleStop}>■ Stop</button>
         </>}
-        {finished&&<>{!saved&&<button style={{...S.btn,...S.btnSuccess}} onClick={handleSave}>Save All</button>}<button style={{...S.btn,...S.btnDanger}} onClick={handleReset}>Reset</button></>}
-        {saved&&<SavedIndicator saved={true} />}
+        {finished&&<div style={{display:'flex',gap:12,justifyContent:'center',flexWrap:'wrap',gridColumn:'1 / -1'}}>{!saved&&<button style={{...S.btn,...S.btnSuccess}} onClick={handleSave}>Save All</button>}<button style={{...S.btn,...S.btnDanger}} onClick={handleReset}>Reset</button>{saved&&<SavedIndicator saved={true} />}</div>}
       </div>
       {athletes.map((at,i)=>{
         if(at.laps.length===0) return null;
@@ -5003,7 +5228,45 @@ function FieldEventPage({ data, save, nav, events, addResult, getAthletePR, chec
   };
   return (
     <div>
-      <button style={S.backLink} onClick={()=>(preset||{}).meetId?nav('meetSub',{meetId:preset.meetId}):nav('tools')}>{"<- "}Back</button>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8,flexWrap:'wrap',gap:8}}>
+        <button style={S.backLink} onClick={()=>(preset||{}).meetId?nav('meetSub',{meetId:preset.meetId}):nav('tools')}>{"<- "}Back to Meet</button>
+        {(preset||{}).meetId&&((preset||{}).prevEventId||(preset||{}).nextEventId)&&(
+          <div style={{display:'flex',gap:6}}>
+            {(preset||{}).prevEventId&&<button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'6px 12px'}} onClick={()=>{
+              const pme = ((data.meets.find(m=>m.id===preset.meetId)||{}).events||[]).find(e=>e.eventId===preset.prevEventId);
+              const pevt = events.find(e=>e.id===preset.prevEventId);
+              if(!pme||!pevt) return;
+              const pAth = (pme.entries||[]).flatMap(en=>en.athletes?en.athletes.map(a=>a.athleteId):[en.athleteId]).filter(Boolean);
+              const all = ((data.meets.find(m=>m.id===preset.meetId)||{}).events||[]).filter(m=>m.entries&&m.entries.length>0);
+              const idx = all.findIndex(m=>m.eventId===preset.prevEventId);
+              const next = idx>=0&&idx<all.length-1 ? all[idx+1] : null;
+              const prev = idx>0 ? all[idx-1] : null;
+              const nP = {meetId:preset.meetId, eventId:preset.prevEventId, athleteIds:pAth, entries:pme.entries,
+                nextEventId: next?next.eventId:null, nextEventLabel: next?getEventLabel(events.find(e=>e.id===next.eventId)||{}):null,
+                prevEventId: prev?prev.eventId:null, prevEventLabel: prev?getEventLabel(events.find(e=>e.id===prev.eventId)||{}):null};
+              if(pevt.eventType==='Field') nav('fieldEvent', nP);
+              else if(pevt.entryType==='Relay') nav('relayTimer', nP);
+              else nav('multiSplit', nP);
+            }}>← {preset.prevEventLabel}</button>}
+            {(preset||{}).nextEventId&&<button style={{...S.btn,...S.btnPrimary,fontSize:11,padding:'6px 12px'}} onClick={()=>{
+              const nme = ((data.meets.find(m=>m.id===preset.meetId)||{}).events||[]).find(e=>e.eventId===preset.nextEventId);
+              const nevt = events.find(e=>e.id===preset.nextEventId);
+              if(!nme||!nevt) return;
+              const nAth = (nme.entries||[]).flatMap(en=>en.athletes?en.athletes.map(a=>a.athleteId):[en.athleteId]).filter(Boolean);
+              const all = ((data.meets.find(m=>m.id===preset.meetId)||{}).events||[]).filter(m=>m.entries&&m.entries.length>0);
+              const idx = all.findIndex(m=>m.eventId===preset.nextEventId);
+              const next = idx>=0&&idx<all.length-1 ? all[idx+1] : null;
+              const prev = idx>0 ? all[idx-1] : null;
+              const nP = {meetId:preset.meetId, eventId:preset.nextEventId, athleteIds:nAth, entries:nme.entries,
+                nextEventId: next?next.eventId:null, nextEventLabel: next?getEventLabel(events.find(e=>e.id===next.eventId)||{}):null,
+                prevEventId: prev?prev.eventId:null, prevEventLabel: prev?getEventLabel(events.find(e=>e.id===prev.eventId)||{}):null};
+              if(nevt.eventType==='Field') nav('fieldEvent', nP);
+              else if(nevt.entryType==='Relay') nav('relayTimer', nP);
+              else nav('multiSplit', nP);
+            }}>{preset.nextEventLabel} →</button>}
+          </div>
+        )}
+      </div>
       <h1 style={S.h1}>Field Event Entry</h1>
       <div style={S.card}>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
@@ -5035,7 +5298,7 @@ function FieldEventPage({ data, save, nav, events, addResult, getAthletePR, chec
     </div>
   );
 }
-function RelayTimer({ data, save, nav, events, addResult, getAthletePR, preset }) {
+function RelayTimer({ data, save, nav, events, addResult, addResults, getAthletePR, preset }) {
   const [meetId, setMeetId] = useState((preset||{}).meetId||'');
   const [eventId, setEventId] = useState((preset||{}).eventId||'');
   const [trackType, setTrackType] = useState('Outdoor');
@@ -5087,22 +5350,65 @@ function RelayTimer({ data, save, nav, events, addResult, getAthletePR, preset }
     const saveMeetId=isPractice?null:meetId;
     const relayAthleteIds=[];
     const allSplits=[];
+    const newResults=[];
     legs.forEach((lg,i)=>{
       if(!lg.athleteId||lg.splitMs===null) return;
-      addResult({id:uid(),athleteId:lg.athleteId,eventId,meetId:saveMeetId,date:raceDate,timeMs:lg.splitMs,splits:[{lap:i+1,split:lg.splitMs,cumulative:lg.cumMs}],isPractice});
+      newResults.push({id:uid(),athleteId:lg.athleteId,eventId,meetId:saveMeetId,date:raceDate,timeMs:lg.splitMs,splits:[{lap:i+1,split:lg.splitMs,cumulative:lg.cumMs}],isPractice});
       relayAthleteIds.push(lg.athleteId);
       allSplits.push({lap:i+1,split:lg.splitMs,cumulative:lg.cumMs});
     });
     if(relayAthleteIds.length>0){
       const totalTime=legs.filter(l=>l.cumMs!==null).reduce((m,l)=>Math.max(m,l.cumMs),0);
-      addResult({id:uid(),eventId,meetId:saveMeetId,date:raceDate,timeMs:totalTime,isRelay:true,relayAthletes:relayAthleteIds,splits:allSplits,isPractice});
+      newResults.push({id:uid(),eventId,meetId:saveMeetId,date:raceDate,timeMs:totalTime,isRelay:true,relayAthletes:relayAthleteIds,splits:allSplits,isPractice});
+    }
+    if(newResults.length>0) {
+      if(addResults) addResults(newResults);
+      else newResults.forEach(r=>addResult(r));
     }
     setSaved2(true);
   };
   const totalGoal = legs.reduce((s,l)=>s+(l.goalMs||0),0);
   return (
     <div>
-      <button style={S.backLink} onClick={()=>(preset||{}).meetId?nav('meetSub',{meetId:preset.meetId}):nav('tools')}>{"<- "}Back</button>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8,flexWrap:'wrap',gap:8}}>
+        <button style={S.backLink} onClick={()=>(preset||{}).meetId?nav('meetSub',{meetId:preset.meetId}):nav('tools')}>{"<- "}Back to Meet</button>
+        {(preset||{}).meetId&&((preset||{}).prevEventId||(preset||{}).nextEventId)&&(
+          <div style={{display:'flex',gap:6}}>
+            {(preset||{}).prevEventId&&<button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'6px 12px'}} onClick={()=>{
+              const pme = ((data.meets.find(m=>m.id===preset.meetId)||{}).events||[]).find(e=>e.eventId===preset.prevEventId);
+              const pevt = events.find(e=>e.id===preset.prevEventId);
+              if(!pme||!pevt) return;
+              const pAth = (pme.entries||[]).flatMap(en=>en.athletes?en.athletes.map(a=>a.athleteId):[en.athleteId]).filter(Boolean);
+              const all = ((data.meets.find(m=>m.id===preset.meetId)||{}).events||[]).filter(m=>m.entries&&m.entries.length>0);
+              const idx = all.findIndex(m=>m.eventId===preset.prevEventId);
+              const next = idx>=0&&idx<all.length-1 ? all[idx+1] : null;
+              const prev = idx>0 ? all[idx-1] : null;
+              const nP = {meetId:preset.meetId, eventId:preset.prevEventId, athleteIds:pAth, entries:pme.entries,
+                nextEventId: next?next.eventId:null, nextEventLabel: next?getEventLabel(events.find(e=>e.id===next.eventId)||{}):null,
+                prevEventId: prev?prev.eventId:null, prevEventLabel: prev?getEventLabel(events.find(e=>e.id===prev.eventId)||{}):null};
+              if(pevt.eventType==='Field') nav('fieldEvent', nP);
+              else if(pevt.entryType==='Relay') nav('relayTimer', nP);
+              else nav('multiSplit', nP);
+            }}>← {preset.prevEventLabel}</button>}
+            {(preset||{}).nextEventId&&<button style={{...S.btn,...S.btnPrimary,fontSize:11,padding:'6px 12px'}} onClick={()=>{
+              const nme = ((data.meets.find(m=>m.id===preset.meetId)||{}).events||[]).find(e=>e.eventId===preset.nextEventId);
+              const nevt = events.find(e=>e.id===preset.nextEventId);
+              if(!nme||!nevt) return;
+              const nAth = (nme.entries||[]).flatMap(en=>en.athletes?en.athletes.map(a=>a.athleteId):[en.athleteId]).filter(Boolean);
+              const all = ((data.meets.find(m=>m.id===preset.meetId)||{}).events||[]).filter(m=>m.entries&&m.entries.length>0);
+              const idx = all.findIndex(m=>m.eventId===preset.nextEventId);
+              const next = idx>=0&&idx<all.length-1 ? all[idx+1] : null;
+              const prev = idx>0 ? all[idx-1] : null;
+              const nP = {meetId:preset.meetId, eventId:preset.nextEventId, athleteIds:nAth, entries:nme.entries,
+                nextEventId: next?next.eventId:null, nextEventLabel: next?getEventLabel(events.find(e=>e.id===next.eventId)||{}):null,
+                prevEventId: prev?prev.eventId:null, prevEventLabel: prev?getEventLabel(events.find(e=>e.id===prev.eventId)||{}):null};
+              if(nevt.eventType==='Field') nav('fieldEvent', nP);
+              else if(nevt.entryType==='Relay') nav('relayTimer', nP);
+              else nav('multiSplit', nP);
+            }}>{preset.nextEventLabel} →</button>}
+          </div>
+        )}
+      </div>
       <h1 style={S.h1}>Relay Timer</h1>
       {!collapsed && (
         <div style={S.card}>

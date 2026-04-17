@@ -2138,12 +2138,14 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
         </div>);
       })()}
       {meetTab==='results' && (()=>{
-        const meetResults = (data.results||[]).filter(r=>r.meetId===meetId&&!r.isRelay&&!r.isRelaySplit);
-        const relayResults = (data.results||[]).filter(r=>r.meetId===meetId&&r.isRelay);
-        const relaySplits = (data.results||[]).filter(r=>r.meetId===meetId&&r.isRelaySplit);
+        const allMeetResults = (data.results||[]).filter(r=>r.meetId===meetId);
+        const meetResults = allMeetResults.filter(r=>!r.isRelay&&!r.isRelaySplit);
+        const relayResults = allMeetResults.filter(r=>r.isRelay);
+        const relaySplits = allMeetResults.filter(r=>r.isRelaySplit);
         const allGroups = data.workoutGroups||[];
         const allGradYears = [...new Set(data.athletes.map(a=>a.gradYear).filter(Boolean))].sort((a,b)=>b-a);
         const isPR = (r) => {
+          if(r.isRelaySplit||r.isRelay) return false;
           const ath = data.athletes.find(a=>a.id===r.athleteId);
           if(!ath) return false;
           const evt = events.find(e=>e.id===r.eventId);
@@ -2175,16 +2177,27 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
         };
         const resultsByAthlete = {};
         meetResults.forEach(r=>{
+          if(!r.athleteId) return;
           if(!resultsByAthlete[r.athleteId]) resultsByAthlete[r.athleteId]=[];
           resultsByAthlete[r.athleteId].push(r);
         });
         relaySplits.forEach(r=>{
+          if(!r.athleteId) return;
           if(!resultsByAthlete[r.athleteId]) resultsByAthlete[r.athleteId]=[];
           resultsByAthlete[r.athleteId].push(r);
         });
         relayResults.forEach(rr=>{
           (rr.relayAthletes||[]).forEach(aid=>{
             if(!resultsByAthlete[aid]) resultsByAthlete[aid]=[];
+            const hasSplit = relaySplits.some(rs=>rs.athleteId===aid&&rs.eventId===rr.eventId&&rs.date===rr.date);
+            if(!hasSplit) {
+              const legSplit = (rr.splits||[]).find(s=>s.athleteId===aid);
+              resultsByAthlete[aid].push({
+                id:rr.id+'-'+aid, athleteId:aid, eventId:rr.eventId, date:rr.date, meetId:rr.meetId,
+                timeMs:legSplit?legSplit.split:null, isRelaySplit:true, relayLeg:legSplit?legSplit.lap:null,
+                _relayTotal:rr.timeMs, _fromComposite:true
+              });
+            }
           });
         });
         const athletesWithResults = Object.keys(resultsByAthlete).map(id=>data.athletes.find(a=>a.id===id)).filter(Boolean);
@@ -2239,7 +2252,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
             </select>
             <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'4px 10px'}} onClick={()=>setResSortDir(d=>d==='asc'?'desc':'asc')}>{resSortDir==='asc'?'A→Z':'Z→A'}</button>
             {(resSearch||resGender||resGroup||resGradYear||resEventFilter)&&<button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'4px 10px'}} onClick={()=>{setResSearch('');setResGender('');setResGroup('');setResGradYear('');setResEventFilter('');}}>Clear</button>}
-            <span style={{fontSize:12,color:C.textMuted,marginLeft:'auto'}}>{filteredAthletes.length} athletes · {meetResults.length+relaySplits.length} results · {relayResults.length} relays</span>
+            <span style={{fontSize:12,color:C.textMuted,marginLeft:'auto'}}>{filteredAthletes.length} athletes · {allMeetResults.length} results</span>
           </div>
           {filteredAthletes.length===0 && <div style={{...S.card,textAlign:'center',padding:30,color:C.textMuted}}>No results match your filters.</div>}
           {filteredAthletes.map(a=>{
@@ -2267,15 +2280,15 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                       const evt = events.find(e=>e.id===r.eventId);
                       if(!evt) return null;
                       const isField = isFieldEvent(evt);
-                      const valStr = isField ? fieldToStr(r.ft,r.inch,r.qtr) : formatTime(r.timeMs);
+                      const valStr = r.timeMs ? (isField ? fieldToStr(r.ft,r.inch,r.qtr) : formatTime(r.timeMs)) : '-';
                       const pr = !r.isRelaySplit && isPR(r);
                       const qual = !r.isRelaySplit && isQualifying(r);
-                      const relayComposite = r.isRelaySplit ? athRelays.find(rr=>rr.eventId===r.eventId&&rr.date===r.date) : null;
+                      const relayComposite = r.isRelaySplit ? (r._relayTotal ? {timeMs:r._relayTotal} : athRelays.find(rr=>rr.eventId===r.eventId&&rr.date===r.date)) : null;
                       return (
                         <tr key={r.id}>
                           <td style={{...S.td,padding:'4px 6px',fontSize:12}}>
                             {getEventLabel(evt)}
-                            {r.isRelaySplit&&<span style={{fontSize:9,color:'#6b46c1',fontWeight:600,marginLeft:4}}>Leg {r.relayLeg} split</span>}
+                            {r.isRelaySplit&&<span style={{fontSize:9,color:'#6b46c1',fontWeight:600,marginLeft:4}}>{r.relayLeg?`Leg ${r.relayLeg} split`:'Relay'}</span>}
                           </td>
                           <td style={{...S.td,padding:'4px 6px',fontWeight:600,fontSize:13}}>
                             {valStr}
@@ -2784,9 +2797,20 @@ function AthleteSubPage({ data, save, nav, athleteId, athFilter, events, getAthl
   const groups = data.workoutGroups || [];
   const athleteGroups = athlete.groups || (athlete.trainingGroup ? [{ groupId:athlete.trainingGroup, level:athlete.trainingLevel||'Level 1' }] : []);
   const athleteEvents = events.filter(e => e.gender==='Mixed' || (athlete.gender==='M' && e.gender==='Boy') || (athlete.gender==='F' && e.gender==='Girl'));
-  const athleteResults = data.results.filter(r=>r.athleteId===athleteId&&!r.isRelaySplit);
+  const athleteResults = data.results.filter(r=>r.athleteId===athleteId&&!r.isRelaySplit&&!r.isRelay);
   const athleteRelaySplits = data.results.filter(r=>r.athleteId===athleteId&&r.isRelaySplit);
   const athleteRelayComposites = data.results.filter(r=>r.isRelay&&(r.relayAthletes||[]).includes(athleteId));
+  athleteRelayComposites.forEach(rr=>{
+    const hasSplit = athleteRelaySplits.some(rs=>rs.eventId===rr.eventId&&rs.date===rr.date);
+    if(!hasSplit) {
+      const legSplit = (rr.splits||[]).find(s=>s.athleteId===athleteId);
+      athleteRelaySplits.push({
+        id:rr.id+'-'+athleteId, athleteId, eventId:rr.eventId, date:rr.date, meetId:rr.meetId,
+        timeMs:legSplit?legSplit.split:rr.timeMs, isRelaySplit:true, relayLeg:legSplit?legSplit.lap:null,
+        _relayTotal:rr.timeMs, _fromComposite:true
+      });
+    }
+  });
   const seasonResults = season ? athleteResults.filter(r=>isInSeason(r.date,season)) : athleteResults;
   const seasonAttendance = (data.attendance||[]).filter(r=>r.athleteId===athleteId && (!season || isInSeason(r.date,season)));
   const attPct = seasonAttendance.length > 0 ? Math.round(seasonAttendance.filter(r=>r.status==='present'||r.status==='late'||r.status==='signedout').length/seasonAttendance.length*100) : null;

@@ -500,9 +500,7 @@ const TimeDropdown = ({ min, sec, onMinChange, onSecChange, label, compact }) =>
       {Array.from({length:31},(_,i)=><option key={i} value={i}>{i}</option>)}
     </select>
     <span style={{color:C.textMuted}}>:</span>
-    <select style={{...S.select, width:compact ? 65 : 75}} value={sec} onChange={e=>onSecChange(e.target.value)}>
-      {Array.from({length:60},(_,i)=><option key={i} value={i.toFixed(2)}>{String(i).padStart(2,'0')}</option>)}
-    </select>
+    <input type="text" inputMode="decimal" placeholder="00.00" style={{...S.input, width:compact ? 65 : 75, textAlign:'center', fontVariantNumeric:'tabular-nums', fontSize:13, padding:'6px 4px'}} value={sec} onChange={e=>onSecChange(e.target.value)} />
   </div>
 );
 const FieldMeasure = ({ ft, inch, qtr, onFtChange, onInchChange, onQtrChange }) => (
@@ -5198,9 +5196,7 @@ function MultiSplitTimer({ data, save, nav, events, addResult, addResults, getAt
                     {Array.from({length:31},(_,n)=><option key={n} value={n}>{n}</option>)}
                   </select>
                   <span style={{fontSize:12,color:C.textMuted}}>:</span>
-                  <select style={{...S.select,width:60,padding:'4px 2px',fontSize:12}} value={(((at.goalMs||0)%60000)/1000).toFixed(2)} onChange={e=>{const c=[...athletes];const min=Math.floor((at.goalMs||0)/60000);c[i]={...c[i],goalMs:(min*60+parseFloat(e.target.value))*1000};setAthletes(c);}}>
-                    {Array.from({length:60},(_,n)=><option key={n} value={n.toFixed(2)}>{String(n).padStart(2,'0')}</option>)}
-                  </select>
+                  <input type="text" inputMode="decimal" style={{...S.input,width:60,padding:'4px 2px',fontSize:12,textAlign:'center'}} value={(((at.goalMs||0)%60000)/1000).toFixed(2)} onChange={e=>{const c=[...athletes];const min=Math.floor((at.goalMs||0)/60000);c[i]={...c[i],goalMs:(min*60+parseFloat(e.target.value||0))*1000};setAthletes(c);}} placeholder="00.00" />
                 </div>}
                 {athletes.length>1&&<button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',flexShrink:0}} onClick={()=>setAthletes(a=>a.filter((_,j)=>j!==i))}>✕</button>}
               </div>);
@@ -5526,9 +5522,7 @@ function RelayTimer({ data, save, nav, events, addResult, addResults, getAthlete
                     {Array.from({length:31},(_,n)=><option key={n} value={n}>{n}</option>)}
                   </select>
                   <span style={{fontSize:12,color:C.textMuted}}>:</span>
-                  <select style={{...S.select,width:60,padding:'4px 2px',fontSize:12}} value={(((lg.goalMs||0)%60000)/1000).toFixed(2)} onChange={e=>{const c=[...legs];const min=Math.floor((lg.goalMs||0)/60000);c[i]={...c[i],goalMs:(min*60+parseFloat(e.target.value))*1000};setLegs(c);}}>
-                    {Array.from({length:60},(_,n)=><option key={n} value={n.toFixed(2)}>{String(n).padStart(2,'0')}</option>)}
-                  </select>
+                  <input type="text" inputMode="decimal" style={{...S.input,width:60,padding:'4px 2px',fontSize:12,textAlign:'center'}} value={(((lg.goalMs||0)%60000)/1000).toFixed(2)} onChange={e=>{const c=[...legs];const min=Math.floor((lg.goalMs||0)/60000);c[i]={...c[i],goalMs:(min*60+parseFloat(e.target.value||0))*1000};setLegs(c);}} placeholder="00.00" />
                 </div>
                 {legs.length>2&&<button style={{background:'none',border:'none',color:C.danger,cursor:'pointer'}} onClick={()=>setLegs(l=>l.filter((_,j)=>j!==i))}>✕</button>}
               </div>

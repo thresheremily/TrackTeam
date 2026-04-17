@@ -784,7 +784,7 @@ function App() {
     const isRelayEvt = isRelay(evt);
     const results = isRelayEvt
       ? data.results.filter(r => r.eventId === eventId && r.isRelay && (!athleteId || (r.relayAthletes||[]).includes(athleteId)))
-      : data.results.filter(r => r.athleteId === athleteId && r.eventId === eventId);
+      : data.results.filter(r => r.athleteId === athleteId && r.eventId === eventId && !r.isRelaySplit);
     if(!results.length) return null;
     if(isFieldEvent(evt)) {
       return results.reduce((best,r) => (!best || fieldToInches(r.ft||0,r.inch||0,r.qtr||0) > fieldToInches(best.ft||0,best.inch||0,best.qtr||0)) ? r : best, null);
@@ -2138,7 +2138,9 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
         </div>);
       })()}
       {meetTab==='results' && (()=>{
-        const meetResults = (data.results||[]).filter(r=>r.meetId===meetId&&!r.isRelay);
+        const meetResults = (data.results||[]).filter(r=>r.meetId===meetId&&!r.isRelay&&!r.isRelaySplit);
+        const relayResults = (data.results||[]).filter(r=>r.meetId===meetId&&r.isRelay);
+        const relaySplits = (data.results||[]).filter(r=>r.meetId===meetId&&r.isRelaySplit);
         const allGroups = data.workoutGroups||[];
         const allGradYears = [...new Set(data.athletes.map(a=>a.gradYear).filter(Boolean))].sort((a,b)=>b-a);
         const isPR = (r) => {
@@ -2146,7 +2148,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
           if(!ath) return false;
           const evt = events.find(e=>e.id===r.eventId);
           if(!evt) return false;
-          const allResultsForAth = (data.results||[]).filter(rs=>rs.athleteId===r.athleteId&&rs.eventId===r.eventId&&!rs.isRelay);
+          const allResultsForAth = (data.results||[]).filter(rs=>rs.athleteId===r.athleteId&&rs.eventId===r.eventId&&!rs.isRelay&&!rs.isRelaySplit);
           if(isFieldEvent(evt)) {
             const myVal = (r.ft||0)*12 + (r.inch||0) + (r.qtr||0);
             return !allResultsForAth.some(rs=>rs.id!==r.id && rs.date<=r.date && ((rs.ft||0)*12+(rs.inch||0)+(rs.qtr||0)) > myVal);
@@ -2176,6 +2178,15 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
           if(!resultsByAthlete[r.athleteId]) resultsByAthlete[r.athleteId]=[];
           resultsByAthlete[r.athleteId].push(r);
         });
+        relaySplits.forEach(r=>{
+          if(!resultsByAthlete[r.athleteId]) resultsByAthlete[r.athleteId]=[];
+          resultsByAthlete[r.athleteId].push(r);
+        });
+        relayResults.forEach(rr=>{
+          (rr.relayAthletes||[]).forEach(aid=>{
+            if(!resultsByAthlete[aid]) resultsByAthlete[aid]=[];
+          });
+        });
         const athletesWithResults = Object.keys(resultsByAthlete).map(id=>data.athletes.find(a=>a.id===id)).filter(Boolean);
         let filteredAthletes = athletesWithResults.filter(a=>{
           if(resSearch && !athSearch(a, resSearch)) return false;
@@ -2199,7 +2210,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
           if(av>bv) return resSortDir==='asc'?1:-1;
           return 0;
         });
-        const allEventIds = [...new Set(meetResults.map(r=>r.eventId))];
+        const allEventIds = [...new Set([...meetResults,...relaySplits,...relayResults].map(r=>r.eventId))];
         const eventsForFilter = allEventIds.map(id=>events.find(e=>e.id===id)).filter(Boolean);
         return (<div>
           <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
@@ -2228,11 +2239,15 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
             </select>
             <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'4px 10px'}} onClick={()=>setResSortDir(d=>d==='asc'?'desc':'asc')}>{resSortDir==='asc'?'A→Z':'Z→A'}</button>
             {(resSearch||resGender||resGroup||resGradYear||resEventFilter)&&<button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'4px 10px'}} onClick={()=>{setResSearch('');setResGender('');setResGroup('');setResGradYear('');setResEventFilter('');}}>Clear</button>}
-            <span style={{fontSize:12,color:C.textMuted,marginLeft:'auto'}}>{filteredAthletes.length} athletes · {meetResults.length} results</span>
+            <span style={{fontSize:12,color:C.textMuted,marginLeft:'auto'}}>{filteredAthletes.length} athletes · {meetResults.length+relaySplits.length} results · {relayResults.length} relays</span>
           </div>
           {filteredAthletes.length===0 && <div style={{...S.card,textAlign:'center',padding:30,color:C.textMuted}}>No results match your filters.</div>}
           {filteredAthletes.map(a=>{
-            const myResults = (resultsByAthlete[a.id]||[]).filter(r=>!resEventFilter||r.eventId===resEventFilter).sort((a,b)=>{const ea=events.find(e=>e.id===a.eventId);const eb=events.find(e=>e.id===b.eventId);return (ea?getDefaultOrder(ea):999)-(eb?getDefaultOrder(eb):999);});
+            const indivResults = (resultsByAthlete[a.id]||[]).filter(r=>!r.isRelaySplit&&!r.isRelay);
+            const athRelaySplits = (resultsByAthlete[a.id]||[]).filter(r=>r.isRelaySplit);
+            const athRelays = relayResults.filter(rr=>(rr.relayAthletes||[]).includes(a.id));
+            const allMyResults = [...indivResults, ...athRelaySplits];
+            const filtered2 = allMyResults.filter(r=>!resEventFilter||r.eventId===resEventFilter).sort((x,y)=>{const ea=events.find(e=>e.id===x.eventId);const eb=events.find(e=>e.id===y.eventId);return (ea?getDefaultOrder(ea):999)-(eb?getDefaultOrder(eb):999);});
             const grpName = ((data.workoutGroups||[]).find(g=>((a.groups||[])[0]||{}).groupId===g.id||a.trainingGroup===g.id)||{}).name||'';
             return (
               <div key={a.id} style={{...S.card,padding:'10px 14px',marginBottom:8,borderLeft:`3px solid ${a.gender==='M'?C.blue:'#d53f8c'}`}}>
@@ -2243,26 +2258,34 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                     <span style={{fontSize:11,color:a.gender==='M'?C.blue:'#d53f8c',marginLeft:6}}>{a.gender==='M'?'B':'G'}</span>
                     {grpName&&<span style={{fontSize:11,color:C.textMuted,marginLeft:6}}>· {grpName}</span>}
                   </div>
-                  <span style={{fontSize:11,color:C.textMuted}}>{myResults.length} result{myResults.length!==1?'s':''}</span>
+                  <span style={{fontSize:11,color:C.textMuted}}>{filtered2.length} result{filtered2.length!==1?'s':''}</span>
                 </div>
                 <table style={{width:'100%',borderCollapse:'collapse'}}>
                   <thead><tr><th style={{...S.th,padding:'4px 6px'}}>Event</th><th style={{...S.th,padding:'4px 6px'}}>Time/Mark</th><th style={{...S.th,padding:'4px 6px',width:90}}></th></tr></thead>
                   <tbody>
-                    {myResults.map(r=>{
+                    {filtered2.map(r=>{
                       const evt = events.find(e=>e.id===r.eventId);
                       if(!evt) return null;
                       const isField = isFieldEvent(evt);
                       const valStr = isField ? fieldToStr(r.ft,r.inch,r.qtr) : formatTime(r.timeMs);
-                      const pr = isPR(r);
-                      const qual = isQualifying(r);
+                      const pr = !r.isRelaySplit && isPR(r);
+                      const qual = !r.isRelaySplit && isQualifying(r);
+                      const relayComposite = r.isRelaySplit ? athRelays.find(rr=>rr.eventId===r.eventId&&rr.date===r.date) : null;
                       return (
                         <tr key={r.id}>
-                          <td style={{...S.td,padding:'4px 6px',fontSize:12}}>{getEventLabel(evt)}</td>
-                          <td style={{...S.td,padding:'4px 6px',fontWeight:600,fontSize:13}}>{valStr}</td>
+                          <td style={{...S.td,padding:'4px 6px',fontSize:12}}>
+                            {getEventLabel(evt)}
+                            {r.isRelaySplit&&<span style={{fontSize:9,color:'#6b46c1',fontWeight:600,marginLeft:4}}>Leg {r.relayLeg} split</span>}
+                          </td>
+                          <td style={{...S.td,padding:'4px 6px',fontWeight:600,fontSize:13}}>
+                            {valStr}
+                            {relayComposite&&<span style={{fontSize:10,color:C.textMuted,fontWeight:400,marginLeft:6}}>({formatTime(relayComposite.timeMs)} total)</span>}
+                          </td>
                           <td style={{...S.td,padding:'4px 6px'}}>
                             <div style={{display:'flex',gap:3,flexWrap:'wrap'}}>
                               {pr && <span style={{fontSize:9,fontWeight:700,padding:'2px 6px',borderRadius:8,background:C.successMuted,color:C.success,border:`1px solid ${C.success}`}}>PR</span>}
                               {qual && <span style={{fontSize:9,fontWeight:700,padding:'2px 6px',borderRadius:8,background:C.accentMuted,color:C.accent,border:`1px solid ${C.accent}`}} title={qual.name}>Q</span>}
+                              {r.isRelaySplit&&<span style={{fontSize:9,fontWeight:700,padding:'2px 6px',borderRadius:8,background:'#6b46c120',color:'#6b46c1',border:'1px solid #6b46c1'}}>R</span>}
                             </div>
                           </td>
                         </tr>
@@ -2761,7 +2784,9 @@ function AthleteSubPage({ data, save, nav, athleteId, athFilter, events, getAthl
   const groups = data.workoutGroups || [];
   const athleteGroups = athlete.groups || (athlete.trainingGroup ? [{ groupId:athlete.trainingGroup, level:athlete.trainingLevel||'Level 1' }] : []);
   const athleteEvents = events.filter(e => e.gender==='Mixed' || (athlete.gender==='M' && e.gender==='Boy') || (athlete.gender==='F' && e.gender==='Girl'));
-  const athleteResults = data.results.filter(r=>r.athleteId===athleteId);
+  const athleteResults = data.results.filter(r=>r.athleteId===athleteId&&!r.isRelaySplit);
+  const athleteRelaySplits = data.results.filter(r=>r.athleteId===athleteId&&r.isRelaySplit);
+  const athleteRelayComposites = data.results.filter(r=>r.isRelay&&(r.relayAthletes||[]).includes(athleteId));
   const seasonResults = season ? athleteResults.filter(r=>isInSeason(r.date,season)) : athleteResults;
   const seasonAttendance = (data.attendance||[]).filter(r=>r.athleteId===athleteId && (!season || isInSeason(r.date,season)));
   const attPct = seasonAttendance.length > 0 ? Math.round(seasonAttendance.filter(r=>r.status==='present'||r.status==='late'||r.status==='signedout').length/seasonAttendance.length*100) : null;
@@ -3039,8 +3064,45 @@ function AthleteSubPage({ data, save, nav, athleteId, athFilter, events, getAthl
             </div>
           );
         })}
-        {athleteEvents.filter(evt=>athleteResults.some(r=>r.eventId===evt.id)).length === 0 && (
+        {athleteEvents.filter(evt=>athleteResults.some(r=>r.eventId===evt.id)).length === 0 && athleteRelaySplits.length === 0 && (
           <p style={{color:C.textMuted,fontSize:13,textAlign:'center',padding:12}}>No results yet</p>
+        )}
+        {athleteRelaySplits.length > 0 && (
+          <div style={{marginTop:8,paddingTop:8,borderTop:`2px solid ${C.border}`}}>
+            <div style={{fontSize:13,fontWeight:700,color:'#6b46c1',marginBottom:8}}>Relay Performances</div>
+            {[...new Set(athleteRelaySplits.map(r=>r.eventId))].map(evtId=>{
+              const evt = events.find(e=>e.id===evtId);
+              if(!evt) return null;
+              const splits = athleteRelaySplits.filter(r=>r.eventId===evtId).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+              const bestSplit = splits.reduce((best,r)=>(!best||r.timeMs<best.timeMs)?r:best,null);
+              return (
+                <div key={evtId} style={{padding:'8px 0',borderBottom:`1px solid ${C.borderLight}`}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+                    <span style={{fontWeight:600,fontSize:13}}>{getEventLabel(evt)}</span>
+                    {bestSplit&&<span style={{fontSize:11,color:'#6b46c1',fontWeight:600}}>Best split: {formatTime(bestSplit.timeMs)}</span>}
+                  </div>
+                  {splits.map(r=>{
+                    const composite = athleteRelayComposites.find(rr=>rr.eventId===evtId&&rr.date===r.date);
+                    const meetObj = r.meetId ? data.meets.find(m=>m.id===r.meetId) : null;
+                    return (
+                      <div key={r.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'3px 0 3px 12px',fontSize:12}}>
+                        <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                          <span style={{color:C.textMuted}}>{r.date}</span>
+                          {meetObj&&<span style={{color:C.textSecondary}}>{meetObj.name}</span>}
+                          {r.isPractice&&<span style={{color:C.textMuted,fontStyle:'italic'}}>Practice</span>}
+                        </div>
+                        <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                          <span style={{fontWeight:600}}>Leg {r.relayLeg}: {formatTime(r.timeMs)}</span>
+                          {composite&&<span style={{color:C.textMuted,fontSize:11}}>({formatTime(composite.timeMs)} total)</span>}
+                          {bestSplit&&r.id===bestSplit.id&&<span style={{fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:6,background:'#6b46c120',color:'#6b46c1'}}>Best</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
       <Modal open={showAddResult} onClose={()=>setShowAddResult(false)} width={420}>
@@ -5353,9 +5415,9 @@ function RelayTimer({ data, save, nav, events, addResult, addResults, getAthlete
     const newResults=[];
     legs.forEach((lg,i)=>{
       if(!lg.athleteId||lg.splitMs===null) return;
-      newResults.push({id:uid(),athleteId:lg.athleteId,eventId,meetId:saveMeetId,date:raceDate,timeMs:lg.splitMs,splits:[{lap:i+1,split:lg.splitMs,cumulative:lg.cumMs}],isPractice});
+      newResults.push({id:uid(),athleteId:lg.athleteId,eventId,meetId:saveMeetId,date:raceDate,timeMs:lg.splitMs,isRelaySplit:true,relayLeg:i+1,splits:[{lap:i+1,split:lg.splitMs,cumulative:lg.cumMs}],isPractice});
       relayAthleteIds.push(lg.athleteId);
-      allSplits.push({lap:i+1,split:lg.splitMs,cumulative:lg.cumMs});
+      allSplits.push({lap:i+1,split:lg.splitMs,cumulative:lg.cumMs,athleteId:lg.athleteId});
     });
     if(relayAthleteIds.length>0){
       const totalTime=legs.filter(l=>l.cumMs!==null).reduce((m,l)=>Math.max(m,l.cumMs),0);

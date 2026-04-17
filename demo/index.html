@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="TrackTeam Demo" />
-  <title>TrackTeam — Demo</title>
+  <title>TrackTeam — Portfolio Demo</title>
   <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
   <link rel="manifest" href="../manifest.json" />
   <link rel="apple-touch-icon" href="../icons/icon-192x192.png" />
@@ -21,11 +21,27 @@
     #msg{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#f5f6f8}
     #msg h1{font-family:'Montserrat',sans-serif;font-size:24px;font-weight:700;color:#c96a1f;letter-spacing:.04em;text-transform:uppercase}
     #msg p{font-size:13px;color:#8c929e;margin-top:8px;max-width:320px;word-break:break-word;text-align:center;padding:0 20px}
-    #demo-banner{position:fixed;top:0;left:0;right:0;z-index:9999;background:#c96a1f;color:#fff;text-align:center;font-family:'Rubik',sans-serif;font-size:12px;font-weight:500;padding:6px 12px;letter-spacing:.03em}
+    #demo-banner{
+      position:fixed;top:0;left:0;right:0;z-index:9999;
+      background:#1a1e26;color:#fff;
+      font-family:'Rubik',sans-serif;font-size:12px;
+      padding:8px 16px;
+      display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap;
+    }
+    #demo-banner strong{color:#c96a1f;}
+    #demo-banner .cred{
+      background:rgba(255,255,255,0.1);border-radius:4px;
+      padding:2px 8px;font-family:monospace;font-size:11px;letter-spacing:0.03em;
+    }
+    #root{padding-top:36px;}
   </style>
 </head>
 <body>
-  <div id="demo-banner">⚡ Demo Mode — Sample data only. No real athletes.</div>
+  <div id="demo-banner">
+    <span>⚡ <strong>Portfolio Demo</strong> — Sample data only</span>
+    <span>Email: <span class="cred">demo@trackteam.app</span></span>
+    <span>Password: <span class="cred">TrackDemo2026!</span></span>
+  </div>
   <div id="msg"><h1>TrackTeam</h1><p id="status">Loading...</p></div>
   <div id="root"></div>
 
@@ -44,8 +60,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
   <script>
-    // ── DEMO Firebase project config ──────────────────────────────
-    // Replace the values below with your trackteam-demo project config
+    // ── Demo Firebase project config — paste your trackteam-demo values here ──
     firebase.initializeApp({
       apiKey: "AIzaSyDceFEVTxezlGSiNih7PzxWKEMm7P8FNHU",
       authDomain: "trackteam-demo.firebaseapp.com",
@@ -54,7 +69,7 @@
       messagingSenderId: "765473897796",
       appId: "1:765473897796:web:2e3f3148b863155ea2ab11"
     });
-    // ─────────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
   </script>
 
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>

@@ -38,9 +38,7 @@
 </head>
 <body>
   <div id="demo-banner">
-    <span>⚡ <strong>Portfolio Demo</strong> — Sample data only</span>
-    <span>Email: <span class="cred">demo@trackteam.app</span></span>
-    <span>Password: <span class="cred">TrackDemo2026!</span></span>
+    ⚡ <strong>Portfolio Demo</strong> — Sample data only, no real athletes
   </div>
   <div id="msg"><h1>TrackTeam</h1><p id="status">Loading...</p></div>
   <div id="root"></div>
@@ -106,6 +104,113 @@
     } catch(e) {
       if (e.message !== 'stop') showErr(e.message ? e.message.substring(0, 300) : String(e));
     }
+  </script>
+
+  <script>
+    // ── Demo auto-login ───────────────────────────────────────────────────────
+    // Watches for the React login form, injects a one-click "Enter Demo" button,
+    // and pre-fills credentials using React's internal event system.
+    const DEMO_EMAIL    = 'demo@trackteam.app';
+    const DEMO_PASSWORD = 'TrackDemo2026!';
+
+    function setReactInputValue(el, value) {
+      // React tracks input values via its own internal fiber — use the
+      // native input value setter so onChange fires correctly
+      const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype, 'value'
+      ).set;
+      nativeInputValueSetter.call(el, value);
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    function injectDemoButton() {
+      // Already injected?
+      if (document.getElementById('demo-enter-btn')) return;
+
+      // Find the email input — that's our signal the auth form is rendered
+      const emailInput = document.querySelector('input[type="email"]');
+      if (!emailInput) return;
+
+      const passwordInput = document.querySelector('input[type="password"]');
+      if (!passwordInput) return;
+
+      // Pre-fill both fields
+      setReactInputValue(emailInput, DEMO_EMAIL);
+      setReactInputValue(passwordInput, DEMO_PASSWORD);
+
+      // Find the card the form lives in and prepend the button above it
+      const card = emailInput.closest('div[style]');
+      const container = card ? card.parentElement : emailInput.parentElement;
+      if (!container) return;
+
+      // Build the button
+      const wrapper = document.createElement('div');
+      wrapper.style.cssText = [
+        'margin-bottom:16px',
+        'text-align:center',
+      ].join(';');
+
+      const btn = document.createElement('button');
+      btn.id = 'demo-enter-btn';
+      btn.textContent = 'Click to Explore Demo →';
+      btn.style.cssText = [
+        'width:100%',
+        'padding:16px 20px',
+        'background:#c96a1f',
+        'color:#fff',
+        'border:none',
+        'border-radius:8px',
+        'font-size:16px',
+        'font-weight:700',
+        'cursor:pointer',
+        'letter-spacing:0.03em',
+        'font-family:Montserrat,Rubik,sans-serif',
+        'text-transform:uppercase',
+        'box-shadow:0 2px 12px rgba(201,106,31,0.35)',
+      ].join(';');
+
+      const note = document.createElement('p');
+      note.textContent = 'Portfolio demo — pre-loaded with sample data';
+      note.style.cssText = [
+        'margin-top:8px',
+        'font-size:12px',
+        'color:#8c929e',
+        'font-family:Rubik,sans-serif',
+      ].join(';');
+
+      btn.onclick = function() {
+        btn.textContent = 'Signing in...';
+        btn.disabled = true;
+        // Re-fill in case React cleared the fields, then click Sign In
+        setReactInputValue(emailInput, DEMO_EMAIL);
+        setReactInputValue(passwordInput, DEMO_PASSWORD);
+        setTimeout(function() {
+          // Find and click the Sign In button
+          const signInBtn = Array.from(document.querySelectorAll('button'))
+            .find(b => b.textContent.trim() === 'Sign In' && b !== btn);
+          if (signInBtn) {
+            signInBtn.click();
+          } else {
+            // Fallback: trigger Enter on password field
+            passwordInput.dispatchEvent(new KeyboardEvent('keydown', {key:'Enter',bubbles:true}));
+          }
+        }, 80);
+      };
+
+      wrapper.appendChild(btn);
+      wrapper.appendChild(note);
+      container.insertBefore(wrapper, container.firstChild);
+    }
+
+    // Poll until the form appears (React renders asynchronously)
+    const observer = new MutationObserver(function() {
+      injectDemoButton();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    // Also try immediately in case it's already rendered
+    setTimeout(injectDemoButton, 500);
+    // ─────────────────────────────────────────────────────────────────────────
   </script>
 </body>
 </html>

@@ -1664,6 +1664,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
   if(!meet) return <div style={S.card}><p>Meet not found</p><button style={S.backLink} onClick={()=>nav('meets')}>{"<- "}Back to Meets</button></div>;
   const maxEventsPerAthlete = meet.maxEventsPerAthlete || 0;
   const maxEntriesPerEvent = meet.maxEntriesPerEvent || 0;
+  const maxRelayEntries = meet.maxRelayEntries || 0;
   const _excludedEventsSet = new Set(meet.excludedEvents || []);
   const athleteEventCounts = (()=>{
     const eventSetByAthlete = {};
@@ -1690,7 +1691,12 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
     });
     return m;
   })();
-  const eventsOverLimit = maxEntriesPerEvent>0 ? Object.entries(eventEntryCounts).filter(([,n])=>n>maxEntriesPerEvent).map(([id])=>id) : [];
+  const getMaxForEvent = (evtId) => {
+    const e = events.find(ev=>ev.id===evtId);
+    if(e && e.entryType==='Relay') return maxRelayEntries;
+    return maxEntriesPerEvent;
+  };
+  const eventsOverLimit = Object.entries(eventEntryCounts).filter(([id,n])=>{const mx=getMaxForEvent(id);return mx>0&&n>mx;}).map(([id])=>id);
   const meetType = (data.meetTypes||[]).find(mt=>mt.id===meet.meetTypeId);
   const excludedEvents = meet.excludedEvents || [];
   const customEventIds = meet.customEventIds || [];
@@ -1910,9 +1916,10 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
         {meet.venue && ` - ${meet.venue}`}{meet.city && `, ${meet.city}`}{meet.state && ` ${meet.state}`}
         {meetType && <span style={{marginLeft:8,color:meetType.qualifying?C.success:C.textMuted,fontWeight:600}}>({meetType.name})</span>}
       </p>
-      {(meet.maxEntriesPerEvent||meet.maxEventsPerAthlete)&&(
+      {(meet.maxEntriesPerEvent||meet.maxEventsPerAthlete||meet.maxRelayEntries)&&(
         <div style={{display:'flex',gap:6,marginBottom:10,flexWrap:'wrap'}}>
-          {meet.maxEntriesPerEvent&&<span style={{fontSize:11,fontWeight:600,color:C.accent,padding:'3px 10px',borderRadius:10,background:C.accentMuted,border:`1px solid ${C.accent}`}}>Max {meet.maxEntriesPerEvent} per event</span>}
+          {meet.maxEntriesPerEvent&&<span style={{fontSize:11,fontWeight:600,color:C.accent,padding:'3px 10px',borderRadius:10,background:C.accentMuted,border:`1px solid ${C.accent}`}}>Max {meet.maxEntriesPerEvent} per individual event</span>}
+          {meet.maxRelayEntries&&<span style={{fontSize:11,fontWeight:600,color:'#6b46c1',padding:'3px 10px',borderRadius:10,background:'#6b46c120',border:'1px solid #6b46c1'}}>Max {meet.maxRelayEntries} per relay event</span>}
           {meet.maxEventsPerAthlete&&<span style={{fontSize:11,fontWeight:600,color:C.accent,padding:'3px 10px',borderRadius:10,background:C.accentMuted,border:`1px solid ${C.accent}`}}>Max {meet.maxEventsPerAthlete} events per athlete</span>}
         </div>
       )}
@@ -1923,11 +1930,11 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
         <button style={{marginLeft:'auto',background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 14px',fontSize:12,fontWeight:600,color:C.textSecondary,cursor:'pointer'}} onClick={()=>setShowManageEvents(true)}>Manage Events</button>
         <button style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 14px',fontSize:12,fontWeight:600,color:C.textSecondary,cursor:'pointer'}} onClick={()=>printMeet(meetTab)}>Print</button>
       </div>
-      {(meet.maxEventsPerAthlete||meet.maxEntriesPerEvent)&&(athletesOverLimit.length>0||eventsOverLimit.length>0)&&(
+      {(meet.maxEventsPerAthlete||meet.maxEntriesPerEvent||meet.maxRelayEntries)&&(athletesOverLimit.length>0||eventsOverLimit.length>0)&&(
         <div style={{padding:'10px 14px',marginBottom:12,borderRadius:8,background:C.dangerMuted,border:`1px solid ${C.danger}`,fontSize:12}}>
-          <div style={{fontWeight:700,color:C.danger,marginBottom:4}}>⚠ Entry Limit Violations</div>
+          <div style={{fontWeight:700,color:C.danger,marginBottom:4}}>Entry Limit Violations</div>
           {athletesOverLimit.length>0&&<div style={{color:C.danger,marginBottom:2}}>Over max events ({maxEventsPerAthlete}): {athletesOverLimit.map(id=>{const a=data.athletes.find(at=>at.id===id);return a?`${athDisplay(a)} (${athleteEventCounts[id]})`:'';}).filter(Boolean).join(', ')}</div>}
-          {eventsOverLimit.length>0&&<div style={{color:C.danger}}>Over max entries ({maxEntriesPerEvent}): {eventsOverLimit.map(id=>{const e=events.find(ev=>ev.id===id);return e?`${getEventLabel(e)} (${eventEntryCounts[id]})`:'';}).filter(Boolean).join(', ')}</div>}
+          {eventsOverLimit.length>0&&<div style={{color:C.danger}}>Over limit: {eventsOverLimit.map(id=>{const e=events.find(ev=>ev.id===id);const mx=getMaxForEvent(id);return e?`${getEventLabel(e)} (${eventEntryCounts[id]}/${mx})`:'';}).filter(Boolean).join(', ')}</div>}
         </div>
       )}
       {meetTab==='events' && (<>
@@ -2006,7 +2013,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                 <span style={{cursor:'grab',fontSize:16,color:C.textMuted,userSelect:'none',marginRight:4}}>:::</span>
                 <span style={{fontWeight:700,fontSize:15}}>{getEventLabel(me.evt)}</span>
                 <span style={{fontSize:10,color:C.textMuted}}>{me.evt.eventType} - {me.evt.entryType}</span>
-                {me.entries.length>0&&(()=>{const over=maxEntriesPerEvent>0&&me.entries.length>maxEntriesPerEvent;return <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,fontWeight:700,background:over?C.dangerMuted:C.surface2,color:over?C.danger:C.textSecondary,border:over?`1px solid ${C.danger}`:'none'}}>{me.entries.length}{maxEntriesPerEvent>0?`/${maxEntriesPerEvent}`:''}{over?' ⚠':''}</span>;})()}
+                {me.entries.length>0&&(()=>{const mx=getMaxForEvent(me.eventId);const over=mx>0&&me.entries.length>mx;return <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,fontWeight:700,background:over?C.dangerMuted:C.surface2,color:over?C.danger:C.textSecondary,border:over?`1px solid ${C.danger}`:'none'}}>{me.entries.length}{mx>0?`/${mx}`:''}{over?' ⚠':''}</span>;})()}
               </div>
               <div style={{display:'flex',gap:6}}>
                 <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'6px 14px'}} onClick={()=>{setEditEntryIdx(null);setShowEntryModal(me.eventId);}}>+ Entry</button>
@@ -2088,6 +2095,26 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
             }
           });
         });
+        const removeAthleteEntry = (athleteId, evtObj, entryIdx) => {
+          const me = (meet.events||[]).find(e=>e.eventId===evtObj.id);
+          if(!me) return;
+          let newEntries;
+          if(evtObj.entryType==='Relay') {
+            newEntries = (me.entries||[]).map((en,i)=>{
+              if(i!==entryIdx) return en;
+              return {...en, athletes:(en.athletes||[]).filter(a=>a.athleteId!==athleteId), alternates:(en.alternates||[]).filter(a=>a.athleteId!==athleteId)};
+            });
+          } else {
+            newEntries = (me.entries||[]).filter((en,i)=>!(i===entryIdx&&en.athleteId===athleteId));
+          }
+          saveEntries(evtObj.id, newEntries);
+        };
+        const addAthleteEntry = (athleteId, eventId) => {
+          const me = (meet.events||[]).find(e=>e.eventId===eventId);
+          const entries = me ? [...(me.entries||[])] : [];
+          entries.push({athleteId, goalMs:0});
+          saveEntries(eventId, entries);
+        };
         const activeAthletes = data.athletes.filter(a=>a.active!==false);
         let athList = activeAthletes.filter(a=>{
           if(notParticipating.includes(a.id)) return false;
@@ -2099,6 +2126,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
           if(athViewSort==='events') return (athleteEntryMap[b.id]||[]).length - (athleteEntryMap[a.id]||[]).length;
           return athLast(a).localeCompare(athLast(b));
         });
+        const indivEvents = applicableEvents.filter(e=>e.entryType==='Individual');
         return (<div>
           <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
             <input style={{...S.input,maxWidth:200}} placeholder="Search athletes..." value={athViewSearch} onChange={e=>setAthViewSearch(e.target.value)} />
@@ -2112,6 +2140,8 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
           </div>
           {athList.map(a=>{
             const myEvents = athleteEntryMap[a.id]||[];
+            const assignedEventIds = myEvents.map(me=>me.evt.id);
+            const availableEvents = indivEvents.filter(e=>!assignedEventIds.includes(e.id)&&(!e.gender||e.gender==='Mixed'||e.gender===(a.gender==='M'?'Boy':'Girl')));
             return (
               <div key={a.id} style={{...S.card,padding:'10px 14px',borderLeft:myEvents.length>0?`3px solid ${C.success}`:`3px solid ${C.border}`}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
@@ -2125,11 +2155,19 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                 {myEvents.length>0 && (
                   <div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:6}}>
                     {myEvents.map((me,i)=>(
-                      <span key={i} style={{fontSize:10,padding:'2px 8px',borderRadius:12,fontWeight:600,background:me.role==='Alternate'?C.surface2:me.role==='Relay'?C.accentMuted:C.successMuted,color:me.role==='Alternate'?C.textMuted:me.role==='Relay'?C.accent:C.success,border:`1px solid ${me.role==='Alternate'?C.border:me.role==='Relay'?C.accent:C.success}`}}>{getEventLabel(me.evt)}{me.role==='Relay'?' (R)':me.role==='Alternate'?' (Alt)':''}</span>
+                      <span key={i} style={{fontSize:10,padding:'2px 8px',borderRadius:12,fontWeight:600,background:me.role==='Alternate'?C.surface2:me.role==='Relay'?C.accentMuted:C.successMuted,color:me.role==='Alternate'?C.textMuted:me.role==='Relay'?C.accent:C.success,border:`1px solid ${me.role==='Alternate'?C.border:me.role==='Relay'?C.accent:C.success}`,display:'inline-flex',alignItems:'center',gap:4}}>
+                        {getEventLabel(me.evt)}{me.role==='Relay'?' (R)':me.role==='Alternate'?' (Alt)':''}
+                        <button style={{background:'none',border:'none',cursor:'pointer',color:'inherit',fontSize:10,padding:0,lineHeight:1,fontWeight:700,opacity:0.7}} onClick={()=>removeAthleteEntry(a.id,me.evt,me.entryIdx)} title="Remove from event">✕</button>
+                      </span>
                     ))}
                   </div>
                 )}
-                {myEvents.length===0 && <div style={{fontSize:11,color:C.danger,marginTop:4,fontStyle:'italic'}}>No events assigned</div>}
+                <div style={{display:'flex',gap:4,marginTop:6,alignItems:'center'}}>
+                  {availableEvents.length>0&&<select style={{...S.select,fontSize:10,padding:'3px 6px',flex:1,maxWidth:200}} defaultValue="" onChange={e=>{if(e.target.value){addAthleteEntry(a.id,e.target.value);e.target.value='';}}}>
+                    <option value="">+ Add event...</option>
+                    {availableEvents.map(e=><option key={e.id} value={e.id}>{getEventLabel(e)}</option>)}
+                  </select>}
+                </div>
               </div>
             );
           })}
@@ -2314,14 +2352,18 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
         <p style={{fontSize:12,color:C.textMuted,marginTop:4,marginBottom:12}}>Uncheck events to hide them. Add meet-specific events (they'll be saved to the library but won't appear in other meets unless added).</p>
         <div style={{padding:'10px 14px',marginBottom:16,background:C.bg,borderRadius:8,border:`1px solid ${C.borderLight}`}}>
           <div style={{fontSize:12,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',marginBottom:8}}>Entry Limits (optional)</div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
             <div>
               <label style={{fontSize:11,color:C.textMuted,display:'block',marginBottom:2}}>Max events per athlete</label>
               <input style={{...S.input,fontSize:13}} type="number" min="0" placeholder="No limit" value={meet.maxEventsPerAthlete||''} onChange={e=>{const v=parseInt(e.target.value)||0;save({...data,meets:data.meets.map(m=>m.id===meetId?{...m,maxEventsPerAthlete:v}:m)});}} />
             </div>
             <div>
-              <label style={{fontSize:11,color:C.textMuted,display:'block',marginBottom:2}}>Max entries per event</label>
+              <label style={{fontSize:11,color:C.textMuted,display:'block',marginBottom:2}}>Max per individual event</label>
               <input style={{...S.input,fontSize:13}} type="number" min="0" placeholder="No limit" value={meet.maxEntriesPerEvent||''} onChange={e=>{const v=parseInt(e.target.value)||0;save({...data,meets:data.meets.map(m=>m.id===meetId?{...m,maxEntriesPerEvent:v}:m)});}} />
+            </div>
+            <div>
+              <label style={{fontSize:11,color:C.textMuted,display:'block',marginBottom:2}}>Max per relay event</label>
+              <input style={{...S.input,fontSize:13}} type="number" min="0" placeholder="No limit" value={meet.maxRelayEntries||''} onChange={e=>{const v=parseInt(e.target.value)||0;save({...data,meets:data.meets.map(m=>m.id===meetId?{...m,maxRelayEntries:v}:m)});}} />
             </div>
           </div>
           <p style={{fontSize:10,color:C.textMuted,marginTop:6,marginBottom:0}}>Set to 0 or leave blank for no limit. Violations show as warnings on the meet page.</p>
@@ -2409,7 +2451,7 @@ function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, ge
   const meet = data.meets.find(m=>m.id===meetId);
   const me = ((meet||{}).events||[]).find(e=>e.eventId===eventId);
   const existingEntries = (me||{}).entries || [];
-  const maxEntries = (meet||{}).maxEntriesPerEvent || null;
+  const maxEntries = evt && evt.entryType==='Relay' ? ((meet||{}).maxRelayEntries || null) : ((meet||{}).maxEntriesPerEvent || null);
   const maxEvents = (meet||{}).maxEventsPerAthlete || null;
   const countAthleteEvents = (athleteId, excludeEventId, excludeEntryIdx) => {
     let count = 0;
@@ -5066,11 +5108,37 @@ function MultiSplitTimer({ data, save, nav, events, addResult, addResults, getAt
   const [finished, setFinished] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [saved, setSaved] = useState(false);
+  const presetKey = useRef((preset||{}).eventId||'');
+  useEffect(()=>{
+    const newKey = (preset||{}).eventId||'';
+    if(newKey && newKey !== presetKey.current) {
+      presetKey.current = newKey;
+      setMeetId((preset||{}).meetId||'');
+      setEventId(newKey);
+      const ids = (preset||{}).athleteIds||[];
+      const entries = (preset||{}).entries||[];
+      if(ids.length>0) setAthletes(ids.map(id=>{const en=entries.find(e=>e.athleteId===id||(e.athletes||[]).some(a=>a.athleteId===id));const goalMs=(en||{}).goalMs||(((en||{}).athletes||[]).find(a=>a.athleteId===id)||{}).goalMs||0;return{id:uid(),athleteId:id,laps:[],goalMs};}));
+      else setAthletes([{id:uid(),athleteId:'',laps:[],goalMs:0},{id:uid(),athleteId:'',laps:[],goalMs:0}]);
+      const selSet = {};
+      ids.forEach(id=>{
+        const hasResult = (data.results||[]).some(r=>r.athleteId===id&&r.eventId===newKey&&r.meetId===(preset||{}).meetId&&!r.isRelay);
+        if(!hasResult) selSet[id] = true;
+      });
+      setSelectedIds(selSet);
+      clearInterval(timerRef.current);
+      setRunning(false); setStartTime(null); setElapsed(0); setFinished(false); setCollapsed(false); setSaved(false);
+    }
+  },[preset]);
   const timerRef = useRef(null);
   const evt = events.find(e=>e.id===eventId);
   const lapDist = trackType==='Indoor'?INDOOR_LAP:OUTDOOR_LAP;
   const totalDist = getDistance(evt);
   const totalLaps = totalDist>0?Math.ceil(totalDist/lapDist):999;
+  const firstLapDist = totalDist>0 ? (totalDist % lapDist || lapDist) : lapDist;
+  const getLapDist = (lapNum) => lapNum===1 ? firstLapDist : lapDist;
+  const getCumDist = (lapNum) => firstLapDist + Math.max(0, lapNum-1) * lapDist;
+  const getExpectedCum = (goalMs, lapNum) => totalDist>0 ? goalMs * getCumDist(lapNum) / totalDist : goalMs * lapNum / totalLaps;
+  const getExpectedSplit = (goalMs, lapNum) => totalDist>0 ? goalMs * getLapDist(lapNum) / totalDist : goalMs / totalLaps;
   const isRelayEvt = (evt||{}).entryType==='Relay';
   const legsPerAthlete = isRelayEvt ? Math.ceil(totalLaps/athletes.length) : totalLaps;
   const COLORS = ['#2b6cb0','#c96a1f','#25763b','#c53030','#6b46c1','#b8860b'];
@@ -5226,7 +5294,7 @@ function MultiSplitTimer({ data, save, nav, events, addResult, addResults, getAt
             const currentLap=at.laps.length;
             const realIdx=athletes.findIndex(a=>a.id===at.id);
             let paceLabel='';
-            if(at.goalMs&&totalLaps>0&&totalLaps<999&&currentLap>0){const targetPerLap=at.goalMs/totalLaps;const diff=at.laps[currentLap-1].cumulative-targetPerLap*currentLap;paceLabel=` ${formatDiff(diff)}`;}
+            if(at.goalMs&&totalLaps>0&&totalLaps<999&&currentLap>0){const diff=at.laps[currentLap-1].cumulative-getExpectedCum(at.goalMs,currentLap);paceLabel=` ${formatDiff(diff)}`;}
             return (<button key={at.id} disabled={done} style={{...S.btn,background:done?C.surface2:COLORS[realIdx%COLORS.length],color:done?C.textMuted:C.white,fontSize:24,padding:'36px 20px',minHeight:140,opacity:done?0.4:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:10,fontWeight:700,lineHeight:1.15,textAlign:'center',border:'none',borderRadius:14,boxShadow:done?'none':'0 2px 6px rgba(0,0,0,0.15)',touchAction:'manipulation',userSelect:'none'}} onClick={()=>handleLap(realIdx)}>
               <span style={{fontSize:24,fontWeight:800,letterSpacing:'0.01em'}}>{athObj?athDisplay(athObj):`Ath ${realIdx+1}`}</span>
               <span style={{fontSize:17,opacity:0.95,fontWeight:600}}>Lap {at.laps.length+1}{done?' ✓ DONE':''}</span>
@@ -5242,7 +5310,6 @@ function MultiSplitTimer({ data, save, nav, events, addResult, addResults, getAt
         const athObj=data.athletes.find(a=>a.id===at.athleteId);
         const athleteColor=COLORS[i%COLORS.length];
         const hasTarget=!!at.goalMs&&totalLaps>0&&totalLaps<999;
-        const targetPerLap=hasTarget?at.goalMs/totalLaps:0;
         return (<div key={at.id} style={{...S.card,borderLeft:`4px solid ${athleteColor}`}}>
           <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
             <h3 style={{fontSize:15,fontWeight:700,margin:0,color:athleteColor}}>{(athObj||{}).name||`Athlete ${i+1}`}</h3>
@@ -5251,11 +5318,14 @@ function MultiSplitTimer({ data, save, nav, events, addResult, addResults, getAt
           {(()=>{
             const lapsCompleted=at.laps.length;
             const lapsRemaining=Math.max(0,(isRelayEvt?legsPerAthlete:totalLaps)-lapsCompleted);
-            const avgSplit=lapsCompleted>0?at.laps[lapsCompleted-1].cumulative/lapsCompleted:0;
-            const predictedFinish=lapsCompleted>0?at.laps[lapsCompleted-1].cumulative+avgSplit*lapsRemaining:0;
+            const distCovered=getCumDist(lapsCompleted);
+            const pacePerMeter=lapsCompleted>0&&distCovered>0?at.laps[lapsCompleted-1].cumulative/distCovered:0;
+            const avgLapPace=pacePerMeter*lapDist;
+            const remainingDist=totalDist-distCovered;
+            const predictedFinish=lapsCompleted>0?at.laps[lapsCompleted-1].cumulative+pacePerMeter*remainingDist:0;
             return (<>
               {lapsCompleted>0&&totalLaps<999&&<div style={{display:'flex',gap:12,flexWrap:'wrap',marginBottom:6,fontSize:11}}>
-                <span style={{color:C.textMuted}}>Avg split: <strong style={{color:C.text}}>{formatTime(avgSplit)}</strong></span>
+                <span style={{color:C.textMuted}}>Avg {lapDist}m pace: <strong style={{color:C.text}}>{formatTime(Math.round(avgLapPace))}</strong></span>
                 {lapsRemaining>0&&<span style={{color:C.textMuted}}>Predicted: <strong style={{color:hasTarget&&predictedFinish>at.goalMs?C.danger:C.success}}>{formatTime(Math.round(predictedFinish))}</strong></span>}
                 {hasTarget&&lapsRemaining>0&&<span style={{color:C.textMuted}}>Target: <strong>{formatTime(at.goalMs)}</strong></span>}
               </div>}
@@ -5266,7 +5336,7 @@ function MultiSplitTimer({ data, save, nav, events, addResult, addResults, getAt
                   const splitDiff=prevSplit!==null?l.split-prevSplit:0;
                   const isFaster=prevSplit!==null&&l.split<prevSplit;
                   const isSlower=prevSplit!==null&&l.split>prevSplit;
-                  const paceDiff=hasTarget?l.cumulative-targetPerLap*l.lap:0;
+                  const paceDiff=hasTarget?l.cumulative-getExpectedCum(at.goalMs,l.lap):0;
                   return (<tr key={l.lap}>
                     <td style={S.td}><span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',minWidth:28,padding:'2px 8px',borderRadius:20,fontSize:12,fontWeight:700,background:C.white,color:athleteColor,border:`2px solid ${athleteColor}`}}>{l.lap}</span></td>
                     <td style={S.td}>{formatTime(l.split)}</td>
@@ -5399,6 +5469,25 @@ function RelayTimer({ data, save, nav, events, addResult, addResults, getAthlete
   const [finished, setFinished] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [saved2, setSaved2] = useState(false);
+  const presetKeyR = useRef((preset||{}).eventId||'');
+  useEffect(()=>{
+    const newKey = (preset||{}).eventId||'';
+    if(newKey && newKey !== presetKeyR.current) {
+      presetKeyR.current = newKey;
+      setMeetId((preset||{}).meetId||'');
+      setEventId(newKey);
+      const entries = (preset||{}).entries||[];
+      const relay = entries.find(e=>e.athletes);
+      if(relay) setLegs(relay.athletes.map(a=>({id:uid(),athleteId:a.athleteId,goalMs:a.goalMs||0,splitMs:null,cumMs:null})));
+      else {
+        const ids = (preset||{}).athleteIds||[];
+        if(ids.length>0) setLegs(ids.map(id=>({id:uid(),athleteId:id,goalMs:0,splitMs:null,cumMs:null})));
+        else setLegs([{id:uid(),athleteId:'',goalMs:0,splitMs:null,cumMs:null},{id:uid(),athleteId:'',goalMs:0,splitMs:null,cumMs:null},{id:uid(),athleteId:'',goalMs:0,splitMs:null,cumMs:null},{id:uid(),athleteId:'',goalMs:0,splitMs:null,cumMs:null}]);
+      }
+      clearInterval(timerRef.current);
+      setRunning(false); setStartTime(null); setElapsed(0); setActiveLeg(0); setFinished(false); setCollapsed(false); setSaved2(false);
+    }
+  },[preset]);
   const timerRef = useRef(null);
   const evt = events.find(e=>e.id===eventId);
   const lapDist = trackType==='Indoor'?INDOOR_LAP:OUTDOOR_LAP;

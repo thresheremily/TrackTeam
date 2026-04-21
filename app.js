@@ -203,6 +203,7 @@ const defaultData = () => ({
     { id:'mt_invite', name:'Invitational', qualifying:false },
     { id:'mt_sect', name:'Sectionals', qualifying:true },
   ],
+  qualifyingStandardTypes: [],
   workoutCategories: [
     { id:'wc_main', name:'Main', color:'#2b6cb0' },
     { id:'wc_warmup', name:'Warm-Up', color:'#c96a1f' },
@@ -4788,7 +4789,7 @@ function EventsPage({ data, save, nav }) {
   const [delId, setDelId] = useState(null);
   const [expandedEvent, setExpandedEvent] = useState(null);
   const [showAddStandard, setShowAddStandard] = useState(null);
-  const [stdForm, setStdForm] = useState({ name:'', timeMs:0, ft:0, inch:0, qtr:0, min:0, sec:0 });
+  const [stdForm, setStdForm] = useState({ name:'', customName:'', timeMs:0, ft:0, inch:0, qtr:0, min:0, sec:0 });
   const [showAddRecord, setShowAddRecord] = useState(null);
   const [recForm, setRecForm] = useState({ athleteId:'', timeMs:0, ft:0, inch:0, qtr:0, min:0, sec:0, date:'', type:'School Record' });
   const toggleSort = (col) => { if(sortCol===col) setSortDir(d=>d==='asc'?'desc':'asc'); else { setSortCol(col); setSortDir('asc'); } };
@@ -4837,9 +4838,11 @@ function EventsPage({ data, save, nav }) {
   const deleteEvent = () => { save({...data, events:(data.events||[]).filter(e=>e.id!==delId)}); setDelId(null); };
   const addStandard = (eventId) => {
     const timeMs = parseTimeToMs(stdForm.min, stdForm.sec);
-    const std = { id:uid(), name:stdForm.name, timeMs, ft:parseInt(stdForm.ft)||0, inch:parseInt(stdForm.inch)||0, qtr:parseFloat(stdForm.qtr)||0 };
+    const stdName = stdForm.name==='__custom' ? (stdForm.customName||'Custom').trim() : stdForm.name;
+    if(!stdName) return;
+    const std = { id:uid(), name:stdName, timeMs, ft:parseInt(stdForm.ft)||0, inch:parseInt(stdForm.inch)||0, qtr:parseFloat(stdForm.qtr)||0 };
     save({...data, events:(data.events||[]).map(e=>e.id===eventId?{...e,qualifyingStandards:[...(e.qualifyingStandards||[]),std]}:e)});
-    setShowAddStandard(null); setStdForm({ name:'', timeMs:0, ft:0, inch:0, qtr:0, min:0, sec:0 });
+    setShowAddStandard(null); setStdForm({ name:'', customName:'', timeMs:0, ft:0, inch:0, qtr:0, min:0, sec:0 });
   };
   const removeStandard = (eventId, stdId) => save({...data, events:(data.events||[]).map(e=>e.id===eventId?{...e,qualifyingStandards:(e.qualifyingStandards||[]).filter(s=>s.id!==stdId)}:e)});
   const addRecord = (eventId) => {
@@ -4960,7 +4963,19 @@ function EventsPage({ data, save, nav }) {
       <Modal open={!!showAddStandard} onClose={()=>setShowAddStandard(null)} width={400}>
         <h2 style={S.h2}>Add Qualifying Standard</h2>
         <div style={{display:'flex',flexDirection:'column',gap:10,marginTop:16}}>
-          <input style={S.input} placeholder="Standard name (e.g. Automatic, Provisional)" value={stdForm.name} onChange={e=>setStdForm({...stdForm,name:e.target.value})} />
+          {(data.qualifyingStandardTypes||[]).length>0 ? (
+            <div>
+              <label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Standard Type</label>
+              <select style={{...S.select,width:'100%'}} value={stdForm.name} onChange={e=>setStdForm({...stdForm,name:e.target.value})}>
+                <option value="">Select type...</option>
+                {(data.qualifyingStandardTypes||[]).map(t=><option key={t.id} value={t.name}>{t.name}</option>)}
+                <option value="__custom">Custom...</option>
+              </select>
+              {stdForm.name==='__custom'&&<input style={{...S.input,marginTop:6}} placeholder="Custom standard name" value={stdForm.customName||''} onChange={e=>setStdForm({...stdForm,customName:e.target.value})} />}
+            </div>
+          ) : (
+            <input style={S.input} placeholder="Standard name (e.g. IAC Qualifier)" value={stdForm.name} onChange={e=>setStdForm({...stdForm,name:e.target.value})} />
+          )}
           {(()=>{const evt=(data.events||[]).find(e=>e.id===showAddStandard);
             return (evt||{}).measurableType==='Time' ? <TimeDropdown min={stdForm.min} sec={stdForm.sec} onMinChange={v=>setStdForm({...stdForm,min:v})} onSecChange={v=>setStdForm({...stdForm,sec:v})} label="Time" /> : <FieldMeasure ft={stdForm.ft} inch={stdForm.inch} qtr={stdForm.qtr} onFtChange={v=>setStdForm({...stdForm,ft:v})} onInchChange={v=>setStdForm({...stdForm,inch:v})} onQtrChange={v=>setStdForm({...stdForm,qtr:v})} />;
           })()}
@@ -5676,6 +5691,89 @@ function RelayTimer({ data, save, nav, events, addResult, addResults, getAthlete
     </div>
   );
 }
+function BulkStandardEntry({ data, save, events, stdTypes }) {
+  const [bulkType, setBulkType] = useState('');
+  const [bulkEntries, setBulkEntries] = useState({});
+  const prefill = (typeId) => {
+    setBulkType(typeId);
+    const typeName = (stdTypes.find(t=>t.id===typeId)||{}).name||'';
+    const pre = {};
+    (data.events||[]).forEach(evt=>{
+      const existing = (evt.qualifyingStandards||[]).find(s=>s.name===typeName);
+      if(existing) {
+        if(evt.measurableType==='Time') pre[evt.id] = {min:Math.floor((existing.timeMs||0)/60000)+'', sec:(((existing.timeMs||0)%60000)/1000).toFixed(2)};
+        else pre[evt.id] = {ft:(existing.ft||'')+'', inch:(existing.inch||'')+'', qtr:(existing.qtr||'')+''};
+      }
+    });
+    setBulkEntries(pre);
+  };
+  const saveBulk = () => {
+    if(!bulkType) return;
+    const typeName = (stdTypes.find(t=>t.id===bulkType)||{}).name||'';
+    const updatedEvents = (data.events||[]).map(evt=>{
+      const val = bulkEntries[evt.id];
+      const existing = (evt.qualifyingStandards||[]).filter(s=>s.name!==typeName);
+      if(!val) return {...evt, qualifyingStandards:existing};
+      if(evt.measurableType==='Time') {
+        const ms = parseTimeToMs(val.min||0, val.sec||0);
+        if(!ms) return {...evt, qualifyingStandards:existing};
+        return {...evt, qualifyingStandards:[...existing, {id:uid(), name:typeName, timeMs:ms}]};
+      } else {
+        const ft=parseInt(val.ft)||0; const inch=parseInt(val.inch)||0; const qtr=parseFloat(val.qtr)||0;
+        if(!ft&&!inch&&!qtr) return {...evt, qualifyingStandards:existing};
+        return {...evt, qualifyingStandards:[...existing, {id:uid(), name:typeName, ft, inch, qtr}]};
+      }
+    });
+    save({...data, events:updatedEvents});
+  };
+  const trackEvts = events.filter(e=>e.measurableType==='Time'&&!e.meetSpecific).sort((a,b)=>getDefaultOrder(a)-getDefaultOrder(b));
+  const fieldEvts = events.filter(e=>e.measurableType!=='Time'&&!e.meetSpecific).sort((a,b)=>a.name.localeCompare(b.name));
+  return (
+    <div>
+      <h2 style={{...S.h2,marginBottom:8}}>Bulk Enter Standards</h2>
+      <div style={{display:'flex',gap:6,marginBottom:12,alignItems:'center'}}>
+        <select style={S.select} value={bulkType} onChange={e=>prefill(e.target.value)}>
+          <option value="">Select standard type...</option>
+          {stdTypes.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
+        </select>
+        {bulkType&&<button style={{...S.btn,...S.btnPrimary,fontSize:12}} onClick={saveBulk}>Save All</button>}
+      </div>
+      {bulkType&&(<div style={S.card}>
+        <p style={{fontSize:11,color:C.textMuted,marginBottom:8}}>Enter the qualifying mark for each event. Leave blank to skip. Existing values for this standard type will be replaced.</p>
+        {trackEvts.length>0&&<div style={{marginBottom:12}}>
+          <div style={{fontSize:12,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',marginBottom:6}}>Track Events</div>
+          <table style={{width:'100%',borderCollapse:'collapse'}}>
+            <thead><tr><th style={{...S.th,textAlign:'left'}}>Event</th><th style={{...S.th,width:55}}>Min</th><th style={{...S.th,width:12}}></th><th style={{...S.th,width:75}}>Sec</th></tr></thead>
+            <tbody>{trackEvts.map(evt=>{
+              const v = bulkEntries[evt.id]||{};
+              return (<tr key={evt.id}>
+                <td style={{...S.td,fontSize:12,fontWeight:500}}>{getEventLabel(evt)}</td>
+                <td style={S.td}><input style={{...S.input,width:'100%',fontSize:12,padding:'4px 6px',textAlign:'center'}} type="number" min="0" value={v.min||''} onChange={e=>{const ne={...bulkEntries};ne[evt.id]={...v,min:e.target.value};setBulkEntries(ne);}} /></td>
+                <td style={{...S.td,textAlign:'center',color:C.textMuted,fontSize:12,padding:0}}>:</td>
+                <td style={S.td}><input style={{...S.input,width:'100%',fontSize:12,padding:'4px 6px',textAlign:'center'}} type="text" inputMode="decimal" placeholder="00.00" value={v.sec||''} onChange={e=>{const ne={...bulkEntries};ne[evt.id]={...v,sec:e.target.value};setBulkEntries(ne);}} /></td>
+              </tr>);
+            })}</tbody>
+          </table>
+        </div>}
+        {fieldEvts.length>0&&<div>
+          <div style={{fontSize:12,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',marginBottom:6}}>Field Events</div>
+          <table style={{width:'100%',borderCollapse:'collapse'}}>
+            <thead><tr><th style={{...S.th,textAlign:'left'}}>Event</th><th style={{...S.th,width:55}}>Ft</th><th style={{...S.th,width:55}}>In</th><th style={{...S.th,width:55}}>Qtr</th></tr></thead>
+            <tbody>{fieldEvts.map(evt=>{
+              const v = bulkEntries[evt.id]||{};
+              return (<tr key={evt.id}>
+                <td style={{...S.td,fontSize:12,fontWeight:500}}>{getEventLabel(evt)}</td>
+                <td style={S.td}><input style={{...S.input,width:'100%',fontSize:12,padding:'4px 6px',textAlign:'center'}} type="number" value={v.ft||''} onChange={e=>{const ne={...bulkEntries};ne[evt.id]={...v,ft:e.target.value};setBulkEntries(ne);}} /></td>
+                <td style={S.td}><input style={{...S.input,width:'100%',fontSize:12,padding:'4px 6px',textAlign:'center'}} type="number" value={v.inch||''} onChange={e=>{const ne={...bulkEntries};ne[evt.id]={...v,inch:e.target.value};setBulkEntries(ne);}} /></td>
+                <td style={S.td}><input style={{...S.input,width:'100%',fontSize:12,padding:'4px 6px',textAlign:'center'}} type="number" step="0.25" value={v.qtr||''} onChange={e=>{const ne={...bulkEntries};ne[evt.id]={...v,qtr:e.target.value};setBulkEntries(ne);}} /></td>
+              </tr>);
+            })}</tbody>
+          </table>
+        </div>}
+      </div>)}
+    </div>
+  );
+}
 function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
   const [tab, setTab] = useState('seasons');
   const [saved, setSaved] = useState(false);
@@ -5865,25 +5963,47 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
         <ConfirmModal open={!!delMTId} onClose={()=>setDelMTId(null)} onConfirm={deleteMT} message="Delete this meet type?" />
       </div>)}
       
-      {tab==='qualifying' && (<div>
-        <h2 style={{...S.h2,marginBottom:12}}>Qualifying Standards - All Events</h2>
-        <div style={S.card}>
-          <table style={{width:'100%',borderCollapse:'collapse'}}>
-            <thead><tr><th style={S.th}>Event</th><th style={S.th}>Gender</th><th style={S.th}>Standard</th><th style={S.th}>Mark</th></tr></thead>
-            <tbody>
-              {events.flatMap(evt=>(evt.qualifyingStandards||[]).map(std=>(
-                <tr key={`${evt.id}-${std.id}`}>
-                  <td style={S.td}>{evt.name}</td>
-                  <td style={S.td}>{evt.gender}</td>
-                  <td style={{...S.td,fontWeight:600}}>{std.name}</td>
-                  <td style={S.td}>{evt.measurableType==='Time'?formatTime(std.timeMs):fieldToStr(std.ft,std.inch,std.qtr)}</td>
-                </tr>
-              )))}
-              {events.every(e=>!(e.qualifyingStandards||[]).length)&&<tr><td colSpan={4} style={{...S.td,textAlign:'center',color:C.textMuted}}>No standards set. Add them in the Events page.</td></tr>}
-            </tbody>
-          </table>
-        </div>
-      </div>)}
+      {tab==='qualifying' && (()=>{
+        const stdTypes = data.qualifyingStandardTypes||[];
+        return (<div>
+          <h2 style={{...S.h2,marginBottom:12}}>Qualifying Standard Types</h2>
+          <p style={{fontSize:12,color:C.textMuted,marginBottom:10}}>Define standard types (e.g. IAC Qualifier, State Qualifier), then bulk-enter marks for all events at once.</p>
+          <div style={{...S.card,marginBottom:16}}>
+            <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10}}>
+              {stdTypes.map(t=>(
+                <span key={t.id} style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:12,fontWeight:600,padding:'4px 12px',borderRadius:16,background:C.accentMuted,color:C.accent,border:`1px solid ${C.accent}`}}>
+                  {t.name}
+                  <button style={{background:'none',border:'none',color:C.accent,cursor:'pointer',fontSize:11,padding:0,fontWeight:700}} onClick={()=>save({...data,qualifyingStandardTypes:stdTypes.filter(x=>x.id!==t.id)})}>✕</button>
+                </span>
+              ))}
+              {!stdTypes.length&&<span style={{fontSize:12,color:C.textMuted,fontStyle:'italic'}}>No types defined yet</span>}
+            </div>
+            <div style={{display:'flex',gap:6}}>
+              <input style={{...S.input,flex:1}} placeholder="New type name (e.g. IAC Qualifier)" id="newStdTypeName" onKeyDown={e=>{if(e.key==='Enter'){const v=e.target.value.trim();if(v){save({...data,qualifyingStandardTypes:[...stdTypes,{id:uid(),name:v}]});e.target.value='';}}}} />
+              <button style={{...S.btn,...S.btnPrimary,fontSize:12}} onClick={()=>{const el=document.getElementById('newStdTypeName');const v=(el||{}).value||'';if(v.trim()){save({...data,qualifyingStandardTypes:[...stdTypes,{id:uid(),name:v.trim()}]});el.value='';}}}>+ Add</button>
+            </div>
+          </div>
+          {stdTypes.length>0&&(<BulkStandardEntry data={data} save={save} events={events} stdTypes={stdTypes} />)}
+          <h2 style={{...S.h2,marginTop:20,marginBottom:12}}>All Standards</h2>
+          <div style={S.card}>
+            <table style={{width:'100%',borderCollapse:'collapse'}}>
+              <thead><tr><th style={S.th}>Event</th><th style={S.th}>Gender</th><th style={S.th}>Standard</th><th style={S.th}>Mark</th><th style={{...S.th,width:30}}></th></tr></thead>
+              <tbody>
+                {events.flatMap(evt=>(evt.qualifyingStandards||[]).map(std=>(
+                  <tr key={`${evt.id}-${std.id}`}>
+                    <td style={S.td}>{evt.name}</td>
+                    <td style={S.td}>{evt.gender}</td>
+                    <td style={{...S.td,fontWeight:600}}>{std.name}</td>
+                    <td style={S.td}>{evt.measurableType==='Time'?formatTime(std.timeMs):fieldToStr(std.ft,std.inch,std.qtr)}</td>
+                    <td style={S.td}><button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:11}} onClick={()=>save({...data,events:(data.events||[]).map(e=>e.id===evt.id?{...e,qualifyingStandards:(e.qualifyingStandards||[]).filter(s=>s.id!==std.id)}:e)})}>✕</button></td>
+                  </tr>
+                )))}
+                {events.every(e=>!(e.qualifyingStandards||[]).length)&&<tr><td colSpan={5} style={{...S.td,textAlign:'center',color:C.textMuted}}>No standards set yet.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </div>);
+      })()}
       
       {tab==='records' && (<div>
         <h2 style={{...S.h2,marginBottom:12}}>School Records - All Events</h2>

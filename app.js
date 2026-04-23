@@ -1661,6 +1661,25 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
   const [resEventFilter, setResEventFilter] = useState('');
   const [resSort, setResSort] = useState('name');
   const [resSortDir, setResSortDir] = useState('asc');
+  const [editResultId, setEditResultId] = useState(null);
+  const [editResultForm, setEditResultForm] = useState({min:'',sec:'',ft:'',inch:'',qtr:''});
+  const saveEditResult = () => {
+    if(!editResultId) return;
+    const r = (data.results||[]).find(x=>x.id===editResultId);
+    if(!r) return;
+    const evt = events.find(e=>e.id===r.eventId);
+    let updates;
+    if(evt && isFieldEvent(evt)) {
+      updates = {ft:parseInt(editResultForm.ft)||0, inch:parseInt(editResultForm.inch)||0, qtr:parseFloat(editResultForm.qtr)||0, verified:true};
+    } else {
+      updates = {timeMs:parseTimeToMs(editResultForm.min, editResultForm.sec), verified:true};
+    }
+    save({...data, results:(data.results||[]).map(x=>x.id===editResultId?{...x,...updates}:x)});
+    setEditResultId(null);
+  };
+  const verifyResult = (id) => save({...data, results:(data.results||[]).map(x=>x.id===id?{...x,verified:true}:x)});
+  const unverifyResult = (id) => save({...data, results:(data.results||[]).map(x=>x.id===id?{...x,verified:false}:x)});
+  const deleteResult = (id) => save({...data, results:(data.results||[]).filter(x=>x.id!==id)});
   const meet = data.meets.find(m=>m.id===meetId);
   if(!meet) return <div style={S.card}><p>Meet not found</p><button style={S.backLink} onClick={()=>nav('meets')}>{"<- "}Back to Meets</button></div>;
   const maxEventsPerAthlete = meet.maxEventsPerAthlete || 0;
@@ -2311,17 +2330,18 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                   <span style={{fontSize:11,color:C.textMuted}}>{filtered2.length} result{filtered2.length!==1?'s':''}</span>
                 </div>
                 <table style={{width:'100%',borderCollapse:'collapse'}}>
-                  <thead><tr><th style={{...S.th,padding:'4px 6px'}}>Event</th><th style={{...S.th,padding:'4px 6px'}}>Time/Mark</th><th style={{...S.th,padding:'4px 6px',width:90}}></th></tr></thead>
+                  <thead><tr><th style={{...S.th,padding:'4px 6px'}}>Event</th><th style={{...S.th,padding:'4px 6px'}}>Time/Mark</th><th style={{...S.th,padding:'4px 6px',width:60}}></th><th style={{...S.th,padding:'4px 6px',width:110}}></th></tr></thead>
                   <tbody>
                     {filtered2.map(r=>{
                       const evt = events.find(e=>e.id===r.eventId);
                       if(!evt) return null;
                       const isField = isFieldEvent(evt);
-                      const valStr = r.timeMs ? (isField ? fieldToStr(r.ft,r.inch,r.qtr) : formatTime(r.timeMs)) : '-';
+                      const valStr = r.timeMs ? (isField ? fieldToStr(r.ft,r.inch,r.qtr) : formatTime(r.timeMs)) : (isField&&(r.ft||r.inch||r.qtr)?fieldToStr(r.ft,r.inch,r.qtr):'-');
                       const pr = !r.isRelaySplit && isPR(r);
                       const qual = !r.isRelaySplit && isQualifying(r);
                       const relayComposite = r.isRelaySplit ? (r._relayTotal ? {timeMs:r._relayTotal} : athRelays.find(rr=>rr.eventId===r.eventId&&rr.date===r.date)) : null;
-                      return (
+                      const isEditing = editResultId===r.id;
+                      return [
                         <tr key={r.id}>
                           <td style={{...S.td,padding:'4px 6px',fontSize:12}}>
                             {getEventLabel(evt)}
@@ -2333,13 +2353,41 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                           </td>
                           <td style={{...S.td,padding:'4px 6px'}}>
                             <div style={{display:'flex',gap:3,flexWrap:'wrap'}}>
+                              {r.verified&&<VerifiedBadge verified={true} small />}
                               {pr && <span style={{fontSize:9,fontWeight:700,padding:'2px 6px',borderRadius:8,background:C.successMuted,color:C.success,border:`1px solid ${C.success}`}}>PR</span>}
                               {qual && <span style={{fontSize:9,fontWeight:700,padding:'2px 6px',borderRadius:8,background:C.accentMuted,color:C.accent,border:`1px solid ${C.accent}`}} title={qual.name}>Q</span>}
                               {r.isRelaySplit&&<span style={{fontSize:9,fontWeight:700,padding:'2px 6px',borderRadius:8,background:'#6b46c120',color:'#6b46c1',border:'1px solid #6b46c1'}}>R</span>}
                             </div>
                           </td>
+                          <td style={{...S.td,padding:'4px 6px'}}>
+                            {!r._fromComposite&&<div style={{display:'flex',gap:3}}>
+                              {!r.verified&&<button style={{...S.btn,...S.btnSecondary,fontSize:9,padding:'2px 6px'}} onClick={()=>verifyResult(r.id)} title="Mark as verified">✓</button>}
+                              {r.verified&&<button style={{...S.btn,fontSize:9,padding:'2px 6px',background:'rgba(43,108,176,0.1)',color:'#2b6cb0',border:'1px solid #2b6cb0'}} onClick={()=>unverifyResult(r.id)} title="Unverify">✓</button>}
+                              <button style={{...S.btn,...S.btnSecondary,fontSize:9,padding:'2px 6px'}} onClick={()=>{if(isEditing){setEditResultId(null);}else{setEditResultId(r.id);if(isField)setEditResultForm({ft:r.ft||'',inch:r.inch||'',qtr:r.qtr||''});else{const ms=r.timeMs||0;setEditResultForm({min:Math.floor(ms/60000)+'',sec:((ms%60000)/1000).toFixed(2)});}}}}>{isEditing?'Cancel':'Edit'}</button>
+                              <button style={{...S.btn,...S.btnDanger,fontSize:9,padding:'2px 6px'}} onClick={()=>deleteResult(r.id)}>✕</button>
+                            </div>}
+                          </td>
+                        </tr>,
+                        isEditing&&<tr key={r.id+'-edit'}>
+                          <td colSpan={4} style={{...S.td,padding:'6px',background:C.bg}}>
+                            <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                              <span style={{fontSize:11,color:C.textSecondary,fontWeight:600}}>Official time:</span>
+                              {isField ? (<>
+                                <input style={{...S.input,width:50,fontSize:12,padding:'4px 6px',textAlign:'center'}} type="number" placeholder="ft" value={editResultForm.ft} onChange={e=>setEditResultForm(f=>({...f,ft:e.target.value}))} />
+                                <span style={{fontSize:11,color:C.textMuted}}>'</span>
+                                <input style={{...S.input,width:50,fontSize:12,padding:'4px 6px',textAlign:'center'}} type="number" placeholder="in" value={editResultForm.inch} onChange={e=>setEditResultForm(f=>({...f,inch:e.target.value}))} />
+                                <span style={{fontSize:11,color:C.textMuted}}>"</span>
+                                <input style={{...S.input,width:50,fontSize:12,padding:'4px 6px',textAlign:'center'}} type="number" step="0.25" placeholder="qtr" value={editResultForm.qtr} onChange={e=>setEditResultForm(f=>({...f,qtr:e.target.value}))} />
+                              </>) : (<>
+                                <input style={{...S.input,width:50,fontSize:12,padding:'4px 6px',textAlign:'center'}} type="number" min="0" value={editResultForm.min} onChange={e=>setEditResultForm(f=>({...f,min:e.target.value}))} />
+                                <span style={{fontSize:11,color:C.textMuted}}>:</span>
+                                <input style={{...S.input,width:70,fontSize:12,padding:'4px 6px',textAlign:'center'}} type="text" inputMode="decimal" placeholder="00.00" value={editResultForm.sec} onChange={e=>setEditResultForm(f=>({...f,sec:e.target.value}))} />
+                              </>)}
+                              <button style={{...S.btn,...S.btnPrimary,fontSize:11,padding:'4px 12px'}} onClick={saveEditResult}>Save & Verify</button>
+                            </div>
+                          </td>
                         </tr>
-                      );
+                      ];
                     })}
                   </tbody>
                 </table>
@@ -4968,7 +5016,11 @@ function EventsPage({ data, save, nav }) {
               <label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Standard Type</label>
               <select style={{...S.select,width:'100%'}} value={stdForm.name} onChange={e=>setStdForm({...stdForm,name:e.target.value})}>
                 <option value="">Select type...</option>
-                {(data.qualifyingStandardTypes||[]).map(t=><option key={t.id} value={t.name}>{t.name}</option>)}
+                {(data.qualifyingStandardTypes||[]).flatMap(t=>{
+                  const subs = t.subtypes||[];
+                  if(subs.length===0) return [<option key={t.id} value={t.name}>{t.name}</option>];
+                  return subs.map((s,si)=><option key={t.id+'-'+si} value={t.name+' - '+s}>{t.name} - {s}</option>);
+                })}
                 <option value="__custom">Custom...</option>
               </select>
               {stdForm.name==='__custom'&&<input style={{...S.input,marginTop:6}} placeholder="Custom standard name" value={stdForm.customName||''} onChange={e=>setStdForm({...stdForm,customName:e.target.value})} />}
@@ -5691,15 +5743,15 @@ function RelayTimer({ data, save, nav, events, addResult, addResults, getAthlete
     </div>
   );
 }
-function BulkStandardEntry({ data, save, events, stdTypes }) {
-  const [bulkType, setBulkType] = useState('');
+function BulkStandardEntry({ data, save, events, stdTypes, combos }) {
+  const [bulkLabel, setBulkLabel] = useState('');
   const [bulkEntries, setBulkEntries] = useState({});
-  const prefill = (typeId) => {
-    setBulkType(typeId);
-    const typeName = (stdTypes.find(t=>t.id===typeId)||{}).name||'';
+  const allCombos = combos || [];
+  const prefill = (label) => {
+    setBulkLabel(label);
     const pre = {};
     (data.events||[]).forEach(evt=>{
-      const existing = (evt.qualifyingStandards||[]).find(s=>s.name===typeName);
+      const existing = (evt.qualifyingStandards||[]).find(s=>s.name===label);
       if(existing) {
         if(evt.measurableType==='Time') pre[evt.id] = {min:Math.floor((existing.timeMs||0)/60000)+'', sec:(((existing.timeMs||0)%60000)/1000).toFixed(2)};
         else pre[evt.id] = {ft:(existing.ft||'')+'', inch:(existing.inch||'')+'', qtr:(existing.qtr||'')+''};
@@ -5708,20 +5760,19 @@ function BulkStandardEntry({ data, save, events, stdTypes }) {
     setBulkEntries(pre);
   };
   const saveBulk = () => {
-    if(!bulkType) return;
-    const typeName = (stdTypes.find(t=>t.id===bulkType)||{}).name||'';
+    if(!bulkLabel) return;
     const updatedEvents = (data.events||[]).map(evt=>{
       const val = bulkEntries[evt.id];
-      const existing = (evt.qualifyingStandards||[]).filter(s=>s.name!==typeName);
+      const existing = (evt.qualifyingStandards||[]).filter(s=>s.name!==bulkLabel);
       if(!val) return {...evt, qualifyingStandards:existing};
       if(evt.measurableType==='Time') {
         const ms = parseTimeToMs(val.min||0, val.sec||0);
         if(!ms) return {...evt, qualifyingStandards:existing};
-        return {...evt, qualifyingStandards:[...existing, {id:uid(), name:typeName, timeMs:ms}]};
+        return {...evt, qualifyingStandards:[...existing, {id:uid(), name:bulkLabel, timeMs:ms}]};
       } else {
         const ft=parseInt(val.ft)||0; const inch=parseInt(val.inch)||0; const qtr=parseFloat(val.qtr)||0;
         if(!ft&&!inch&&!qtr) return {...evt, qualifyingStandards:existing};
-        return {...evt, qualifyingStandards:[...existing, {id:uid(), name:typeName, ft, inch, qtr}]};
+        return {...evt, qualifyingStandards:[...existing, {id:uid(), name:bulkLabel, ft, inch, qtr}]};
       }
     });
     save({...data, events:updatedEvents});
@@ -5732,13 +5783,13 @@ function BulkStandardEntry({ data, save, events, stdTypes }) {
     <div>
       <h2 style={{...S.h2,marginBottom:8}}>Bulk Enter Standards</h2>
       <div style={{display:'flex',gap:6,marginBottom:12,alignItems:'center'}}>
-        <select style={S.select} value={bulkType} onChange={e=>prefill(e.target.value)}>
-          <option value="">Select standard type...</option>
-          {stdTypes.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
+        <select style={S.select} value={bulkLabel} onChange={e=>prefill(e.target.value)}>
+          <option value="">Select standard...</option>
+          {allCombos.map((c,i)=><option key={i} value={c.label}>{c.label}</option>)}
         </select>
-        {bulkType&&<button style={{...S.btn,...S.btnPrimary,fontSize:12}} onClick={saveBulk}>Save All</button>}
+        {bulkLabel&&<button style={{...S.btn,...S.btnPrimary,fontSize:12}} onClick={saveBulk}>Save All</button>}
       </div>
-      {bulkType&&(<div style={S.card}>
+      {bulkLabel&&(<div style={S.card}>
         <p style={{fontSize:11,color:C.textMuted,marginBottom:8}}>Enter the qualifying mark for each event. Leave blank to skip. Existing values for this standard type will be replaced.</p>
         {trackEvts.length>0&&<div style={{marginBottom:12}}>
           <div style={{fontSize:12,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',marginBottom:6}}>Track Events</div>
@@ -5965,25 +6016,40 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
       
       {tab==='qualifying' && (()=>{
         const stdTypes = data.qualifyingStandardTypes||[];
+        const allCombos = [];
+        stdTypes.forEach(t=>{
+          const subs = t.subtypes||[];
+          if(subs.length===0) allCombos.push({typeId:t.id,typeName:t.name,subtype:null,label:t.name});
+          else subs.forEach(s=>allCombos.push({typeId:t.id,typeName:t.name,subtype:s,label:t.name+' - '+s}));
+        });
         return (<div>
           <h2 style={{...S.h2,marginBottom:12}}>Qualifying Standard Types</h2>
-          <p style={{fontSize:12,color:C.textMuted,marginBottom:10}}>Define standard types (e.g. IAC Qualifier, State Qualifier), then bulk-enter marks for all events at once.</p>
+          <p style={{fontSize:12,color:C.textMuted,marginBottom:10}}>Define standard types (e.g. IAC Qualifier, State Qualifier) with optional sub-types (e.g. FAT, Hand Timing, Automatic, Provisional). Then bulk-enter marks.</p>
           <div style={{...S.card,marginBottom:16}}>
-            <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10}}>
-              {stdTypes.map(t=>(
-                <span key={t.id} style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:12,fontWeight:600,padding:'4px 12px',borderRadius:16,background:C.accentMuted,color:C.accent,border:`1px solid ${C.accent}`}}>
-                  {t.name}
-                  <button style={{background:'none',border:'none',color:C.accent,cursor:'pointer',fontSize:11,padding:0,fontWeight:700}} onClick={()=>save({...data,qualifyingStandardTypes:stdTypes.filter(x=>x.id!==t.id)})}>✕</button>
-                </span>
-              ))}
-              {!stdTypes.length&&<span style={{fontSize:12,color:C.textMuted,fontStyle:'italic'}}>No types defined yet</span>}
-            </div>
-            <div style={{display:'flex',gap:6}}>
-              <input style={{...S.input,flex:1}} placeholder="New type name (e.g. IAC Qualifier)" id="newStdTypeName" onKeyDown={e=>{if(e.key==='Enter'){const v=e.target.value.trim();if(v){save({...data,qualifyingStandardTypes:[...stdTypes,{id:uid(),name:v}]});e.target.value='';}}}} />
-              <button style={{...S.btn,...S.btnPrimary,fontSize:12}} onClick={()=>{const el=document.getElementById('newStdTypeName');const v=(el||{}).value||'';if(v.trim()){save({...data,qualifyingStandardTypes:[...stdTypes,{id:uid(),name:v.trim()}]});el.value='';}}}>+ Add</button>
+            {stdTypes.map(t=>(
+              <div key={t.id} style={{padding:'8px 0',borderBottom:`1px solid ${C.borderLight}`,marginBottom:4}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                  <span style={{fontWeight:700,fontSize:13,color:C.accent}}>{t.name}</span>
+                  <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:11}} onClick={()=>save({...data,qualifyingStandardTypes:stdTypes.filter(x=>x.id!==t.id)})}>Remove</button>
+                </div>
+                <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:4}}>
+                  {(t.subtypes||[]).map((s,si)=>(
+                    <span key={si} style={{display:'inline-flex',alignItems:'center',gap:3,fontSize:11,padding:'2px 10px',borderRadius:12,background:C.surface2,color:C.textSecondary,border:`1px solid ${C.border}`}}>
+                      {s}
+                      <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:10,padding:0}} onClick={()=>save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,subtypes:(x.subtypes||[]).filter((_,j)=>j!==si)}:x)})}>✕</button>
+                    </span>
+                  ))}
+                  <input style={{...S.input,width:130,fontSize:11,padding:'2px 8px'}} placeholder="+ sub-type" onKeyDown={e=>{if(e.key==='Enter'&&e.target.value.trim()){save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,subtypes:[...(x.subtypes||[]),e.target.value.trim()]}:x)});e.target.value='';}}} />
+                </div>
+              </div>
+            ))}
+            {!stdTypes.length&&<span style={{fontSize:12,color:C.textMuted,fontStyle:'italic'}}>No types defined yet</span>}
+            <div style={{display:'flex',gap:6,marginTop:8}}>
+              <input style={{...S.input,flex:1}} placeholder="New type name (e.g. IAC Qualifier)" id="newStdTypeName" onKeyDown={e=>{if(e.key==='Enter'){const v=e.target.value.trim();if(v){save({...data,qualifyingStandardTypes:[...stdTypes,{id:uid(),name:v,subtypes:[]}]});e.target.value='';}}}} />
+              <button style={{...S.btn,...S.btnPrimary,fontSize:12}} onClick={()=>{const el=document.getElementById('newStdTypeName');const v=(el||{}).value||'';if(v.trim()){save({...data,qualifyingStandardTypes:[...stdTypes,{id:uid(),name:v.trim(),subtypes:[]}]});el.value='';}}}>+ Add Type</button>
             </div>
           </div>
-          {stdTypes.length>0&&(<BulkStandardEntry data={data} save={save} events={events} stdTypes={stdTypes} />)}
+          {allCombos.length>0&&(<BulkStandardEntry data={data} save={save} events={events} stdTypes={stdTypes} combos={allCombos} />)}
           <h2 style={{...S.h2,marginTop:20,marginBottom:12}}>All Standards</h2>
           <div style={S.card}>
             <table style={{width:'100%',borderCollapse:'collapse'}}>

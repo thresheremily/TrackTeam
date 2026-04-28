@@ -142,6 +142,26 @@ const getDefaultOrder = (evt) => {
   const idx = DEFAULT_MEET_ORDER.findIndex(o=>o.name===evt.name&&o.gender===evt.gender);
   return idx>=0?idx:500;
 };
+const getSortedMeetEventIds = (data, events, meetId) => {
+  const meet = (data.meets||[]).find(m=>m.id===meetId);
+  if(!meet) return [];
+  const eventOrder = meet.eventOrder || [];
+  const excluded = new Set(meet.excludedEvents || []);
+  const customIds = meet.customEventIds || [];
+  const defaultApplicable = events.filter(e=>(e.trackType===meet.trackType||e.trackType==='Both')&&!e.meetSpecific);
+  const customEvts = events.filter(e=>customIds.includes(e.id));
+  const applicable = [...defaultApplicable,...customEvts.filter(ce=>!defaultApplicable.some(de=>de.id===ce.id))].filter(e=>!excluded.has(e.id));
+  const withEntries = applicable.filter(evt=>{
+    const me = (meet.events||[]).find(m=>m.eventId===evt.id);
+    return me && (me.entries||[]).length > 0;
+  });
+  withEntries.sort((a,b)=>{
+    const idxA=eventOrder.indexOf(a.id);const idxB=eventOrder.indexOf(b.id);
+    if(idxA>=0&&idxB>=0)return idxA-idxB;if(idxA>=0)return -1;if(idxB>=0)return 1;
+    return getDefaultOrder(a)-getDefaultOrder(b);
+  });
+  return withEntries.map(e=>e.id);
+};
 const parseCSV = (text) => {
   const lines = text.trim().split(/\r?\n/);
   if(lines.length < 2) return { headers: [], rows: [] };
@@ -1765,6 +1785,18 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
     else updatedMeetEvents.push({eventId, entries:newEntries});
     save({...data, meets:data.meets.map(m=>m.id===meetId?{...m, events:updatedMeetEvents}:m)});
   };
+  const swapRelayLegs = (eventId, entryIdx, legA, legB) => {
+    const me = (meet.events||[]).find(e=>e.eventId===eventId);
+    if(!me) return;
+    const newEntries = (me.entries||[]).map((en,i)=>{
+      if(i!==entryIdx) return en;
+      const athletes = [...(en.athletes||[])];
+      if(legA<0||legB<0||legA>=athletes.length||legB>=athletes.length) return en;
+      [athletes[legA], athletes[legB]] = [athletes[legB], athletes[legA]];
+      return {...en, athletes};
+    });
+    saveEntries(eventId, newEntries);
+  };
   const toggleExcludeEvent = (eventId) => {
     const cur = meet.excludedEvents || [];
     const next = cur.includes(eventId) ? cur.filter(id=>id!==eventId) : [...cur, eventId];
@@ -1898,24 +1930,19 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
   const goToRecord = (me) => {
     const entries = me.entries || [];
     const athleteIds = entries.flatMap(en => en.athletes ? en.athletes.map(a=>a.athleteId) : [en.athleteId]).filter(Boolean);
-    const sortedEvents = filtered.filter(m=>m.entries && m.entries.length>0);
-    const curIdx = sortedEvents.findIndex(m=>m.eventId===me.eventId);
-    const nextEvent = curIdx>=0 && curIdx < sortedEvents.length-1 ? sortedEvents[curIdx+1] : null;
-    const prevEvent = curIdx>0 ? sortedEvents[curIdx-1] : null;
+    const sortedIds = getSortedMeetEventIds(data, events, meetId);
+    const curIdx = sortedIds.indexOf(me.evt.id);
+    const nextId = curIdx>=0 && curIdx<sortedIds.length-1 ? sortedIds[curIdx+1] : null;
+    const prevId = curIdx>0 ? sortedIds[curIdx-1] : null;
     const navParams = {
       meetId, eventId:me.evt.id, athleteIds, entries,
-      nextEventId: nextEvent ? nextEvent.evt.id : null,
-      nextEventLabel: nextEvent ? getEventLabel(nextEvent.evt) : null,
-      prevEventId: prevEvent ? prevEvent.evt.id : null,
-      prevEventLabel: prevEvent ? getEventLabel(prevEvent.evt) : null,
+      sortedEventIds: sortedIds,
+      nextEventId: nextId, nextEventLabel: nextId ? getEventLabel(events.find(e=>e.id===nextId)||{}) : null,
+      prevEventId: prevId, prevEventLabel: prevId ? getEventLabel(events.find(e=>e.id===prevId)||{}) : null,
     };
-    if(me.evt.eventType === 'Field') {
-      nav('fieldEvent', navParams);
-    } else if(me.evt.entryType === 'Relay') {
-      nav('relayTimer', navParams);
-    } else {
-      nav('multiSplit', navParams);
-    }
+    if(me.evt.eventType === 'Field') nav('fieldEvent', navParams);
+    else if(me.evt.entryType === 'Relay') nav('relayTimer', navParams);
+    else nav('multiSplit', navParams);
   };
   const goToRecordSelected = goToRecord;
   const toggleSelect = (eventId, idx) => {
@@ -2055,12 +2082,18 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                         ...(en.athletes||[]).map((a,ai) => {
                           const ath = data.athletes.find(at=>at.id===a.athleteId);
                           const pr = getAthletePR(a.athleteId, me.eventId);
+                          const legCount = (en.athletes||[]).length;
                           return (
                             <tr key={`${ei}-${ai}`}>
                               <td style={{...S.td,paddingLeft:16}}><span style={{fontSize:10,color:C.textMuted,marginRight:6}}>Leg {ai+1}</span>{ath?athDisplay(ath):'-'}</td>
                               <td style={S.td}>{pr ? formatTime(pr.timeMs) : '-'}</td>
                               <td style={S.td}>{a.goalMs ? formatTime(a.goalMs) : '-'}</td>
-                              <td style={S.td}></td>
+                              <td style={S.td}>
+                                <div style={{display:'flex',gap:2}}>
+                                  <button style={{background:'none',border:`1px solid ${C.border}`,borderRadius:4,cursor:'pointer',padding:'2px 6px',fontSize:11,color:ai===0?C.border:C.textSecondary}} disabled={ai===0} onClick={()=>swapRelayLegs(me.eventId,ei,ai,ai-1)}>↑</button>
+                                  <button style={{background:'none',border:`1px solid ${C.border}`,borderRadius:4,cursor:'pointer',padding:'2px 6px',fontSize:11,color:ai>=legCount-1?C.border:C.textSecondary}} disabled={ai>=legCount-1} onClick={()=>swapRelayLegs(me.eventId,ei,ai,ai+1)}>↓</button>
+                                </div>
+                              </td>
                             </tr>
                           );
                         }),
@@ -5150,6 +5183,28 @@ function RaceTimer({ data, save, nav, events, addResult, getAthletePR, checkReco
     </div>
   );
 }
+const navToMeetEvent = (data, events, nav, preset, targetEventId) => {
+  if(!targetEventId||!preset||!preset.meetId) return;
+  const meet = (data.meets||[]).find(m=>m.id===preset.meetId);
+  if(!meet) return;
+  const me = (meet.events||[]).find(e=>e.eventId===targetEventId);
+  const evt = events.find(e=>e.id===targetEventId);
+  if(!me||!evt) return;
+  const athIds = (me.entries||[]).flatMap(en=>en.athletes?en.athletes.map(a=>a.athleteId):[en.athleteId]).filter(Boolean);
+  const sorted = preset.sortedEventIds || getSortedMeetEventIds(data, events, preset.meetId);
+  const idx = sorted.indexOf(targetEventId);
+  const nextId = idx>=0&&idx<sorted.length-1?sorted[idx+1]:null;
+  const prevId = idx>0?sorted[idx-1]:null;
+  const nP = {
+    meetId:preset.meetId, eventId:targetEventId, athleteIds:athIds, entries:me.entries,
+    sortedEventIds:sorted,
+    nextEventId:nextId, nextEventLabel:nextId?getEventLabel(events.find(e=>e.id===nextId)||{}):null,
+    prevEventId:prevId, prevEventLabel:prevId?getEventLabel(events.find(e=>e.id===prevId)||{}):null
+  };
+  if(evt.eventType==='Field') nav('fieldEvent',nP);
+  else if(evt.entryType==='Relay') nav('relayTimer',nP);
+  else nav('multiSplit',nP);
+};
 function MultiSplitTimer({ data, save, nav, events, addResult, addResults, getAthletePR, checkRecord, preset }) {
   const [meetId, setMeetId] = useState((preset||{}).meetId||'');
   const [eventId, setEventId] = useState((preset||{}).eventId||'');
@@ -5263,38 +5318,8 @@ function MultiSplitTimer({ data, save, nav, events, addResult, addResults, getAt
         <button style={S.backLink} onClick={()=>(preset||{}).meetId?nav('meetSub',{meetId:preset.meetId}):nav('tools')}>{"<- "}Back to Meet</button>
         {(preset||{}).meetId&&((preset||{}).prevEventId||(preset||{}).nextEventId)&&(
           <div style={{display:'flex',gap:6}}>
-            {(preset||{}).prevEventId&&<button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'6px 12px'}} onClick={()=>{
-              const prevMe = ((data.meets.find(m=>m.id===preset.meetId)||{}).events||[]).find(e=>e.eventId===preset.prevEventId);
-              const prevEvt = events.find(e=>e.id===preset.prevEventId);
-              if(!prevMe||!prevEvt) return;
-              const prevAthIds = (prevMe.entries||[]).flatMap(en=>en.athletes?en.athletes.map(a=>a.athleteId):[en.athleteId]).filter(Boolean);
-              const all = ((data.meets.find(m=>m.id===preset.meetId)||{}).events||[]).filter(m=>m.entries&&m.entries.length>0);
-              const idx = all.findIndex(m=>m.eventId===preset.prevEventId);
-              const next = idx>=0&&idx<all.length-1 ? all[idx+1] : null;
-              const prev = idx>0 ? all[idx-1] : null;
-              const navParams = {meetId:preset.meetId, eventId:preset.prevEventId, athleteIds:prevAthIds, entries:prevMe.entries,
-                nextEventId: next?next.eventId:null, nextEventLabel: next?getEventLabel(events.find(e=>e.id===next.eventId)||{}):null,
-                prevEventId: prev?prev.eventId:null, prevEventLabel: prev?getEventLabel(events.find(e=>e.id===prev.eventId)||{}):null};
-              if(prevEvt.eventType==='Field') nav('fieldEvent', navParams);
-              else if(prevEvt.entryType==='Relay') nav('relayTimer', navParams);
-              else nav('multiSplit', navParams);
-            }}>← {preset.prevEventLabel}</button>}
-            {(preset||{}).nextEventId&&<button style={{...S.btn,...S.btnPrimary,fontSize:11,padding:'6px 12px'}} onClick={()=>{
-              const nextMe = ((data.meets.find(m=>m.id===preset.meetId)||{}).events||[]).find(e=>e.eventId===preset.nextEventId);
-              const nextEvt = events.find(e=>e.id===preset.nextEventId);
-              if(!nextMe||!nextEvt) return;
-              const nextAthIds = (nextMe.entries||[]).flatMap(en=>en.athletes?en.athletes.map(a=>a.athleteId):[en.athleteId]).filter(Boolean);
-              const all = ((data.meets.find(m=>m.id===preset.meetId)||{}).events||[]).filter(m=>m.entries&&m.entries.length>0);
-              const idx = all.findIndex(m=>m.eventId===preset.nextEventId);
-              const next = idx>=0&&idx<all.length-1 ? all[idx+1] : null;
-              const prev = idx>0 ? all[idx-1] : null;
-              const navParams = {meetId:preset.meetId, eventId:preset.nextEventId, athleteIds:nextAthIds, entries:nextMe.entries,
-                nextEventId: next?next.eventId:null, nextEventLabel: next?getEventLabel(events.find(e=>e.id===next.eventId)||{}):null,
-                prevEventId: prev?prev.eventId:null, prevEventLabel: prev?getEventLabel(events.find(e=>e.id===prev.eventId)||{}):null};
-              if(nextEvt.eventType==='Field') nav('fieldEvent', navParams);
-              else if(nextEvt.entryType==='Relay') nav('relayTimer', navParams);
-              else nav('multiSplit', navParams);
-            }}>{preset.nextEventLabel} →</button>}
+            {(preset||{}).prevEventId&&<button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'6px 12px'}} onClick={()=>navToMeetEvent(data,events,nav,preset,preset.prevEventId)}>← {preset.prevEventLabel}</button>}
+            {(preset||{}).nextEventId&&<button style={{...S.btn,...S.btnPrimary,fontSize:11,padding:'6px 12px'}} onClick={()=>navToMeetEvent(data,events,nav,preset,preset.nextEventId)}>{preset.nextEventLabel} →</button>}
           </div>
         )}
       </div>
@@ -5370,7 +5395,22 @@ function MultiSplitTimer({ data, save, nav, events, addResult, addResults, getAt
           })}
           <button style={{...S.btn,...S.btnDanger,fontSize:20,padding:'36px 20px',minHeight:140,fontWeight:700,borderRadius:14,touchAction:'manipulation'}} onClick={handleStop}>■ Stop</button>
         </>}
-        {finished&&<div style={{display:'flex',gap:12,justifyContent:'center',flexWrap:'wrap',gridColumn:'1 / -1'}}>{!saved&&<button style={{...S.btn,...S.btnSuccess}} onClick={handleSave}>Save All</button>}<button style={{...S.btn,...S.btnDanger}} onClick={handleReset}>Reset</button>{saved&&<SavedIndicator saved={true} />}</div>}
+        {finished&&<div style={{display:'flex',gap:12,justifyContent:'center',flexWrap:'wrap',gridColumn:'1 / -1'}}>
+          {!saved&&<button style={{...S.btn,...S.btnSuccess}} onClick={handleSave}>Save All</button>}
+          <button style={{...S.btn,...S.btnDanger}} onClick={handleReset}>Reset</button>
+          {saved&&<SavedIndicator saved={true} />}
+          {saved&&<button style={{...S.btn,...S.btnPrimary,fontSize:14,padding:'10px 24px'}} onClick={()=>{
+            clearInterval(timerRef.current);setRunning(false);setElapsed(0);setFinished(false);setSaved(false);setCollapsed(false);
+            setAthletes(a=>a.map(at=>({...at,laps:[]})));
+            const newSel={};
+            athletes.forEach(at=>{
+              if(!at.athleteId) return;
+              const hasResult = (data.results||[]).some(r=>r.athleteId===at.athleteId&&r.eventId===eventId&&r.meetId===meetId&&!r.isRelay);
+              if(!hasResult) newSel[at.athleteId]=true;
+            });
+            setSelectedIds(newSel);
+          }}>Next Heat</button>}
+        </div>}
       </div>
       {athletes.map((at,i)=>{
         if(at.laps.length===0) return null;
@@ -5451,38 +5491,8 @@ function FieldEventPage({ data, save, nav, events, addResult, getAthletePR, chec
         <button style={S.backLink} onClick={()=>(preset||{}).meetId?nav('meetSub',{meetId:preset.meetId}):nav('tools')}>{"<- "}Back to Meet</button>
         {(preset||{}).meetId&&((preset||{}).prevEventId||(preset||{}).nextEventId)&&(
           <div style={{display:'flex',gap:6}}>
-            {(preset||{}).prevEventId&&<button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'6px 12px'}} onClick={()=>{
-              const pme = ((data.meets.find(m=>m.id===preset.meetId)||{}).events||[]).find(e=>e.eventId===preset.prevEventId);
-              const pevt = events.find(e=>e.id===preset.prevEventId);
-              if(!pme||!pevt) return;
-              const pAth = (pme.entries||[]).flatMap(en=>en.athletes?en.athletes.map(a=>a.athleteId):[en.athleteId]).filter(Boolean);
-              const all = ((data.meets.find(m=>m.id===preset.meetId)||{}).events||[]).filter(m=>m.entries&&m.entries.length>0);
-              const idx = all.findIndex(m=>m.eventId===preset.prevEventId);
-              const next = idx>=0&&idx<all.length-1 ? all[idx+1] : null;
-              const prev = idx>0 ? all[idx-1] : null;
-              const nP = {meetId:preset.meetId, eventId:preset.prevEventId, athleteIds:pAth, entries:pme.entries,
-                nextEventId: next?next.eventId:null, nextEventLabel: next?getEventLabel(events.find(e=>e.id===next.eventId)||{}):null,
-                prevEventId: prev?prev.eventId:null, prevEventLabel: prev?getEventLabel(events.find(e=>e.id===prev.eventId)||{}):null};
-              if(pevt.eventType==='Field') nav('fieldEvent', nP);
-              else if(pevt.entryType==='Relay') nav('relayTimer', nP);
-              else nav('multiSplit', nP);
-            }}>← {preset.prevEventLabel}</button>}
-            {(preset||{}).nextEventId&&<button style={{...S.btn,...S.btnPrimary,fontSize:11,padding:'6px 12px'}} onClick={()=>{
-              const nme = ((data.meets.find(m=>m.id===preset.meetId)||{}).events||[]).find(e=>e.eventId===preset.nextEventId);
-              const nevt = events.find(e=>e.id===preset.nextEventId);
-              if(!nme||!nevt) return;
-              const nAth = (nme.entries||[]).flatMap(en=>en.athletes?en.athletes.map(a=>a.athleteId):[en.athleteId]).filter(Boolean);
-              const all = ((data.meets.find(m=>m.id===preset.meetId)||{}).events||[]).filter(m=>m.entries&&m.entries.length>0);
-              const idx = all.findIndex(m=>m.eventId===preset.nextEventId);
-              const next = idx>=0&&idx<all.length-1 ? all[idx+1] : null;
-              const prev = idx>0 ? all[idx-1] : null;
-              const nP = {meetId:preset.meetId, eventId:preset.nextEventId, athleteIds:nAth, entries:nme.entries,
-                nextEventId: next?next.eventId:null, nextEventLabel: next?getEventLabel(events.find(e=>e.id===next.eventId)||{}):null,
-                prevEventId: prev?prev.eventId:null, prevEventLabel: prev?getEventLabel(events.find(e=>e.id===prev.eventId)||{}):null};
-              if(nevt.eventType==='Field') nav('fieldEvent', nP);
-              else if(nevt.entryType==='Relay') nav('relayTimer', nP);
-              else nav('multiSplit', nP);
-            }}>{preset.nextEventLabel} →</button>}
+            {(preset||{}).prevEventId&&<button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'6px 12px'}} onClick={()=>navToMeetEvent(data,events,nav,preset,preset.prevEventId)}>← {preset.prevEventLabel}</button>}
+            {(preset||{}).nextEventId&&<button style={{...S.btn,...S.btnPrimary,fontSize:11,padding:'6px 12px'}} onClick={()=>navToMeetEvent(data,events,nav,preset,preset.nextEventId)}>{preset.nextEventLabel} →</button>}
           </div>
         )}
       </div>
@@ -5612,38 +5622,8 @@ function RelayTimer({ data, save, nav, events, addResult, addResults, getAthlete
         <button style={S.backLink} onClick={()=>(preset||{}).meetId?nav('meetSub',{meetId:preset.meetId}):nav('tools')}>{"<- "}Back to Meet</button>
         {(preset||{}).meetId&&((preset||{}).prevEventId||(preset||{}).nextEventId)&&(
           <div style={{display:'flex',gap:6}}>
-            {(preset||{}).prevEventId&&<button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'6px 12px'}} onClick={()=>{
-              const pme = ((data.meets.find(m=>m.id===preset.meetId)||{}).events||[]).find(e=>e.eventId===preset.prevEventId);
-              const pevt = events.find(e=>e.id===preset.prevEventId);
-              if(!pme||!pevt) return;
-              const pAth = (pme.entries||[]).flatMap(en=>en.athletes?en.athletes.map(a=>a.athleteId):[en.athleteId]).filter(Boolean);
-              const all = ((data.meets.find(m=>m.id===preset.meetId)||{}).events||[]).filter(m=>m.entries&&m.entries.length>0);
-              const idx = all.findIndex(m=>m.eventId===preset.prevEventId);
-              const next = idx>=0&&idx<all.length-1 ? all[idx+1] : null;
-              const prev = idx>0 ? all[idx-1] : null;
-              const nP = {meetId:preset.meetId, eventId:preset.prevEventId, athleteIds:pAth, entries:pme.entries,
-                nextEventId: next?next.eventId:null, nextEventLabel: next?getEventLabel(events.find(e=>e.id===next.eventId)||{}):null,
-                prevEventId: prev?prev.eventId:null, prevEventLabel: prev?getEventLabel(events.find(e=>e.id===prev.eventId)||{}):null};
-              if(pevt.eventType==='Field') nav('fieldEvent', nP);
-              else if(pevt.entryType==='Relay') nav('relayTimer', nP);
-              else nav('multiSplit', nP);
-            }}>← {preset.prevEventLabel}</button>}
-            {(preset||{}).nextEventId&&<button style={{...S.btn,...S.btnPrimary,fontSize:11,padding:'6px 12px'}} onClick={()=>{
-              const nme = ((data.meets.find(m=>m.id===preset.meetId)||{}).events||[]).find(e=>e.eventId===preset.nextEventId);
-              const nevt = events.find(e=>e.id===preset.nextEventId);
-              if(!nme||!nevt) return;
-              const nAth = (nme.entries||[]).flatMap(en=>en.athletes?en.athletes.map(a=>a.athleteId):[en.athleteId]).filter(Boolean);
-              const all = ((data.meets.find(m=>m.id===preset.meetId)||{}).events||[]).filter(m=>m.entries&&m.entries.length>0);
-              const idx = all.findIndex(m=>m.eventId===preset.nextEventId);
-              const next = idx>=0&&idx<all.length-1 ? all[idx+1] : null;
-              const prev = idx>0 ? all[idx-1] : null;
-              const nP = {meetId:preset.meetId, eventId:preset.nextEventId, athleteIds:nAth, entries:nme.entries,
-                nextEventId: next?next.eventId:null, nextEventLabel: next?getEventLabel(events.find(e=>e.id===next.eventId)||{}):null,
-                prevEventId: prev?prev.eventId:null, prevEventLabel: prev?getEventLabel(events.find(e=>e.id===prev.eventId)||{}):null};
-              if(nevt.eventType==='Field') nav('fieldEvent', nP);
-              else if(nevt.entryType==='Relay') nav('relayTimer', nP);
-              else nav('multiSplit', nP);
-            }}>{preset.nextEventLabel} →</button>}
+            {(preset||{}).prevEventId&&<button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'6px 12px'}} onClick={()=>navToMeetEvent(data,events,nav,preset,preset.prevEventId)}>← {preset.prevEventLabel}</button>}
+            {(preset||{}).nextEventId&&<button style={{...S.btn,...S.btnPrimary,fontSize:11,padding:'6px 12px'}} onClick={()=>navToMeetEvent(data,events,nav,preset,preset.nextEventId)}>{preset.nextEventLabel} →</button>}
           </div>
         )}
       </div>
@@ -5666,6 +5646,10 @@ function RelayTimer({ data, save, nav, events, addResult, addResults, getAthlete
             </div>
             {legs.map((lg,i)=>(
               <div key={lg.id} style={{display:'flex',gap:8,marginBottom:8,alignItems:'center',flexWrap:'wrap'}}>
+                <div style={{display:'flex',flexDirection:'column',gap:2,flexShrink:0}}>
+                  <button style={{background:'none',border:`1px solid ${C.border}`,borderRadius:4,cursor:'pointer',padding:'1px 6px',fontSize:10,color:i===0?C.border:C.textSecondary,lineHeight:1}} disabled={i===0} onClick={()=>{const c=[...legs];[c[i],c[i-1]]=[c[i-1],c[i]];setLegs(c);}}>↑</button>
+                  <button style={{background:'none',border:`1px solid ${C.border}`,borderRadius:4,cursor:'pointer',padding:'1px 6px',fontSize:10,color:i>=legs.length-1?C.border:C.textSecondary,lineHeight:1}} disabled={i>=legs.length-1} onClick={()=>{const c=[...legs];[c[i],c[i+1]]=[c[i+1],c[i]];setLegs(c);}}>↓</button>
+                </div>
                 <div style={{width:8,height:32,borderRadius:4,background:COLORS[i%COLORS.length],flexShrink:0}} />
                 <span style={{fontSize:12,fontWeight:700,color:COLORS[i%COLORS.length],minWidth:40}}>Leg {i+1}</span>
                 <select style={{...S.select,flex:1,minWidth:100}} value={lg.athleteId} onChange={e=>{const c=[...legs];c[i]={...c[i],athleteId:e.target.value};setLegs(c);}}>

@@ -874,6 +874,7 @@ function App() {
     practicePlans: () => <PracticePlansPage data={data} save={save} nav={nav} season={season} initialWeekId={pageParams.weekId} />,
     dailyPractice: () => <DailyPracticeView data={data} nav={nav} date={pageParams.date} />,
     meets: () => <MeetsPage data={data} save={save} nav={nav} events={events} />,
+    seasonResults: () => <SeasonResultsPage data={data} save={save} nav={nav} events={events} getAthletePR={getAthletePR} season={season} />,
     meetSub: () => <MeetSubPage data={data} save={save} nav={nav} meetId={pageParams.meetId} events={events} getAthletePR={getAthletePR} checkQualifying={checkQualifying} />,
     athletes: () => <AthletesPage data={data} save={save} nav={nav} />,
     athleteSub: () => <AthleteSubPage data={data} save={save} nav={nav} athleteId={pageParams.athleteId} athFilter={pageParams.athFilter} events={events} getAthletePR={getAthletePR} checkRecord={checkRecord} checkQualifying={checkQualifying} season={season} />,
@@ -890,6 +891,7 @@ function App() {
     { key:'attendance', label:'Attendance', icon:'📋' },
     { key:'practicePlans', label:'Practice Plans', icon:'📅' },
     { key:'meets', label:'Meets', icon:'🏆' },
+    { key:'seasonResults', label:'Results', icon:'📊' },
     { key:'athletes', label:'Athletes', icon:'🏃' },
     { key:'eventsPage', label:'Events', icon:'🎯' },
     { key:'tools', label:'Tools', icon:'⏱️' },
@@ -5231,26 +5233,26 @@ function MultiSplitTimer({ data, save, nav, events, addResult, addResults, getAt
   const [collapsed, setCollapsed] = useState(false);
   const [saved, setSaved] = useState(false);
   const presetKey = useRef((preset||{}).eventId||'');
+  const msPresetEventId = (preset||{}).eventId||'';
   useEffect(()=>{
-    const newKey = (preset||{}).eventId||'';
-    if(newKey && newKey !== presetKey.current) {
-      presetKey.current = newKey;
+    if(msPresetEventId && msPresetEventId !== presetKey.current) {
+      presetKey.current = msPresetEventId;
       setMeetId((preset||{}).meetId||'');
-      setEventId(newKey);
+      setEventId(msPresetEventId);
       const ids = (preset||{}).athleteIds||[];
       const entries = (preset||{}).entries||[];
       if(ids.length>0) setAthletes(ids.map(id=>{const en=entries.find(e=>e.athleteId===id||(e.athletes||[]).some(a=>a.athleteId===id));const goalMs=(en||{}).goalMs||(((en||{}).athletes||[]).find(a=>a.athleteId===id)||{}).goalMs||0;return{id:uid(),athleteId:id,laps:[],goalMs};}));
       else setAthletes([{id:uid(),athleteId:'',laps:[],goalMs:0},{id:uid(),athleteId:'',laps:[],goalMs:0}]);
       const selSet = {};
       ids.forEach(id=>{
-        const hasResult = (data.results||[]).some(r=>r.athleteId===id&&r.eventId===newKey&&r.meetId===(preset||{}).meetId&&!r.isRelay);
+        const hasResult = (data.results||[]).some(r=>r.athleteId===id&&r.eventId===msPresetEventId&&r.meetId===(preset||{}).meetId&&!r.isRelay);
         if(!hasResult) selSet[id] = true;
       });
       setSelectedIds(selSet);
       clearInterval(timerRef.current);
       setRunning(false); setStartTime(null); setElapsed(0); setFinished(false); setCollapsed(false); setSaved(false);
     }
-  },[preset]);
+  },[msPresetEventId]);
   const timerRef = useRef(null);
   const evt = events.find(e=>e.id===eventId);
   const lapDist = trackType==='Indoor'?INDOOR_LAP:OUTDOOR_LAP;
@@ -5547,12 +5549,13 @@ function RelayTimer({ data, save, nav, events, addResult, addResults, getAthlete
   const [collapsed, setCollapsed] = useState(false);
   const [saved2, setSaved2] = useState(false);
   const presetKeyR = useRef((preset||{}).eventId||'');
+  const presetEventId = (preset||{}).eventId||'';
+  const presetMeetId = (preset||{}).meetId||'';
   useEffect(()=>{
-    const newKey = (preset||{}).eventId||'';
-    if(newKey && newKey !== presetKeyR.current) {
-      presetKeyR.current = newKey;
-      setMeetId((preset||{}).meetId||'');
-      setEventId(newKey);
+    if(presetEventId && presetEventId !== presetKeyR.current) {
+      presetKeyR.current = presetEventId;
+      setMeetId(presetMeetId);
+      setEventId(presetEventId);
       const entries = (preset||{}).entries||[];
       const relay = entries.find(e=>e.athletes);
       if(relay) setLegs(relay.athletes.map(a=>({id:uid(),athleteId:a.athleteId,goalMs:a.goalMs||0,splitMs:null,cumMs:null})));
@@ -5564,7 +5567,7 @@ function RelayTimer({ data, save, nav, events, addResult, addResults, getAthlete
       clearInterval(timerRef.current);
       setRunning(false); setStartTime(null); setElapsed(0); setActiveLeg(0); setFinished(false); setCollapsed(false); setSaved2(false);
     }
-  },[preset]);
+  },[presetEventId]);
   const timerRef = useRef(null);
   const evt = events.find(e=>e.id===eventId);
   const lapDist = trackType==='Indoor'?INDOOR_LAP:OUTDOOR_LAP;
@@ -5724,6 +5727,186 @@ function RelayTimer({ data, save, nav, events, addResult, addResults, getAthlete
           {finished&&!!totalGoal&&(()=>{const finalTime=legs.filter(l=>l.cumMs!==null).reduce((m,l)=>Math.max(m,l.cumMs),0);const diff=finalTime-totalGoal;return <div style={{textAlign:'center',padding:'8px 0',fontSize:14,fontWeight:600,color:diff<=0?C.success:C.danger}}>Final: {formatTime(finalTime)} ({formatDiff(diff)} vs target)</div>;})()}
         </div>
       )}
+    </div>
+  );
+}
+function SeasonResultsPage({ data, save, nav, events, getAthletePR, season }) {
+  const [tab, setTab] = useState('events');
+  const [search, setSearch] = useState('');
+  const [genderFilter, setGenderFilter] = useState('');
+  const [gradYearFilter, setGradYearFilter] = useState('');
+  const [groupFilter, setGroupFilter] = useState('');
+  const [eventFilter, setEventFilter] = useState('');
+  const groups = data.workoutGroups||[];
+  const allGradYears = [...new Set(data.athletes.map(a=>a.gradYear).filter(Boolean))].sort((a,b)=>b-a);
+  const seasonResults = season ? (data.results||[]).filter(r=>isInSeason(r.date,season)&&!r.isRelay&&!r.isRelaySplit&&!r.isPractice) : (data.results||[]).filter(r=>!r.isRelay&&!r.isRelaySplit&&!r.isPractice);
+  const seasonRelaySplits = season ? (data.results||[]).filter(r=>isInSeason(r.date,season)&&r.isRelaySplit&&!r.isPractice) : (data.results||[]).filter(r=>r.isRelaySplit&&!r.isPractice);
+  const seasonRelays = season ? (data.results||[]).filter(r=>isInSeason(r.date,season)&&r.isRelay&&!r.isPractice) : (data.results||[]).filter(r=>r.isRelay&&!r.isPractice);
+  const activeAthletes = data.athletes.filter(a=>a.active!==false);
+  const athMatch = (a) => {
+    if(search && !athSearch(a, search)) return false;
+    if(genderFilter && a.gender!==genderFilter) return false;
+    if(gradYearFilter && String(a.gradYear)!==String(gradYearFilter)) return false;
+    if(groupFilter && !(a.groups||[]).some(g=>g.groupId===groupFilter) && a.trainingGroup!==groupFilter) return false;
+    return true;
+  };
+  const eventsWithResults = events.filter(e=>!e.meetSpecific&&seasonResults.some(r=>r.eventId===e.id)).sort((a,b)=>getDefaultOrder(a)-getDefaultOrder(b));
+  const relayEventsWithResults = events.filter(e=>!e.meetSpecific&&(seasonRelays.some(r=>r.eventId===e.id)||seasonRelaySplits.some(r=>r.eventId===e.id))).sort((a,b)=>getDefaultOrder(a)-getDefaultOrder(b));
+  const allEventsForFilter = [...new Set([...eventsWithResults,...relayEventsWithResults].map(e=>e.id))].map(id=>events.find(e=>e.id===id)).filter(Boolean);
+  const clearFilters = () => {setSearch('');setGenderFilter('');setGradYearFilter('');setGroupFilter('');setEventFilter('');};
+  const hasFilters = search||genderFilter||gradYearFilter||groupFilter||eventFilter;
+  const filterBar = (
+    <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
+      <input style={{...S.input,maxWidth:180}} placeholder="Search athletes..." value={search} onChange={e=>setSearch(e.target.value)} />
+      <select style={S.select} value={genderFilter} onChange={e=>setGenderFilter(e.target.value)}><option value="">All Genders</option><option value="M">Boys</option><option value="F">Girls</option></select>
+      <select style={S.select} value={gradYearFilter} onChange={e=>setGradYearFilter(e.target.value)}><option value="">All Years</option>{allGradYears.map(y=><option key={y} value={y}>'{(y+'').slice(-2)}</option>)}</select>
+      <select style={S.select} value={groupFilter} onChange={e=>setGroupFilter(e.target.value)}><option value="">All Groups</option>{groups.map(g=><option key={g.id} value={g.id}>{g.name}</option>)}</select>
+      <select style={S.select} value={eventFilter} onChange={e=>setEventFilter(e.target.value)}><option value="">All Events</option>{allEventsForFilter.map(e=><option key={e.id} value={e.id}>{getEventLabel(e)}</option>)}</select>
+      {hasFilters&&<button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'4px 10px'}} onClick={clearFilters}>Clear</button>}
+    </div>
+  );
+  return (
+    <div>
+      <h1 style={S.h1}>Season Results{season&&<span style={{fontSize:14,color:C.textMuted,fontWeight:400,marginLeft:8}}>{season.name}</span>}</h1>
+      <div style={{display:'flex',gap:0,marginBottom:12,borderBottom:`2px solid ${C.border}`}}>
+        {['events','athletes'].map(t=>(
+          <button key={t} style={{padding:'10px 20px',fontSize:13,fontWeight:600,border:'none',borderBottom:tab===t?`3px solid ${C.accent}`:'3px solid transparent',background:'none',color:tab===t?C.accent:C.textMuted,cursor:'pointer',textTransform:'uppercase',letterSpacing:'0.04em'}} onClick={()=>setTab(t)}>{t==='events'?'By Event':'By Athlete'}</button>
+        ))}
+      </div>
+      {filterBar}
+      {tab==='events'&&(
+        <div>
+          {(eventFilter?allEventsForFilter.filter(e=>e.id===eventFilter):[...eventsWithResults,...relayEventsWithResults.filter(e=>!eventsWithResults.some(x=>x.id===e.id))]).map(evt=>{
+            if(eventFilter && evt.id!==eventFilter) return null;
+            const isField = isFieldEvent(evt);
+            const isRelayEvt = evt.entryType==='Relay';
+            let ranked;
+            if(isRelayEvt) {
+              ranked = seasonRelays.filter(r=>r.eventId===evt.id).sort((a,b)=>isField?((b.ft||0)*12+(b.inch||0)+(b.qtr||0))-((a.ft||0)*12+(a.inch||0)+(a.qtr||0)):a.timeMs-b.timeMs);
+            } else {
+              const allForEvt = seasonResults.filter(r=>r.eventId===evt.id);
+              const bestByAthlete = {};
+              allForEvt.forEach(r=>{
+                if(!r.athleteId) return;
+                const a = data.athletes.find(at=>at.id===r.athleteId);
+                if(!a||!athMatch(a)) return;
+                if(!bestByAthlete[r.athleteId]) bestByAthlete[r.athleteId]=r;
+                else {
+                  if(isField) { if(((r.ft||0)*12+(r.inch||0)+(r.qtr||0))>((bestByAthlete[r.athleteId].ft||0)*12+(bestByAthlete[r.athleteId].inch||0)+(bestByAthlete[r.athleteId].qtr||0))) bestByAthlete[r.athleteId]=r; }
+                  else { if(r.timeMs<bestByAthlete[r.athleteId].timeMs) bestByAthlete[r.athleteId]=r; }
+                }
+              });
+              ranked = Object.values(bestByAthlete).sort((a,b)=>isField?((b.ft||0)*12+(b.inch||0)+(b.qtr||0))-((a.ft||0)*12+(a.inch||0)+(a.qtr||0)):a.timeMs-b.timeMs);
+            }
+            if(!ranked.length) return null;
+            return (
+              <div key={evt.id} style={{...S.card,marginBottom:12}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                  <div>
+                    <span style={{fontWeight:700,fontSize:15,color:C.text}}>{getEventLabel(evt)}</span>
+                    <span style={{fontSize:11,color:C.textMuted,marginLeft:8}}>{evt.eventType} - {evt.entryType}</span>
+                  </div>
+                  <span style={{fontSize:12,color:C.textMuted}}>{ranked.length} {isRelayEvt?'teams':'athletes'}</span>
+                </div>
+                <table style={{width:'100%',borderCollapse:'collapse'}}>
+                  <thead><tr><th style={{...S.th,width:40}}>#</th><th style={S.th}>{isRelayEvt?'Team':'Athlete'}</th><th style={S.th}>Meet</th><th style={{...S.th,textAlign:'right'}}>Mark</th><th style={{...S.th,width:50}}></th></tr></thead>
+                  <tbody>
+                    {ranked.map((r,i)=>{
+                      const meetObj = r.meetId?data.meets.find(m=>m.id===r.meetId):null;
+                      const valStr = isField?fieldToStr(r.ft,r.inch,r.qtr):formatTime(r.timeMs);
+                      if(isRelayEvt) {
+                        const names = (r.relayAthletes||[]).map(aid=>{const a=data.athletes.find(at=>at.id===aid);return a?athDisplay(a):'?';}).join(', ');
+                        return (<tr key={r.id}><td style={{...S.td,textAlign:'center',fontWeight:700,color:i<3?C.accent:C.textMuted}}>{i+1}</td><td style={{...S.td,fontSize:12}}>{names}</td><td style={{...S.td,fontSize:11,color:C.textMuted}}>{meetObj?meetObj.name:r.date}</td><td style={{...S.td,textAlign:'right',fontWeight:600}}>{valStr}</td><td style={S.td}></td></tr>);
+                      }
+                      const ath = data.athletes.find(a=>a.id===r.athleteId);
+                      if(!ath) return null;
+                      const allForAth = seasonResults.filter(rs=>rs.athleteId===r.athleteId&&rs.eventId===evt.id);
+                      const isSeasonBest = allForAth.length>0 && r.id===allForAth.sort((a,b)=>isField?((b.ft||0)*12+(b.inch||0)+(b.qtr||0))-((a.ft||0)*12+(a.inch||0)+(a.qtr||0)):a.timeMs-b.timeMs)[0].id;
+                      const qual = (()=>{const stds=(evt.qualifyingStandards||[]);if(!stds.length)return null;for(const s of stds){if(isField){if(((r.ft||0)*12+(r.inch||0)+(r.qtr||0))>=((s.ft||0)*12+(s.inch||0)+(s.qtr||0)))return s;}else{if(r.timeMs&&r.timeMs<=s.timeMs)return s;}}return null;})();
+                      return (
+                        <tr key={r.id} style={{cursor:'pointer'}} onClick={()=>nav('athleteSub',{athleteId:ath.id})}>
+                          <td style={{...S.td,textAlign:'center',fontWeight:700,color:i===0?'#c9a830':i===1?'#888':i===2?'#b87333':C.textMuted,fontSize:i<3?15:13}}>{i+1}</td>
+                          <td style={{...S.td,fontWeight:500}}>
+                            {athDisplay(ath)}
+                            {ath.gradYear&&<span style={{color:C.textMuted,fontSize:11,marginLeft:4}}>'{(ath.gradYear+'').slice(-2)}</span>}
+                            <span style={{fontSize:10,color:ath.gender==='M'?C.blue:'#d53f8c',marginLeft:4}}>{ath.gender==='M'?'B':'G'}</span>
+                          </td>
+                          <td style={{...S.td,fontSize:11,color:C.textMuted}}>{meetObj?meetObj.name:r.date}</td>
+                          <td style={{...S.td,textAlign:'right',fontWeight:600,fontSize:13}}>{valStr}</td>
+                          <td style={{...S.td}}>
+                            <div style={{display:'flex',gap:2}}>
+                              {isSeasonBest&&<span style={{fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:6,background:C.successMuted,color:C.success}}>SB</span>}
+                              {qual&&<span style={{fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:6,background:C.accentMuted,color:C.accent}} title={qual.name}>Q</span>}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })}
+          {!eventsWithResults.length&&!relayEventsWithResults.length&&<div style={{...S.card,textAlign:'center',padding:30,color:C.textMuted}}>No results recorded this season.</div>}
+        </div>
+      )}
+      {tab==='athletes'&&(()=>{
+        const athsWithResults = activeAthletes.filter(a=>{
+          if(!athMatch(a)) return false;
+          return seasonResults.some(r=>r.athleteId===a.id) || seasonRelaySplits.some(r=>r.athleteId===a.id) || seasonRelays.some(r=>(r.relayAthletes||[]).includes(a.id));
+        }).sort((a,b)=>athLast(a).localeCompare(athLast(b)));
+        return (<div>
+          {athsWithResults.map(a=>{
+            const myResults = seasonResults.filter(r=>r.athleteId===a.id);
+            const prByEvent = {};
+            myResults.forEach(r=>{
+              if(eventFilter&&r.eventId!==eventFilter) return;
+              const evt = events.find(e=>e.id===r.eventId);
+              if(!evt) return;
+              const isField = isFieldEvent(evt);
+              if(!prByEvent[r.eventId]) prByEvent[r.eventId]={evt,result:r};
+              else {
+                const cur = prByEvent[r.eventId].result;
+                if(isField) { if(((r.ft||0)*12+(r.inch||0)+(r.qtr||0))>((cur.ft||0)*12+(cur.inch||0)+(cur.qtr||0))) prByEvent[r.eventId].result=r; }
+                else { if(r.timeMs<cur.timeMs) prByEvent[r.eventId].result=r; }
+              }
+            });
+            const prList = Object.values(prByEvent).sort((a,b)=>getDefaultOrder(a.evt)-getDefaultOrder(b.evt));
+            const grpName = ((groups.find(g=>((a.groups||[])[0]||{}).groupId===g.id||a.trainingGroup===g.id))||{}).name||'';
+            if(!prList.length&&eventFilter) return null;
+            return (
+              <div key={a.id} style={{...S.card,padding:'10px 14px',marginBottom:8,borderLeft:`3px solid ${a.gender==='M'?C.blue:'#d53f8c'}`,cursor:'pointer'}} onClick={()=>nav('athleteSub',{athleteId:a.id})}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:prList.length?6:0}}>
+                  <div>
+                    <span style={{fontWeight:600,fontSize:14,color:C.text}}>{athDisplay(a)}</span>
+                    {a.gradYear&&<span style={{color:C.textMuted,fontSize:12,marginLeft:6}}>'{(a.gradYear+'').slice(-2)}</span>}
+                    <span style={{fontSize:11,color:a.gender==='M'?C.blue:'#d53f8c',marginLeft:6}}>{a.gender==='M'?'B':'G'}</span>
+                    {grpName&&<span style={{fontSize:11,color:C.textMuted,marginLeft:6}}>{grpName}</span>}
+                  </div>
+                  <span style={{fontSize:11,color:C.textMuted}}>{prList.length} event{prList.length!==1?'s':''}</span>
+                </div>
+                {prList.length>0&&(
+                  <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+                    {prList.map(({evt,result:r})=>{
+                      const isField = isFieldEvent(evt);
+                      const valStr = isField?fieldToStr(r.ft,r.inch,r.qtr):formatTime(r.timeMs);
+                      const qual = (()=>{const stds=(evt.qualifyingStandards||[]);for(const s of stds){if(isField){if(((r.ft||0)*12+(r.inch||0)+(r.qtr||0))>=((s.ft||0)*12+(s.inch||0)+(s.qtr||0)))return s;}else{if(r.timeMs&&r.timeMs<=s.timeMs)return s;}}return null;})();
+                      return (
+                        <div key={evt.id} style={{fontSize:11,padding:'4px 10px',borderRadius:8,background:C.surface2,border:`1px solid ${C.borderLight}`,display:'flex',alignItems:'center',gap:4}}>
+                          <span style={{fontWeight:600,color:C.textSecondary}}>{getEventLabel(evt)}</span>
+                          <span style={{fontWeight:700,color:C.text}}>{valStr}</span>
+                          {qual&&<span style={{fontSize:8,fontWeight:700,padding:'1px 4px',borderRadius:4,background:C.accentMuted,color:C.accent}}>Q</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {!athsWithResults.length&&<div style={{...S.card,textAlign:'center',padding:30,color:C.textMuted}}>No athletes with results match your filters.</div>}
+        </div>);
+      })()}
     </div>
   );
 }

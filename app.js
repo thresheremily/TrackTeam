@@ -167,10 +167,11 @@ const getStdBadgeInfo = (data, stdName) => {
     const subs = t.subtypes||[];
     const baseAbbrev = t.abbrev||t.name.slice(0,4).toUpperCase();
     const baseColor = t.color||'#2b6cb0';
-    if(subs.length===0 && t.name===stdName) return {abbrev:baseAbbrev,color:baseColor};
+    if(t.name===stdName) return {abbrev:baseAbbrev,color:baseColor};
     for(const s of subs) { if(t.name+' - '+s===stdName) return {abbrev:baseAbbrev+'-'+s.slice(0,1).toUpperCase(),color:baseColor}; }
+    if(stdName.startsWith(t.name)) return {abbrev:baseAbbrev,color:baseColor};
   }
-  return {abbrev:stdName.slice(0,4).toUpperCase(),color:'#2b6cb0'};
+  return {abbrev:(stdName||'').slice(0,4).toUpperCase(),color:'#2b6cb0'};
 };
 const QStdBadge = ({data,std}) => {
   if(!std) return null;
@@ -180,8 +181,9 @@ const QStdBadge = ({data,std}) => {
 const getStdTimingTypeGlobal = (data, stdName) => {
   for(const t of (data.qualifyingStandardTypes||[])) {
     const subs = t.subtypes||[];
-    if(subs.length===0 && t.name===stdName) return t.timingType||'Both';
+    if(t.name===stdName) return t.timingType||'Both';
     for(const s of subs) { if(t.name+' - '+s===stdName) return (t.subtypeTimingTypes||{})[s]||'Both'; }
+    if(stdName.startsWith(t.name)) return t.timingType||'Both';
   }
   return 'Both';
 };
@@ -2302,9 +2304,9 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
         const meetTiming = meet.timingSystem||'FAT';
         const getStdTimingType = (stdName) => {
           for(const t of (data.qualifyingStandardTypes||[])) {
-            const subs = t.subtypes||[];
-            if(subs.length===0 && t.name===stdName) return t.timingType||'Both';
-            for(const s of subs) { if(t.name+' - '+s===stdName) return (t.subtypeTimingTypes||{})[s]||'Both'; }
+            if(t.name===stdName) return t.timingType||'Both';
+            for(const s of (t.subtypes||[])) { if(t.name+' - '+s===stdName) return (t.subtypeTimingTypes||{})[s]||'Both'; }
+            if(stdName.startsWith(t.name)) return t.timingType||'Both';
           }
           return 'Both';
         };
@@ -3340,12 +3342,42 @@ function AthleteSubPage({ data, save, nav, athleteId, athFilter, events, getAthl
               if(!evt) return null;
               const splits = athleteRelaySplits.filter(r=>r.eventId===evtId).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
               const bestSplit = splits.reduce((best,r)=>(!best||r.timeMs<best.timeMs)?r:best,null);
+              const composites = athleteRelayComposites.filter(rr=>rr.eventId===evtId).sort((a,b)=>a.timeMs-b.timeMs);
+              const bestComposite = composites.length>0?composites[0]:null;
               return (
                 <div key={evtId} style={{padding:'8px 0',borderBottom:`1px solid ${C.borderLight}`}}>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
                     <span style={{fontWeight:600,fontSize:13}}>{getEventLabel(evt)}</span>
-                    {bestSplit&&<span style={{fontSize:11,color:'#6b46c1',fontWeight:600}}>Best split: {formatTime(bestSplit.timeMs)}</span>}
+                    <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                      {bestSplit&&<span style={{fontSize:11,color:'#6b46c1',fontWeight:600}}>Best split: {formatTime(bestSplit.timeMs)}</span>}
+                      {bestComposite&&<span style={{fontSize:11,color:C.accent,fontWeight:600}}>Best relay: {formatTime(bestComposite.timeMs)}</span>}
+                    </div>
                   </div>
+                  {showQualifying&&bestComposite&&(()=>{
+                    const stds = evt.qualifyingStandards||[];
+                    if(!stds.length) return null;
+                    return (<div style={{marginBottom:6,display:'flex',flexDirection:'column',gap:4}}>
+                      {stds.map(std=>{
+                        const stdMs=std.timeMs||0;
+                        if(!stdMs) return null;
+                        const prMs=bestComposite.timeMs;
+                        const met=prMs<=stdMs;
+                        const diff=stdMs-prMs;
+                        const pct=Math.min(100,Math.round(stdMs/(prMs||1)*100));
+                        const diffStr=met?'Qualified':formatTime(prMs-stdMs)+' away';
+                        const barColor=met?C.success:pct>=90?'#b8860b':C.accent;
+                        const info=getStdBadgeInfo(data,std.name);
+                        return (<div key={std.id} style={{display:'flex',alignItems:'center',gap:8,fontSize:11}}>
+                          <span style={{width:70,color:info.color,fontWeight:600,flexShrink:0}}>{info.abbrev}</span>
+                          <span style={{width:55,color:C.textMuted,flexShrink:0,fontSize:10}}>{formatTime(stdMs)}</span>
+                          <div style={{flex:1,height:6,background:C.surface2,borderRadius:3,overflow:'hidden'}}>
+                            <div style={{width:pct+'%',height:'100%',background:barColor,borderRadius:3,transition:'width 0.3s'}} />
+                          </div>
+                          <span style={{width:85,textAlign:'right',flexShrink:0,fontWeight:600,color:met?C.success:pct>=90?'#b8860b':C.textMuted}}>{diffStr}</span>
+                        </div>);
+                      })}
+                    </div>);
+                  })()}
                   {splits.map(r=>{
                     const composite = athleteRelayComposites.find(rr=>rr.eventId===evtId&&rr.date===r.date);
                     const meetObj = r.meetId ? data.meets.find(m=>m.id===r.meetId) : null;
@@ -5926,6 +5958,28 @@ function SeasonResultsPage({ data, save, nav, events, getAthletePR, season }) {
                   </div>
                   <span style={{fontSize:12,color:C.textMuted}}>{ranked.length} {isRelayEvt?'teams':'athletes'}</span>
                 </div>
+                {isRelayEvt&&ranked.length>0&&(evt.qualifyingStandards||[]).length>0&&(
+                  <div style={{marginBottom:8,display:'flex',flexDirection:'column',gap:3}}>
+                    {(evt.qualifyingStandards||[]).map(std=>{
+                      const stdMs=std.timeMs||0;
+                      if(!stdMs) return null;
+                      const bestMs=ranked[0].timeMs;
+                      const met=bestMs<=stdMs;
+                      const pct=Math.min(100,Math.round(stdMs/(bestMs||1)*100));
+                      const diffStr=met?'Qualified':formatTime(bestMs-stdMs)+' away';
+                      const barColor=met?C.success:pct>=90?'#b8860b':C.accent;
+                      const info=getStdBadgeInfo(data,std.name);
+                      return (<div key={std.id} style={{display:'flex',alignItems:'center',gap:8,fontSize:11}}>
+                        <span style={{width:65,color:info.color,fontWeight:600,flexShrink:0}}>{info.abbrev}</span>
+                        <span style={{width:55,color:C.textMuted,flexShrink:0,fontSize:10}}>{formatTime(stdMs)}</span>
+                        <div style={{flex:1,height:6,background:C.surface2,borderRadius:3,overflow:'hidden'}}>
+                          <div style={{width:pct+'%',height:'100%',background:barColor,borderRadius:3,transition:'width 0.3s'}} />
+                        </div>
+                        <span style={{width:85,textAlign:'right',flexShrink:0,fontWeight:600,color:met?C.success:pct>=90?'#b8860b':C.textMuted}}>{diffStr}</span>
+                      </div>);
+                    })}
+                  </div>
+                )}
                 <table style={{width:'100%',borderCollapse:'collapse'}}>
                   <thead><tr><th style={{...S.th,width:40}}>#</th><th style={S.th}>{isRelayEvt?'Team':'Athlete'}</th><th style={S.th}>Meet</th><th style={{...S.th,textAlign:'right'}}>Mark</th><th style={{...S.th,width:50}}></th></tr></thead>
                   <tbody>
@@ -6032,15 +6086,15 @@ function SeasonResultsPage({ data, save, nav, events, getAthletePR, season }) {
           const subs = t.subtypes||[];
           const baseAbbrev = t.abbrev||t.name.slice(0,4).toUpperCase();
           const baseColor = t.color||'#2b6cb0';
-          if(subs.length===0) allStdCombos.push({label:t.name,abbrev:baseAbbrev,color:baseColor,timingType:t.timingType||'Both'});
-          else subs.forEach(s=>allStdCombos.push({label:t.name+' - '+s,abbrev:baseAbbrev+'-'+s.slice(0,1).toUpperCase(),color:baseColor,timingType:(t.subtypeTimingTypes||{})[s]||'Both'}));
+          if(subs.length===0) allStdCombos.push({label:t.name,typeName:t.name,subtype:null,abbrev:baseAbbrev,color:baseColor,timingType:t.timingType||'Both'});
+          else subs.forEach(s=>allStdCombos.push({label:t.name+' - '+s,typeName:t.name,subtype:s,abbrev:baseAbbrev+'-'+s.slice(0,1).toUpperCase(),color:baseColor,timingType:(t.subtypeTimingTypes||{})[s]||'Both'}));
         });
         if(!allStdCombos.length) return <div style={{...S.card,textAlign:'center',padding:30,color:C.textMuted}}>No qualifying standard types defined. Set them up in Settings → Qualifying.</div>;
         return (<div>
           {allStdCombos.map(combo=>{
             const qualifiedByEvent = {};
             events.forEach(evt=>{
-              const stds = (evt.qualifyingStandards||[]).filter(s=>s.name===combo.label);
+              const stds = (evt.qualifyingStandards||[]).filter(s=>s.name===combo.label || s.name===combo.typeName);
               if(!stds.length) return;
               const std = stds[0];
               const isField = isFieldEvent(evt);
@@ -6089,6 +6143,7 @@ function SeasonResultsPage({ data, save, nav, events, getAthletePR, season }) {
                   </div>
                   <span style={{fontSize:12,color:totalQualified>0?C.success:C.textMuted,fontWeight:600}}>{totalQualified} qualified</span>
                 </div>
+                {(()=>{const typ=stdTypes.find(t=>t.id===combo.typeId);return typ&&typ.notes?<div style={{fontSize:11,color:C.textSecondary,padding:'6px 10px',background:C.bg,borderRadius:6,marginBottom:10,whiteSpace:'pre-wrap',lineHeight:1.4,borderLeft:`3px solid ${combo.color}`}}>{typ.notes}</div>:null;})()}
                 {(eventFilter?evtIds.filter(id=>id===eventFilter):evtIds).map(evtId=>{
                   const {evt,std,qualified} = qualifiedByEvent[evtId];
                   const isField = isFieldEvent(evt);
@@ -6120,17 +6175,44 @@ function SeasonResultsPage({ data, save, nav, events, getAthletePR, season }) {
                       {qualified.filter(q=>q.isRelay).map(q=>{
                         const names = (q.athletes||[]).map(aid=>{const a=data.athletes.find(at=>at.id===aid);return a?athDisplay(a):'?';}).join(', ');
                         const meetObj = q.result.meetId?data.meets.find(m=>m.id===q.result.meetId):null;
+                        const diff = stdVal - q.result.timeMs;
                         return (
                           <div key={q.result.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'3px 8px',fontSize:12}}>
                             <span style={{fontWeight:500,color:'#6b46c1'}}>{names}</span>
                             <div style={{display:'flex',gap:8,alignItems:'center'}}>
                               <span style={{color:C.textMuted,fontSize:11}}>{meetObj?meetObj.name:q.result.date}</span>
                               <span style={{fontWeight:600}}>{formatTime(q.result.timeMs)}</span>
+                              {diff>0&&<span style={{fontSize:10,color:C.success,fontWeight:600}}>-{formatTime(diff)}</span>}
                             </div>
                           </div>
                         );
                       })}
-                      {!qualified.length&&<div style={{fontSize:11,color:C.textMuted,padding:'3px 8px',fontStyle:'italic'}}>No qualifiers yet</div>}
+                      {(()=>{
+                        if(evt.entryType!=='Relay') return null;
+                        const allRelays = seasonRelays.filter(r=>r.eventId===evt.id).sort((a,b)=>a.timeMs-b.timeMs);
+                        const notQualified = allRelays.filter(rr=>!qualified.some(q=>q.isRelay&&q.result.id===rr.id));
+                        if(!notQualified.length) return null;
+                        const closest = notQualified[0];
+                        const pct = Math.min(100,Math.round(stdVal/(closest.timeMs||1)*100));
+                        const awayMs = closest.timeMs - stdVal;
+                        const closestNames = (closest.relayAthletes||[]).map(aid=>{const a=data.athletes.find(at=>at.id===aid);return a?athDisplay(a):'?';}).join(', ');
+                        const closestMeet = closest.meetId?data.meets.find(m=>m.id===closest.meetId):null;
+                        return (<div style={{padding:'4px 8px',marginTop:4,background:C.bg,borderRadius:6}}>
+                          <div style={{fontSize:10,fontWeight:600,color:C.textMuted,marginBottom:3}}>Closest to qualifying:</div>
+                          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:12,marginBottom:3}}>
+                            <span style={{color:'#6b46c1',fontWeight:500}}>{closestNames}</span>
+                            <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                              <span style={{color:C.textMuted,fontSize:10}}>{closestMeet?closestMeet.name:closest.date}</span>
+                              <span style={{fontWeight:600}}>{formatTime(closest.timeMs)}</span>
+                              <span style={{fontSize:10,fontWeight:600,color:pct>=90?'#b8860b':C.textMuted}}>{formatTime(awayMs)} away</span>
+                            </div>
+                          </div>
+                          <div style={{height:5,background:C.surface2,borderRadius:3,overflow:'hidden'}}>
+                            <div style={{width:pct+'%',height:'100%',background:pct>=90?'#b8860b':C.accent,borderRadius:3}} />
+                          </div>
+                        </div>);
+                      })()}
+                      {!qualified.length&&evt.entryType!=='Relay'&&<div style={{fontSize:11,color:C.textMuted,padding:'3px 8px',fontStyle:'italic'}}>No qualifiers yet</div>}
                     </div>
                   );
                 })}
@@ -6484,6 +6566,10 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
                 </div>}
                 <div style={{marginTop:6}}>
                   <input style={{...S.input,width:160,fontSize:12,padding:'4px 8px'}} placeholder="+ add sub-type" onKeyDown={e=>{if(e.key==='Enter'&&e.target.value.trim()){save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,subtypes:[...(x.subtypes||[]),e.target.value.trim()]}:x)});e.target.value='';}}} />
+                </div>
+                <div style={{marginTop:8}}>
+                  <label style={{fontSize:10,fontWeight:600,color:C.textMuted,textTransform:'uppercase',display:'block',marginBottom:3}}>Notes</label>
+                  <textarea style={{...S.input,width:'100%',fontSize:12,padding:'6px 8px',minHeight:50,resize:'vertical',fontFamily:'inherit'}} placeholder="Qualifying rules, deadlines, special conditions..." value={t.notes||''} onChange={e=>save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,notes:e.target.value}:x)})} />
                 </div>
               </div>
             ))}

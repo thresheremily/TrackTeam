@@ -6087,8 +6087,8 @@ function SeasonResultsPage({ data, save, nav, events, getAthletePR, season }) {
           const subs = t.subtypes||[];
           const baseAbbrev = t.abbrev||t.name.slice(0,4).toUpperCase();
           const baseColor = t.color||'#2b6cb0';
-          if(subs.length===0) allStdCombos.push({label:t.name,typeName:t.name,subtype:null,abbrev:baseAbbrev,color:baseColor,timingType:t.timingType||'Both'});
-          else subs.forEach(s=>allStdCombos.push({label:t.name+' - '+s,typeName:t.name,subtype:s,abbrev:baseAbbrev+'-'+s.slice(0,1).toUpperCase(),color:baseColor,timingType:(t.subtypeTimingTypes||{})[s]||'Both'}));
+          if(subs.length===0) allStdCombos.push({typeId:t.id,label:t.name,typeName:t.name,subtype:null,abbrev:baseAbbrev,color:baseColor,timingType:t.timingType||'Both'});
+          else subs.forEach(s=>allStdCombos.push({typeId:t.id,label:t.name+' - '+s,typeName:t.name,subtype:s,abbrev:baseAbbrev+'-'+s.slice(0,1).toUpperCase(),color:baseColor,timingType:(t.subtypeTimingTypes||{})[s]||'Both'}));
         });
         if(!allStdCombos.length) return <div style={{...S.card,textAlign:'center',padding:30,color:C.textMuted}}>No qualifying standard types defined. Set them up in Settings → Qualifying.</div>;
         return (<div>
@@ -6097,7 +6097,10 @@ function SeasonResultsPage({ data, save, nav, events, getAthletePR, season }) {
             events.forEach(evt=>{
               const allEvtStds = evt.qualifyingStandards||[];
               if(!allEvtStds.length) return;
-              const matchStd = allEvtStds.find(s=>s.name===combo.label) || (combo.subtype===null ? allEvtStds.find(s=>s.name===combo.typeName || s.name.startsWith(combo.typeName)) : null);
+              const matchStd = allEvtStds.find(s=>s.name===combo.label)
+                || allEvtStds.find(s=>s.name===combo.typeName)
+                || allEvtStds.find(s=>combo.typeName && s.name.startsWith(combo.typeName))
+                || (combo.subtype && allEvtStds.find(s=>s.name.includes(combo.subtype)));
               if(!matchStd) return;
               const isField = isFieldEvent(evt);
               const stdVal = isField ? (matchStd.ft||0)*12+(matchStd.inch||0)+(matchStd.qtr||0) : matchStd.timeMs;
@@ -6186,24 +6189,27 @@ function SeasonResultsPage({ data, save, nav, events, getAthletePR, season }) {
                         if(evt.entryType!=='Relay') return null;
                         const allRelays = seasonRelays.filter(r=>r.eventId===evt.id).sort((a,b)=>a.timeMs-b.timeMs);
                         const notQualified = allRelays.filter(rr=>!qualified.some(q=>q.isRelay&&q.result.id===rr.id));
-                        if(!notQualified.length) return null;
-                        const closest = notQualified[0];
-                        const pct = Math.min(100,Math.round(stdVal/(closest.timeMs||1)*100));
-                        const awayMs = closest.timeMs - stdVal;
-                        const closestNames = (closest.relayAthletes||[]).map(aid=>{const a=data.athletes.find(at=>at.id===aid);return a?athDisplay(a):'?';}).join(', ');
-                        const closestMeet = closest.meetId?data.meets.find(m=>m.id===closest.meetId):null;
-                        return (<div style={{padding:'4px 8px',marginTop:4,background:C.bg,borderRadius:6}}>
-                          <div style={{fontSize:10,fontWeight:600,color:C.textMuted,marginBottom:3}}>Closest to qualifying:</div>
-                          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:12,marginBottom:3}}>
-                            <span style={{color:'#6b46c1',fontWeight:500}}>{closestNames}</span>
-                            <div style={{display:'flex',gap:6,alignItems:'center'}}>
-                              <span style={{color:C.textMuted,fontSize:10}}>{closestMeet?closestMeet.name:closest.date}</span>
-                              <span style={{fontWeight:600}}>{formatTime(closest.timeMs)}</span>
-                              <span style={{fontSize:10,fontWeight:600,color:pct>=90?'#b8860b':C.textMuted}}>{formatTime(awayMs)} away</span>
-                            </div>
-                          </div>
-                          <div style={{height:5,background:C.surface2,borderRadius:3,overflow:'hidden'}}>
-                            <div style={{width:pct+'%',height:'100%',background:pct>=90?'#b8860b':C.accent,borderRadius:3}} />
+                        const close = notQualified.filter(rr=>{const pct=Math.round(stdVal/(rr.timeMs||1)*100);return pct>=90;});
+                        if(!close.length) return qualified.length?null:<div style={{fontSize:11,color:C.textMuted,padding:'3px 8px',fontStyle:'italic'}}>No relay results within range</div>;
+                        const rKey = `rclose-${evt.id}-${combo.label}`;
+                        const closest = close[0];
+                        return (<div>
+                          <button style={{background:'none',border:'none',color:C.textMuted,cursor:'pointer',fontSize:10,fontWeight:600,padding:'3px 8px'}} onClick={()=>{const el=document.getElementById(rKey);if(el)el.style.display=el.style.display==='none'?'block':'none';}}>Closest relay to qualifying ({close.length}) ▸</button>
+                          <div id={rKey} style={{display:'none',padding:'4px 8px',background:C.bg,borderRadius:6}}>
+                            {close.map(rr=>{
+                              const names = (rr.relayAthletes||[]).map(aid=>{const a=data.athletes.find(at=>at.id===aid);return a?athDisplay(a):'?';}).join(', ');
+                              const pct=Math.round(stdVal/(rr.timeMs||1)*100);
+                              const awayMs = rr.timeMs - stdVal;
+                              const meetObj = rr.meetId?data.meets.find(m=>m.id===rr.meetId):null;
+                              return (<div key={rr.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:11,padding:'2px 0'}}>
+                                <span style={{color:'#6b46c1',fontWeight:500}}>{names}</span>
+                                <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                                  <span style={{color:C.textMuted,fontSize:10}}>{meetObj?meetObj.name:rr.date}</span>
+                                  <span style={{fontWeight:600}}>{formatTime(rr.timeMs)}</span>
+                                  <span style={{fontSize:10,color:pct>=95?'#b8860b':C.textMuted,fontWeight:600}}>{formatTime(awayMs)} away</span>
+                                </div>
+                              </div>);
+                            })}
                           </div>
                         </div>);
                       })()}
@@ -6218,24 +6224,30 @@ function SeasonResultsPage({ data, save, nav, events, getAthletePR, season }) {
                             bestByAth[r.athleteId]=r;
                         });
                         const sorted = Object.values(bestByAth).sort((a,b)=>isField?((b.ft||0)*12+(b.inch||0)+(b.qtr||0))-((a.ft||0)*12+(a.inch||0)+(a.qtr||0)):a.timeMs-b.timeMs);
-                        const top3 = sorted.slice(0,3);
-                        if(!top3.length) return <div style={{fontSize:11,color:C.textMuted,padding:'3px 8px',fontStyle:'italic'}}>No results yet</div>;
-                        return (<div style={{padding:'4px 8px',marginTop:2,background:C.bg,borderRadius:6}}>
-                          <div style={{fontSize:10,fontWeight:600,color:C.textMuted,marginBottom:3}}>Closest to qualifying:</div>
-                          {top3.map((r,ri)=>{
-                            const a=data.athletes.find(at=>at.id===r.athleteId);
-                            if(!a) return null;
-                            const valStr=isField?fieldToStr(r.ft,r.inch,r.qtr):formatTime(r.timeMs);
-                            const pct=isField?Math.min(100,Math.round(((r.ft||0)*12+(r.inch||0)+(r.qtr||0))/stdVal*100)):Math.min(100,Math.round(stdVal/(r.timeMs||1)*100));
-                            const awayStr=isField?((stdVal-((r.ft||0)*12+(r.inch||0)+(r.qtr||0)))/12).toFixed(1)+'ft away':formatTime(r.timeMs-stdVal)+' away';
-                            return (<div key={r.athleteId} style={{display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:11,padding:'2px 0',cursor:'pointer'}} onClick={()=>nav('athleteSub',{athleteId:a.id})}>
-                              <span style={{fontWeight:500}}>{athDisplay(a)}</span>
-                              <div style={{display:'flex',gap:6,alignItems:'center'}}>
-                                <span style={{fontWeight:600}}>{valStr}</span>
-                                <span style={{fontSize:10,color:pct>=90?'#b8860b':C.textMuted,fontWeight:600}}>{awayStr}</span>
-                              </div>
-                            </div>);
-                          })}
+                        const close = sorted.filter(r=>{
+                          const pct=isField?Math.round(((r.ft||0)*12+(r.inch||0)+(r.qtr||0))/stdVal*100):Math.round(stdVal/(r.timeMs||1)*100);
+                          return pct>=90;
+                        }).slice(0,5);
+                        if(!close.length) return <div style={{fontSize:11,color:C.textMuted,padding:'3px 8px',fontStyle:'italic'}}>No results within range yet</div>;
+                        const cKey = `close-${evt.id}-${combo.label}`;
+                        return (<div>
+                          <button style={{background:'none',border:'none',color:C.textMuted,cursor:'pointer',fontSize:10,fontWeight:600,padding:'3px 8px'}} onClick={()=>{const el=document.getElementById(cKey);if(el)el.style.display=el.style.display==='none'?'block':'none';}}>Closest to qualifying ({close.length}) ▸</button>
+                          <div id={cKey} style={{display:'none',padding:'4px 8px',background:C.bg,borderRadius:6}}>
+                            {close.map(r=>{
+                              const a=data.athletes.find(at=>at.id===r.athleteId);
+                              if(!a) return null;
+                              const valStr=isField?fieldToStr(r.ft,r.inch,r.qtr):formatTime(r.timeMs);
+                              const pct=isField?Math.round(((r.ft||0)*12+(r.inch||0)+(r.qtr||0))/stdVal*100):Math.round(stdVal/(r.timeMs||1)*100);
+                              const awayStr=isField?((stdVal-((r.ft||0)*12+(r.inch||0)+(r.qtr||0)))/12).toFixed(1)+'ft away':formatTime(r.timeMs-stdVal)+' away';
+                              return (<div key={r.athleteId} style={{display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:11,padding:'2px 0',cursor:'pointer'}} onClick={()=>nav('athleteSub',{athleteId:a.id})}>
+                                <span style={{fontWeight:500}}>{athDisplay(a)}</span>
+                                <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                                  <span style={{fontWeight:600}}>{valStr}</span>
+                                  <span style={{fontSize:10,color:pct>=95?'#b8860b':C.textMuted,fontWeight:600}}>{awayStr}</span>
+                                </div>
+                              </div>);
+                            })}
+                          </div>
                         </div>);
                       })()}
                     </div>

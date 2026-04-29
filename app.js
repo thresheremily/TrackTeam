@@ -5888,6 +5888,7 @@ function SeasonResultsPage({ data, save, nav, events, getAthletePR, season }) {
   const [gradYearFilter, setGradYearFilter] = useState('');
   const [groupFilter, setGroupFilter] = useState('');
   const [eventFilter, setEventFilter] = useState('');
+  const [expandedStds, setExpandedStds] = useState({});
   const groups = data.workoutGroups||[];
   const allGradYears = [...new Set(data.athletes.map(a=>a.gradYear).filter(Boolean))].sort((a,b)=>b-a);
   const seasonResults = season ? (data.results||[]).filter(r=>isInSeason(r.date,season)&&!r.isRelay&&!r.isRelaySplit&&!r.isPractice) : (data.results||[]).filter(r=>!r.isRelay&&!r.isRelaySplit&&!r.isPractice);
@@ -6131,16 +6132,22 @@ function SeasonResultsPage({ data, save, nav, events, getAthletePR, season }) {
             const evtIds = Object.keys(qualifiedByEvent);
             const totalQualified = evtIds.reduce((s,id)=>s+qualifiedByEvent[id].qualified.length,0);
             if(eventFilter && !evtIds.includes(eventFilter)) return null;
+            const isExpanded = !!expandedStds[combo.label];
             return (
-              <div key={combo.label} style={{...S.card,marginBottom:16,borderLeft:`4px solid ${combo.color}`}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+              <div key={combo.label} style={{...S.card,marginBottom:12,borderLeft:`4px solid ${combo.color}`,padding:isExpanded?undefined:'10px 16px'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}} onClick={()=>setExpandedStds(p=>({...p,[combo.label]:!p[combo.label]}))}>
                   <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <span style={{fontSize:12,color:combo.color,fontWeight:700}}>{isExpanded?'▼':'▶'}</span>
                     <span style={{fontSize:10,fontWeight:700,padding:'3px 10px',borderRadius:10,background:combo.color+'20',color:combo.color,border:`1px solid ${combo.color}`}}>{combo.abbrev}</span>
                     <span style={{fontWeight:700,fontSize:15,color:C.text}}>{combo.label}</span>
                     <span style={{fontSize:10,color:C.textMuted,padding:'2px 6px',borderRadius:8,background:C.surface2}}>{combo.timingType}</span>
                   </div>
-                  <span style={{fontSize:12,color:totalQualified>0?C.success:C.textMuted,fontWeight:600}}>{totalQualified} qualified</span>
+                  <div style={{display:'flex',alignItems:'center',gap:6}}>
+                    {totalQualified>0&&<span style={{fontSize:11,fontWeight:700,padding:'3px 12px',borderRadius:12,background:C.success,color:'#fff'}}>{totalQualified} qualified</span>}
+                    {totalQualified===0&&<span style={{fontSize:11,fontWeight:600,color:C.textMuted}}>{evtIds.length} events</span>}
+                  </div>
                 </div>
+                {isExpanded&&<div style={{marginTop:10}}>
                 {(()=>{const typ=stdTypes.find(t=>t.id===combo.typeId);return typ&&typ.notes?<div style={{fontSize:11,color:C.textSecondary,padding:'6px 10px',background:C.bg,borderRadius:6,marginBottom:10,whiteSpace:'pre-wrap',lineHeight:1.4,borderLeft:`3px solid ${combo.color}`}}>{typ.notes}</div>:null;})()}
                 {(eventFilter?evtIds.filter(id=>id===eventFilter):evtIds).map(evtId=>{
                   const {evt,std,stdVal,qualified} = qualifiedByEvent[evtId];
@@ -6149,23 +6156,27 @@ function SeasonResultsPage({ data, save, nav, events, getAthletePR, season }) {
                   return (
                     <div key={evtId} style={{marginBottom:10,paddingBottom:8,borderBottom:`1px solid ${C.borderLight}`}}>
                       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
-                        <span style={{fontWeight:600,fontSize:13}}>{getEventLabel(evt)}</span>
-                        <span style={{fontSize:11,color:C.textMuted}}>Standard: <strong>{stdStr}</strong> — {qualified.length} qualified</span>
+                        <div style={{display:'flex',alignItems:'center',gap:6}}>
+                          <span style={{fontWeight:600,fontSize:13}}>{getEventLabel(evt)}</span>
+                          {qualified.length>0&&<span style={{fontSize:9,fontWeight:700,padding:'2px 8px',borderRadius:10,background:C.success,color:'#fff'}}>{qualified.length}</span>}
+                        </div>
+                        <span style={{fontSize:11,color:C.textMuted}}>Standard: <strong>{stdStr}</strong></span>
                       </div>
-                      {qualified.filter(q=>!q.isRelay).sort((a,b)=>isField?((b.result.ft||0)*12+(b.result.inch||0)+(b.result.qtr||0))-((a.result.ft||0)*12+(a.result.inch||0)+(a.result.qtr||0)):a.result.timeMs-b.result.timeMs).map(q=>{
+                      {qualified.filter(q=>!q.isRelay).sort((a,b)=>isField?((b.result.ft||0)*12+(b.result.inch||0)+(b.result.qtr||0))-((a.result.ft||0)*12+(a.result.inch||0)+(a.result.qtr||0)):a.result.timeMs-b.result.timeMs).map((q,qi)=>{
                         const a = data.athletes.find(at=>at.id===q.athleteId);
                         if(!a) return null;
                         const meetObj = q.result.meetId?data.meets.find(m=>m.id===q.result.meetId):null;
                         const valStr = isField?fieldToStr(q.result.ft,q.result.inch,q.result.qtr):formatTime(q.result.timeMs);
                         return (
-                          <div key={q.athleteId} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'3px 8px',fontSize:12,cursor:'pointer'}} onClick={()=>nav('athleteSub',{athleteId:a.id})}>
-                            <div>
-                              <span style={{fontWeight:500}}>{athDisplay(a)}</span>
-                              {a.gradYear&&<span style={{color:C.textMuted,marginLeft:4}}>'{(a.gradYear+'').slice(-2)}</span>}
+                          <div key={q.athleteId} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 10px',fontSize:12,cursor:'pointer',background:C.successMuted,borderRadius:6,marginBottom:3,border:`1px solid ${C.success}30`}} onClick={()=>nav('athleteSub',{athleteId:a.id})}>
+                            <div style={{display:'flex',alignItems:'center',gap:6}}>
+                              <span style={{fontSize:11,fontWeight:700,color:C.success,minWidth:16}}>✓</span>
+                              <span style={{fontWeight:600,color:C.text}}>{athDisplay(a)}</span>
+                              {a.gradYear&&<span style={{color:C.textMuted,fontSize:11}}>'{(a.gradYear+'').slice(-2)}</span>}
                             </div>
                             <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                              <span style={{color:C.textMuted,fontSize:11}}>{meetObj?meetObj.name:q.result.date}</span>
-                              <span style={{fontWeight:600}}>{valStr}</span>
+                              <span style={{color:C.textSecondary,fontSize:11}}>{meetObj?meetObj.name:q.result.date}</span>
+                              <span style={{fontWeight:700,color:C.success}}>{valStr}</span>
                             </div>
                           </div>
                         );
@@ -6175,12 +6186,15 @@ function SeasonResultsPage({ data, save, nav, events, getAthletePR, season }) {
                         const meetObj = q.result.meetId?data.meets.find(m=>m.id===q.result.meetId):null;
                         const diff = stdVal - q.result.timeMs;
                         return (
-                          <div key={q.result.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'3px 8px',fontSize:12}}>
-                            <span style={{fontWeight:500,color:'#6b46c1'}}>{names}</span>
+                          <div key={q.result.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 10px',fontSize:12,background:C.successMuted,borderRadius:6,marginBottom:3,border:`1px solid ${C.success}30`}}>
+                            <div style={{display:'flex',alignItems:'center',gap:6}}>
+                              <span style={{fontSize:11,fontWeight:700,color:C.success}}>✓</span>
+                              <span style={{fontWeight:600,color:'#6b46c1'}}>{names}</span>
+                            </div>
                             <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                              <span style={{color:C.textMuted,fontSize:11}}>{meetObj?meetObj.name:q.result.date}</span>
-                              <span style={{fontWeight:600}}>{formatTime(q.result.timeMs)}</span>
-                              {diff>0&&<span style={{fontSize:10,color:C.success,fontWeight:600}}>-{formatTime(diff)}</span>}
+                              <span style={{color:C.textSecondary,fontSize:11}}>{meetObj?meetObj.name:q.result.date}</span>
+                              <span style={{fontWeight:700,color:C.success}}>{formatTime(q.result.timeMs)}</span>
+                              {diff>0&&<span style={{fontSize:10,color:C.success,fontWeight:600}}>(-{formatTime(diff)})</span>}
                             </div>
                           </div>
                         );
@@ -6254,6 +6268,7 @@ function SeasonResultsPage({ data, save, nav, events, getAthletePR, season }) {
                   );
                 })}
                 {!evtIds.length&&<div style={{fontSize:12,color:C.textMuted,textAlign:'center',padding:12}}>No events with this standard have qualifying results.</div>}
+                </div>}
               </div>
             );
           })}

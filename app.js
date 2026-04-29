@@ -5944,8 +5944,14 @@ function BulkStandardEntry({ data, save, events, stdTypes, combos }) {
     });
     save({...data, events:updatedEvents});
   };
-  const trackEvts = events.filter(e=>e.measurableType==='Time'&&!e.meetSpecific).sort((a,b)=>getDefaultOrder(a)-getDefaultOrder(b));
-  const fieldEvts = events.filter(e=>e.measurableType!=='Time'&&!e.meetSpecific).sort((a,b)=>a.name.localeCompare(b.name));
+  const FIELD_ORDER = {'High Jump':1,'Pole Vault':2,'Long Jump':3,'Triple Jump':4,'Shot Put':10,'Discus':11,'Javelin':12,'Hammer':13,'Weight Throw':14};
+  const fieldOrder = (e) => (FIELD_ORDER[e.name]||50)*10+(e.gender==='Girl'?0:1);
+  const trackEvts = events.filter(e=>e.measurableType==='Time'&&!e.meetSpecific).sort((a,b)=>{
+    const da=getDistance(a)||99999; const db=getDistance(b)||99999;
+    if(da!==db) return da-db;
+    return (a.gender==='Girl'?0:1)-(b.gender==='Girl'?0:1);
+  });
+  const fieldEvts = events.filter(e=>e.measurableType!=='Time'&&!e.meetSpecific).sort((a,b)=>fieldOrder(a)-fieldOrder(b));
   return (
     <div>
       <h2 style={{...S.h2,marginBottom:8}}>Bulk Enter Standards</h2>

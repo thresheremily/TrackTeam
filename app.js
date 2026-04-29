@@ -177,6 +177,37 @@ const QStdBadge = ({data,std}) => {
   const info = getStdBadgeInfo(data, std.name);
   return <span style={{fontSize:9,fontWeight:700,padding:'2px 6px',borderRadius:8,background:info.color+'20',color:info.color,border:`1px solid ${info.color}`,whiteSpace:'nowrap'}} title={std.name}>{info.abbrev}</span>;
 };
+const getStdTimingTypeGlobal = (data, stdName) => {
+  for(const t of (data.qualifyingStandardTypes||[])) {
+    const subs = t.subtypes||[];
+    if(subs.length===0 && t.name===stdName) return t.timingType||'Both';
+    for(const s of subs) { if(t.name+' - '+s===stdName) return (t.subtypeTimingTypes||{})[s]||'Both'; }
+  }
+  return 'Both';
+};
+const stdMatchesResultTiming = (data, stdName, meetId) => {
+  const tt = getStdTimingTypeGlobal(data, stdName);
+  if(tt==='Both') return true;
+  if(!meetId) return true;
+  const meet = (data.meets||[]).find(m=>m.id===meetId);
+  if(!meet) return true;
+  const meetTiming = meet.timingSystem||'FAT';
+  return tt===meetTiming;
+};
+const getAllQualifyingForResult = (data, events, r) => {
+  const evt = events.find(e=>e.id===r.eventId);
+  if(!evt||!(evt.qualifyingStandards||[]).length) return [];
+  const applicable = (evt.qualifyingStandards||[]).filter(s=>stdMatchesResultTiming(data,s.name,r.meetId));
+  const isField = (evt.eventType||'')==='Field';
+  if(isField) {
+    const myVal = (r.ft||0)*12+(r.inch||0)+(r.qtr||0);
+    return applicable.filter(s=>{const sVal=(s.ft||0)*12+(s.inch||0)+(s.qtr||0);return sVal>0&&myVal>=sVal;});
+  } else {
+    const checkMs = r.timeMs||(r._relayTotal)||0;
+    if(!checkMs) return [];
+    return applicable.filter(s=>s.timeMs>0&&checkMs<=s.timeMs);
+  }
+};
 const parseCSV = (text) => {
   const lines = text.trim().split(/\r?\n/);
   if(lines.length < 2) return { headers: [], rows: [] };
@@ -3277,7 +3308,7 @@ function AthleteSubPage({ data, save, nav, athleteId, athFilter, events, getAthl
                         const valStr = isFieldEvent(evt)?fieldToStr(r.ft,r.inch,r.qtr):formatTime(r.timeMs);
                         const isPRResult = pr&&r.id===pr.id;
                         const qualStds = (evt.qualifyingStandards||[]);
-                        const qual = qualStds.length>0?(isFieldEvent(evt)?qualStds.find(s=>((r.ft||0)*12+(r.inch||0)+(r.qtr||0))>=((s.ft||0)*12+(s.inch||0)+(s.qtr||0))):qualStds.find(s=>s.timeMs>0&&r.timeMs&&r.timeMs<=s.timeMs)):null;
+                        const allQualStds = getAllQualifyingForResult(data,events,r);
                         return (<tr key={r.id} style={{background:isPRResult?C.successMuted:'transparent'}}>
                           <td style={{...S.td,fontSize:11,padding:'3px 6px'}}>{r.date}</td>
                           <td style={{...S.td,fontSize:11,padding:'3px 6px',color:C.textSecondary}}>{meetObj?meetObj.name:r.isPractice?'Practice':'-'}</td>
@@ -3285,7 +3316,7 @@ function AthleteSubPage({ data, save, nav, athleteId, athFilter, events, getAthl
                           <td style={{...S.td,padding:'3px 6px'}}>
                             <div style={{display:'flex',gap:2}}>
                               {isPRResult&&<span style={{fontSize:8,fontWeight:700,padding:'1px 4px',borderRadius:4,background:C.successMuted,color:C.success}}>PR</span>}
-                              {qual&&<QStdBadge data={data} std={qual} />}
+                              {allQualStds.map(q=><QStdBadge key={q.id} data={data} std={q} />)}
                               {r.verified&&<span style={{fontSize:8,fontWeight:700,padding:'1px 4px',borderRadius:4,background:'rgba(43,108,176,0.08)',color:'#2b6cb0'}}>V</span>}
                             </div>
                           </td>
@@ -3328,7 +3359,7 @@ function AthleteSubPage({ data, save, nav, athleteId, athFilter, events, getAthl
                         <div style={{display:'flex',gap:8,alignItems:'center'}}>
                           <span style={{fontWeight:600}}>Leg {r.relayLeg}: {formatTime(r.timeMs)}</span>
                           {composite&&<span style={{color:C.textMuted,fontSize:11}}>({formatTime(composite.timeMs)} total)</span>}
-                          {composite&&(()=>{const stds=(evt.qualifyingStandards||[]);return stds.filter(s=>s.timeMs>0&&composite.timeMs<=s.timeMs).map(q=><QStdBadge key={q.id} data={data} std={q} />);})()}
+                          {composite&&(()=>{const stds=(evt.qualifyingStandards||[]);return getAllQualifyingForResult(data,events,{eventId:evtId,timeMs:composite.timeMs,meetId:composite.meetId}).map(q=><QStdBadge key={q.id} data={data} std={q} />);})()}
                           {bestSplit&&r.id===bestSplit.id&&<span style={{fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:6,background:'#6b46c120',color:'#6b46c1'}}>Best</span>}
                         </div>
                       </div>
@@ -5909,7 +5940,7 @@ function SeasonResultsPage({ data, save, nav, events, getAthletePR, season }) {
                       if(!ath) return null;
                       const allForAth = seasonResults.filter(rs=>rs.athleteId===r.athleteId&&rs.eventId===evt.id);
                       const isSeasonBest = allForAth.length>0 && r.id===allForAth.sort((a,b)=>isField?((b.ft||0)*12+(b.inch||0)+(b.qtr||0))-((a.ft||0)*12+(a.inch||0)+(a.qtr||0)):a.timeMs-b.timeMs)[0].id;
-                      const qual = (()=>{const stds=(evt.qualifyingStandards||[]);if(!stds.length)return null;for(const s of stds){if(isField){if(((r.ft||0)*12+(r.inch||0)+(r.qtr||0))>=((s.ft||0)*12+(s.inch||0)+(s.qtr||0)))return s;}else{if(r.timeMs&&r.timeMs<=s.timeMs)return s;}}return null;})();
+                      const allQualS = getAllQualifyingForResult(data,events,r);
                       return (
                         <tr key={r.id} style={{cursor:'pointer'}} onClick={()=>nav('athleteSub',{athleteId:ath.id})}>
                           <td style={{...S.td,textAlign:'center',fontWeight:700,color:i===0?'#c9a830':i===1?'#888':i===2?'#b87333':C.textMuted,fontSize:i<3?15:13}}>{i+1}</td>
@@ -5923,7 +5954,7 @@ function SeasonResultsPage({ data, save, nav, events, getAthletePR, season }) {
                           <td style={{...S.td}}>
                             <div style={{display:'flex',gap:2}}>
                               {isSeasonBest&&<span style={{fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:6,background:C.successMuted,color:C.success}}>SB</span>}
-                              {qual&&<QStdBadge data={data} std={qual} />}
+                              {allQualS.map(q=><QStdBadge key={q.id} data={data} std={q} />)}
                             </div>
                           </td>
                         </tr>
@@ -5977,12 +6008,12 @@ function SeasonResultsPage({ data, save, nav, events, getAthletePR, season }) {
                     {prList.map(({evt,result:r})=>{
                       const isField = isFieldEvent(evt);
                       const valStr = isField?fieldToStr(r.ft,r.inch,r.qtr):formatTime(r.timeMs);
-                      const qual = (()=>{const stds=(evt.qualifyingStandards||[]);for(const s of stds){if(isField){if(((r.ft||0)*12+(r.inch||0)+(r.qtr||0))>=((s.ft||0)*12+(s.inch||0)+(s.qtr||0)))return s;}else{if(r.timeMs&&r.timeMs<=s.timeMs)return s;}}return null;})();
+                      const allQualA = getAllQualifyingForResult(data,events,{...r,meetId:r.meetId});
                       return (
                         <div key={evt.id} style={{fontSize:11,padding:'4px 10px',borderRadius:8,background:C.surface2,border:`1px solid ${C.borderLight}`,display:'flex',alignItems:'center',gap:4}}>
                           <span style={{fontWeight:600,color:C.textSecondary}}>{getEventLabel(evt)}</span>
                           <span style={{fontWeight:700,color:C.text}}>{valStr}</span>
-                          {qual&&<QStdBadge data={data} std={qual} />}
+                          {allQualA.map(q=><QStdBadge key={q.id} data={data} std={q} />)}
                         </div>
                       );
                     })}
@@ -6015,31 +6046,34 @@ function SeasonResultsPage({ data, save, nav, events, getAthletePR, season }) {
               const isField = isFieldEvent(evt);
               const stdVal = isField ? (std.ft||0)*12+(std.inch||0)+(std.qtr||0) : std.timeMs;
               if(!stdVal) return;
-              const allResults = [...seasonResults.filter(r=>r.eventId===evt.id),...seasonRelaySplits.filter(r=>r.eventId===evt.id)];
-              const relays = seasonRelays.filter(r=>r.eventId===evt.id);
+              const stdTimingReq = combo.timingType;
               const qualified = [];
-              const bestByAthlete = {};
-              allResults.forEach(r=>{
-                if(!r.athleteId) return;
-                const a = data.athletes.find(at=>at.id===r.athleteId);
-                if(!a||!athMatch(a)) return;
-                let met = false;
-                if(isField) met = ((r.ft||0)*12+(r.inch||0)+(r.qtr||0)) >= stdVal;
-                else {
-                  const checkMs = r.timeMs||(r._relayTotal)||0;
-                  met = checkMs>0 && checkMs <= stdVal;
-                }
-                if(met) {
-                  if(!bestByAthlete[r.athleteId]||(!isField&&r.timeMs<bestByAthlete[r.athleteId].timeMs)||(isField&&((r.ft||0)*12+(r.inch||0)+(r.qtr||0))>((bestByAthlete[r.athleteId].ft||0)*12+(bestByAthlete[r.athleteId].inch||0)+(bestByAthlete[r.athleteId].qtr||0))))
-                    bestByAthlete[r.athleteId] = r;
-                }
-              });
-              relays.forEach(rr=>{
-                let met = false;
-                if(!isField) met = rr.timeMs>0 && rr.timeMs <= stdVal;
-                if(met) qualified.push({isRelay:true,result:rr,athletes:rr.relayAthletes||[]});
-              });
-              Object.entries(bestByAthlete).forEach(([aid,r])=>qualified.push({isRelay:false,athleteId:aid,result:r}));
+              if(evt.entryType==='Relay') {
+                seasonRelays.filter(r=>r.eventId===evt.id).forEach(rr=>{
+                  const rrMeet = rr.meetId?(data.meets||[]).find(m=>m.id===rr.meetId):null;
+                  const rrTiming = rrMeet?rrMeet.timingSystem||'FAT':'FAT';
+                  if(stdTimingReq!=='Both'&&stdTimingReq!==rrTiming) return;
+                  if(!isField && rr.timeMs>0 && rr.timeMs<=stdVal) qualified.push({isRelay:true,result:rr,athletes:rr.relayAthletes||[]});
+                });
+              } else {
+                const bestByAthlete = {};
+                seasonResults.filter(r=>r.eventId===evt.id).forEach(r=>{
+                  if(!r.athleteId) return;
+                  const a = data.athletes.find(at=>at.id===r.athleteId);
+                  if(!a||!athMatch(a)) return;
+                  let met = false;
+                  const rMeet = r.meetId?(data.meets||[]).find(m=>m.id===r.meetId):null;
+                  const rTiming = rMeet?rMeet.timingSystem||'FAT':'FAT';
+                  if(stdTimingReq!=='Both'&&stdTimingReq!==rTiming) return;
+                  if(isField) met = ((r.ft||0)*12+(r.inch||0)+(r.qtr||0)) >= stdVal;
+                  else met = r.timeMs>0 && r.timeMs<=stdVal;
+                  if(met) {
+                    if(!bestByAthlete[r.athleteId]||(!isField&&r.timeMs<bestByAthlete[r.athleteId].timeMs)||(isField&&((r.ft||0)*12+(r.inch||0)+(r.qtr||0))>((bestByAthlete[r.athleteId].ft||0)*12+(bestByAthlete[r.athleteId].inch||0)+(bestByAthlete[r.athleteId].qtr||0))))
+                      bestByAthlete[r.athleteId] = r;
+                  }
+                });
+                Object.entries(bestByAthlete).forEach(([aid,r])=>qualified.push({isRelay:false,athleteId:aid,result:r}));
+              }
               if(qualified.length) qualifiedByEvent[evt.id] = {evt,std,qualified};
             });
             const evtIds = Object.keys(qualifiedByEvent);
@@ -6418,27 +6452,38 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
             {stdTypes.map(t=>(
               <div key={t.id} style={{padding:'8px 0',borderBottom:`1px solid ${C.borderLight}`,marginBottom:4}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
-                  <input style={{...S.input,fontWeight:700,fontSize:13,color:t.color||C.accent,border:'none',borderBottom:`1px dashed ${C.border}`,borderRadius:0,padding:'2px 4px',background:'transparent',flex:1,maxWidth:200}} value={t.name} onChange={e=>save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,name:e.target.value}:x)})} />
-                  <input style={{...S.input,width:55,fontSize:11,padding:'2px 4px',textAlign:'center',fontWeight:700}} value={t.abbrev||''} placeholder="ABBR" onChange={e=>save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,abbrev:e.target.value.slice(0,5)}:x)})} title="Short abbreviation for badges" />
-                  <input type="color" style={{width:28,height:28,border:'none',cursor:'pointer',padding:0,borderRadius:4}} value={t.color||'#2b6cb0'} onChange={e=>save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,color:e.target.value}:x)})} title="Badge color" />
-                  <span style={{fontSize:9,padding:'2px 8px',borderRadius:8,fontWeight:700,background:(t.color||'#2b6cb0')+'20',color:t.color||'#2b6cb0',border:`1px solid ${t.color||'#2b6cb0'}`}}>{t.abbrev||t.name.slice(0,4).toUpperCase()}</span>
-                  {!(t.subtypes||[]).length&&<select style={{...S.select,fontSize:11,padding:'2px 6px',width:80}} value={t.timingType||'Both'} onChange={e=>save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,timingType:e.target.value}:x)})}>
-                    <option value="Both">All</option><option value="FAT">FAT</option><option value="Hand">Hand</option>
-                  </select>}
-                  <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:11}} onClick={()=>save({...data,qualifyingStandardTypes:stdTypes.filter(x=>x.id!==t.id)})}>Remove</button>
+                  <div style={{display:'flex',alignItems:'center',gap:6,flex:1}}>
+                    <input style={{...S.input,fontWeight:700,fontSize:14,color:t.color||'#2b6cb0',border:'none',borderBottom:`2px solid ${t.color||'#2b6cb0'}`,borderRadius:0,padding:'4px 6px',background:'transparent',maxWidth:200}} value={t.name} onChange={e=>save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,name:e.target.value}:x)})} />
+                    <input style={{...S.input,width:55,fontSize:12,padding:'4px 6px',textAlign:'center',fontWeight:700,border:`2px solid ${C.border}`,borderRadius:6}} value={t.abbrev||''} placeholder="ABBR" onChange={e=>save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,abbrev:e.target.value.slice(0,5)}:x)})} title="Short abbreviation for badges" />
+                    <span style={{fontSize:10,fontWeight:700,padding:'3px 10px',borderRadius:10,background:(t.color||'#2b6cb0')+'20',color:t.color||'#2b6cb0',border:`1px solid ${t.color||'#2b6cb0'}`}}>{t.abbrev||t.name.slice(0,4).toUpperCase()}</span>
+                  </div>
+                  <button style={{...S.btn,...S.btnDanger,fontSize:11,padding:'4px 10px'}} onClick={()=>save({...data,qualifyingStandardTypes:stdTypes.filter(x=>x.id!==t.id)})}>Remove</button>
                 </div>
-                {t.lastUpdated&&<div style={{fontSize:9,color:C.textMuted,marginTop:2}}>Last updated: {new Date(t.lastUpdated).toLocaleDateString()} {new Date(t.lastUpdated).toLocaleTimeString()}</div>}
-                <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:4}}>
-                  {(t.subtypes||[]).map((s,si)=>(
-                    <span key={si} style={{display:'inline-flex',alignItems:'center',gap:3,fontSize:11,padding:'2px 10px',borderRadius:12,background:C.surface2,color:C.textSecondary,border:`1px solid ${C.border}`}}>
-                      <input style={{border:'none',background:'transparent',fontSize:11,color:C.textSecondary,width:Math.max(40,s.length*7),padding:0,textAlign:'center'}} value={s} onChange={e=>{const ns=[...(t.subtypes||[])];ns[si]=e.target.value;save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,subtypes:ns}:x)});}} />
-                      <select style={{border:'none',background:'transparent',fontSize:9,color:C.textMuted,padding:0,cursor:'pointer'}} value={(t.subtypeTimingTypes||{})[s]||'Both'} onChange={e=>{const st={...(t.subtypeTimingTypes||{})};st[s]=e.target.value;save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,subtypeTimingTypes:st}:x)});}}>
-                        <option value="Both">All</option><option value="FAT">FAT</option><option value="Hand">Hand</option>
-                      </select>
-                      <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:10,padding:0}} onClick={()=>save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,subtypes:(x.subtypes||[]).filter((_,j)=>j!==si)}:x)})}>✕</button>
-                    </span>
+                <div style={{display:'flex',gap:3,marginTop:6,flexWrap:'wrap'}}>
+                  {['#2b6cb0','#25763b','#c9a830','#c53030','#6b46c1','#c96a1f','#d53f8c','#0d9488','#1e40af','#7c3aed','#b45309','#4338ca','#047857','#be185d','#374151','#0369a1'].map(clr=>(
+                    <button key={clr} style={{width:22,height:22,borderRadius:6,border:(t.color||'#2b6cb0')===clr?'3px solid #1a1e26':`2px solid ${clr}40`,background:clr,cursor:'pointer',padding:0}} onClick={()=>save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,color:clr}:x)})} />
                   ))}
-                  <input style={{...S.input,width:130,fontSize:11,padding:'2px 8px'}} placeholder="+ sub-type" onKeyDown={e=>{if(e.key==='Enter'&&e.target.value.trim()){save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,subtypes:[...(x.subtypes||[]),e.target.value.trim()]}:x)});e.target.value='';}}} />
+                </div>
+                {!(t.subtypes||[]).length&&<div style={{marginTop:6}}><select style={{...S.select,fontSize:11,padding:'4px 8px',width:110}} value={t.timingType||'Both'} onChange={e=>save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,timingType:e.target.value}:x)})}>
+                  <option value="Both">All Timing</option><option value="FAT">FAT Only</option><option value="Hand">Hand Only</option>
+                </select></div>}
+                {t.lastUpdated&&<div style={{fontSize:9,color:C.textMuted,marginTop:4}}>Last updated: {new Date(t.lastUpdated).toLocaleDateString()} {new Date(t.lastUpdated).toLocaleTimeString()}</div>}
+                {(t.subtypes||[]).length>0&&<div style={{marginTop:8}}>
+                  <div style={{fontSize:10,fontWeight:600,color:C.textMuted,textTransform:'uppercase',marginBottom:4}}>Sub-types</div>
+                  <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                    {(t.subtypes||[]).map((s,si)=>(
+                      <div key={si} style={{display:'flex',alignItems:'center',gap:4,fontSize:12,padding:'4px 10px',borderRadius:8,background:C.surface2,border:`1px solid ${C.border}`}}>
+                        <input style={{border:'none',background:'transparent',fontSize:12,color:C.text,width:Math.max(50,s.length*8),padding:0,fontWeight:600}} value={s} onChange={e=>{const ns=[...(t.subtypes||[])];ns[si]=e.target.value;save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,subtypes:ns}:x)});}} />
+                        <select style={{border:'none',background:'transparent',fontSize:10,color:C.textMuted,padding:0,cursor:'pointer'}} value={(t.subtypeTimingTypes||{})[s]||'Both'} onChange={e=>{const st={...(t.subtypeTimingTypes||{})};st[s]=e.target.value;save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,subtypeTimingTypes:st}:x)});}}>
+                          <option value="Both">All</option><option value="FAT">FAT</option><option value="Hand">Hand</option>
+                        </select>
+                        <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12,padding:0,fontWeight:700}} onClick={()=>save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,subtypes:(x.subtypes||[]).filter((_,j)=>j!==si)}:x)})}>✕</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>}
+                <div style={{marginTop:6}}>
+                  <input style={{...S.input,width:160,fontSize:12,padding:'4px 8px'}} placeholder="+ add sub-type" onKeyDown={e=>{if(e.key==='Enter'&&e.target.value.trim()){save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,subtypes:[...(x.subtypes||[]),e.target.value.trim()]}:x)});e.target.value='';}}} />
                 </div>
               </div>
             ))}

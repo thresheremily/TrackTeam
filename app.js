@@ -196,10 +196,11 @@ const stdMatchesResultTiming = (data, stdName, meetId) => {
   const meetTiming = meet.timingSystem||'FAT';
   return tt===meetTiming;
 };
-const getAllQualifyingForResult = (data, events, r) => {
+const getAllQualifyingForResult = (data, events, r, filterTiming) => {
   const evt = events.find(e=>e.id===r.eventId);
   if(!evt||!(evt.qualifyingStandards||[]).length) return [];
-  const applicable = (evt.qualifyingStandards||[]).filter(s=>stdMatchesResultTiming(data,s.name,r.meetId));
+  const stds = evt.qualifyingStandards||[];
+  const applicable = filterTiming ? stds.filter(s=>stdMatchesResultTiming(data,s.name,r.meetId)) : stds;
   const isField = (evt.eventType||'')==='Field';
   if(isField) {
     const myVal = (r.ft||0)*12+(r.inch||0)+(r.qtr||0);
@@ -6094,31 +6095,25 @@ function SeasonResultsPage({ data, save, nav, events, getAthletePR, season }) {
           {allStdCombos.map(combo=>{
             const qualifiedByEvent = {};
             events.forEach(evt=>{
-              const stds = (evt.qualifyingStandards||[]).filter(s=>s.name===combo.label || s.name===combo.typeName);
-              if(!stds.length) return;
-              const std = stds[0];
+              const allEvtStds = evt.qualifyingStandards||[];
+              if(!allEvtStds.length) return;
+              const matchStd = allEvtStds.find(s=>s.name===combo.label) || (combo.subtype===null ? allEvtStds.find(s=>s.name===combo.typeName || s.name.startsWith(combo.typeName)) : null);
+              if(!matchStd) return;
               const isField = isFieldEvent(evt);
-              const stdVal = isField ? (std.ft||0)*12+(std.inch||0)+(std.qtr||0) : std.timeMs;
+              const stdVal = isField ? (matchStd.ft||0)*12+(matchStd.inch||0)+(matchStd.qtr||0) : matchStd.timeMs;
               if(!stdVal) return;
-              const stdTimingReq = combo.timingType;
               const qualified = [];
+              const allRes = (data.results||[]).filter(r=>r.eventId===evt.id&&(!season||isInSeason(r.date,season))&&!r.isPractice);
               if(evt.entryType==='Relay') {
-                seasonRelays.filter(r=>r.eventId===evt.id).forEach(rr=>{
-                  const rrMeet = rr.meetId?(data.meets||[]).find(m=>m.id===rr.meetId):null;
-                  const rrTiming = rrMeet?rrMeet.timingSystem||'FAT':'FAT';
-                  if(stdTimingReq!=='Both'&&stdTimingReq!==rrTiming) return;
+                allRes.filter(r=>r.isRelay).forEach(rr=>{
                   if(!isField && rr.timeMs>0 && rr.timeMs<=stdVal) qualified.push({isRelay:true,result:rr,athletes:rr.relayAthletes||[]});
                 });
               } else {
                 const bestByAthlete = {};
-                seasonResults.filter(r=>r.eventId===evt.id).forEach(r=>{
-                  if(!r.athleteId) return;
+                allRes.filter(r=>r.athleteId&&!r.isRelay&&!r.isRelaySplit).forEach(r=>{
                   const a = data.athletes.find(at=>at.id===r.athleteId);
                   if(!a||!athMatch(a)) return;
                   let met = false;
-                  const rMeet = r.meetId?(data.meets||[]).find(m=>m.id===r.meetId):null;
-                  const rTiming = rMeet?rMeet.timingSystem||'FAT':'FAT';
-                  if(stdTimingReq!=='Both'&&stdTimingReq!==rTiming) return;
                   if(isField) met = ((r.ft||0)*12+(r.inch||0)+(r.qtr||0)) >= stdVal;
                   else met = r.timeMs>0 && r.timeMs<=stdVal;
                   if(met) {
@@ -6128,7 +6123,7 @@ function SeasonResultsPage({ data, save, nav, events, getAthletePR, season }) {
                 });
                 Object.entries(bestByAthlete).forEach(([aid,r])=>qualified.push({isRelay:false,athleteId:aid,result:r}));
               }
-              if(qualified.length) qualifiedByEvent[evt.id] = {evt,std,qualified};
+              qualifiedByEvent[evt.id] = {evt,std:matchStd,stdVal,qualified};
             });
             const evtIds = Object.keys(qualifiedByEvent);
             const totalQualified = evtIds.reduce((s,id)=>s+qualifiedByEvent[id].qualified.length,0);
@@ -6145,7 +6140,7 @@ function SeasonResultsPage({ data, save, nav, events, getAthletePR, season }) {
                 </div>
                 {(()=>{const typ=stdTypes.find(t=>t.id===combo.typeId);return typ&&typ.notes?<div style={{fontSize:11,color:C.textSecondary,padding:'6px 10px',background:C.bg,borderRadius:6,marginBottom:10,whiteSpace:'pre-wrap',lineHeight:1.4,borderLeft:`3px solid ${combo.color}`}}>{typ.notes}</div>:null;})()}
                 {(eventFilter?evtIds.filter(id=>id===eventFilter):evtIds).map(evtId=>{
-                  const {evt,std,qualified} = qualifiedByEvent[evtId];
+                  const {evt,std,stdVal,qualified} = qualifiedByEvent[evtId];
                   const isField = isFieldEvent(evt);
                   const stdStr = isField?fieldToStr(std.ft,std.inch,std.qtr):formatTime(std.timeMs);
                   return (
@@ -6212,7 +6207,37 @@ function SeasonResultsPage({ data, save, nav, events, getAthletePR, season }) {
                           </div>
                         </div>);
                       })()}
-                      {!qualified.length&&evt.entryType!=='Relay'&&<div style={{fontSize:11,color:C.textMuted,padding:'3px 8px',fontStyle:'italic'}}>No qualifiers yet</div>}
+                      {!qualified.length&&evt.entryType!=='Relay'&&(()=>{
+                        const allRes = (data.results||[]).filter(r=>r.eventId===evt.id&&r.athleteId&&!r.isRelay&&!r.isRelaySplit&&!r.isPractice&&(!season||isInSeason(r.date,season)));
+                        const isField = isFieldEvent(evt);
+                        const bestByAth = {};
+                        allRes.forEach(r=>{
+                          const a = data.athletes.find(at=>at.id===r.athleteId);
+                          if(!a||!athMatch(a)) return;
+                          if(!bestByAth[r.athleteId]||(!isField&&r.timeMs<bestByAth[r.athleteId].timeMs)||(isField&&((r.ft||0)*12+(r.inch||0)+(r.qtr||0))>((bestByAth[r.athleteId].ft||0)*12+(bestByAth[r.athleteId].inch||0)+(bestByAth[r.athleteId].qtr||0))))
+                            bestByAth[r.athleteId]=r;
+                        });
+                        const sorted = Object.values(bestByAth).sort((a,b)=>isField?((b.ft||0)*12+(b.inch||0)+(b.qtr||0))-((a.ft||0)*12+(a.inch||0)+(a.qtr||0)):a.timeMs-b.timeMs);
+                        const top3 = sorted.slice(0,3);
+                        if(!top3.length) return <div style={{fontSize:11,color:C.textMuted,padding:'3px 8px',fontStyle:'italic'}}>No results yet</div>;
+                        return (<div style={{padding:'4px 8px',marginTop:2,background:C.bg,borderRadius:6}}>
+                          <div style={{fontSize:10,fontWeight:600,color:C.textMuted,marginBottom:3}}>Closest to qualifying:</div>
+                          {top3.map((r,ri)=>{
+                            const a=data.athletes.find(at=>at.id===r.athleteId);
+                            if(!a) return null;
+                            const valStr=isField?fieldToStr(r.ft,r.inch,r.qtr):formatTime(r.timeMs);
+                            const pct=isField?Math.min(100,Math.round(((r.ft||0)*12+(r.inch||0)+(r.qtr||0))/stdVal*100)):Math.min(100,Math.round(stdVal/(r.timeMs||1)*100));
+                            const awayStr=isField?((stdVal-((r.ft||0)*12+(r.inch||0)+(r.qtr||0)))/12).toFixed(1)+'ft away':formatTime(r.timeMs-stdVal)+' away';
+                            return (<div key={r.athleteId} style={{display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:11,padding:'2px 0',cursor:'pointer'}} onClick={()=>nav('athleteSub',{athleteId:a.id})}>
+                              <span style={{fontWeight:500}}>{athDisplay(a)}</span>
+                              <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                                <span style={{fontWeight:600}}>{valStr}</span>
+                                <span style={{fontSize:10,color:pct>=90?'#b8860b':C.textMuted,fontWeight:600}}>{awayStr}</span>
+                              </div>
+                            </div>);
+                          })}
+                        </div>);
+                      })()}
                     </div>
                   );
                 })}

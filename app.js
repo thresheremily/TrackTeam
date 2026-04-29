@@ -5961,14 +5961,14 @@ function BulkStandardEntry({ data, save, events, stdTypes, combos }) {
         {trackEvts.length>0&&<div style={{marginBottom:12}}>
           <div style={{fontSize:12,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',marginBottom:6}}>Track Events</div>
           <table style={{width:'100%',borderCollapse:'collapse'}}>
-            <thead><tr><th style={{...S.th,textAlign:'left'}}>Event</th><th style={{...S.th,width:55}}>Min</th><th style={{...S.th,width:12}}></th><th style={{...S.th,width:75}}>Sec</th></tr></thead>
+            <thead><tr><th style={{...S.th,textAlign:'left'}}>Event</th><th style={{...S.th,width:80}}>Min</th><th style={{...S.th,width:12}}></th><th style={{...S.th,width:100}}>Sec</th></tr></thead>
             <tbody>{trackEvts.map(evt=>{
               const v = bulkEntries[evt.id]||{};
               return (<tr key={evt.id}>
-                <td style={{...S.td,fontSize:12,fontWeight:500}}>{getEventLabel(evt)}</td>
-                <td style={S.td}><input style={{...S.input,width:'100%',fontSize:12,padding:'4px 6px',textAlign:'center'}} type="number" min="0" value={v.min||''} onChange={e=>{const ne={...bulkEntries};ne[evt.id]={...v,min:e.target.value};setBulkEntries(ne);}} /></td>
-                <td style={{...S.td,textAlign:'center',color:C.textMuted,fontSize:12,padding:0}}>:</td>
-                <td style={S.td}><input style={{...S.input,width:'100%',fontSize:12,padding:'4px 6px',textAlign:'center'}} type="text" inputMode="decimal" placeholder="00.00" value={v.sec||''} onChange={e=>{const ne={...bulkEntries};ne[evt.id]={...v,sec:e.target.value};setBulkEntries(ne);}} /></td>
+                <td style={{...S.td,fontSize:13,fontWeight:500}}>{getEventLabel(evt)}</td>
+                <td style={S.td}><input style={{...S.input,width:'100%',fontSize:15,padding:'8px 10px',textAlign:'center',MozAppearance:'textfield',WebkitAppearance:'none'}} type="number" min="0" value={v.min||''} onChange={e=>{const ne={...bulkEntries};ne[evt.id]={...v,min:e.target.value};setBulkEntries(ne);}} /></td>
+                <td style={{...S.td,textAlign:'center',color:C.textMuted,fontSize:16,padding:0,fontWeight:700}}>:</td>
+                <td style={S.td}><input style={{...S.input,width:'100%',fontSize:15,padding:'8px 10px',textAlign:'center'}} type="text" inputMode="decimal" placeholder="00.00" value={v.sec||''} onChange={e=>{const ne={...bulkEntries};ne[evt.id]={...v,sec:e.target.value};setBulkEntries(ne);}} /></td>
               </tr>);
             })}</tbody>
           </table>
@@ -5976,14 +5976,14 @@ function BulkStandardEntry({ data, save, events, stdTypes, combos }) {
         {fieldEvts.length>0&&<div>
           <div style={{fontSize:12,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',marginBottom:6}}>Field Events</div>
           <table style={{width:'100%',borderCollapse:'collapse'}}>
-            <thead><tr><th style={{...S.th,textAlign:'left'}}>Event</th><th style={{...S.th,width:55}}>Ft</th><th style={{...S.th,width:55}}>In</th><th style={{...S.th,width:55}}>Qtr</th></tr></thead>
+            <thead><tr><th style={{...S.th,textAlign:'left'}}>Event</th><th style={{...S.th,width:75}}>Ft</th><th style={{...S.th,width:75}}>In</th><th style={{...S.th,width:75}}>Qtr</th></tr></thead>
             <tbody>{fieldEvts.map(evt=>{
               const v = bulkEntries[evt.id]||{};
               return (<tr key={evt.id}>
-                <td style={{...S.td,fontSize:12,fontWeight:500}}>{getEventLabel(evt)}</td>
-                <td style={S.td}><input style={{...S.input,width:'100%',fontSize:12,padding:'4px 6px',textAlign:'center'}} type="number" value={v.ft||''} onChange={e=>{const ne={...bulkEntries};ne[evt.id]={...v,ft:e.target.value};setBulkEntries(ne);}} /></td>
-                <td style={S.td}><input style={{...S.input,width:'100%',fontSize:12,padding:'4px 6px',textAlign:'center'}} type="number" value={v.inch||''} onChange={e=>{const ne={...bulkEntries};ne[evt.id]={...v,inch:e.target.value};setBulkEntries(ne);}} /></td>
-                <td style={S.td}><input style={{...S.input,width:'100%',fontSize:12,padding:'4px 6px',textAlign:'center'}} type="number" step="0.25" value={v.qtr||''} onChange={e=>{const ne={...bulkEntries};ne[evt.id]={...v,qtr:e.target.value};setBulkEntries(ne);}} /></td>
+                <td style={{...S.td,fontSize:13,fontWeight:500}}>{getEventLabel(evt)}</td>
+                <td style={S.td}><input style={{...S.input,width:'100%',fontSize:15,padding:'8px 10px',textAlign:'center',MozAppearance:'textfield',WebkitAppearance:'none'}} type="number" value={v.ft||''} onChange={e=>{const ne={...bulkEntries};ne[evt.id]={...v,ft:e.target.value};setBulkEntries(ne);}} /></td>
+                <td style={S.td}><input style={{...S.input,width:'100%',fontSize:15,padding:'8px 10px',textAlign:'center',MozAppearance:'textfield',WebkitAppearance:'none'}} type="number" value={v.inch||''} onChange={e=>{const ne={...bulkEntries};ne[evt.id]={...v,inch:e.target.value};setBulkEntries(ne);}} /></td>
+                <td style={S.td}><input style={{...S.input,width:'100%',fontSize:15,padding:'8px 10px',textAlign:'center',MozAppearance:'textfield',WebkitAppearance:'none'}} type="number" step="0.25" value={v.qtr||''} onChange={e=>{const ne={...bulkEntries};ne[evt.id]={...v,qtr:e.target.value};setBulkEntries(ne);}} /></td>
               </tr>);
             })}</tbody>
           </table>

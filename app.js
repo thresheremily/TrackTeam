@@ -1474,9 +1474,12 @@ function MeetFormModal({ editId, initial, meetTypes, onSave, onClose }) {
           <input style={S.input} placeholder="City" value={f.city} onChange={e=>setF({...f,city:e.target.value})} />
           <input style={S.input} placeholder="State" value={f.state} onChange={e=>setF({...f,state:e.target.value})} />
         </div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
           <div><label style={{fontSize:12,color:C.textSecondary}}>Track Type</label>
             <select style={{...S.select,width:'100%'}} value={f.trackType} onChange={e=>setF({...f,trackType:e.target.value})}><option>Indoor</option><option>Outdoor</option></select>
+          </div>
+          <div><label style={{fontSize:12,color:C.textSecondary}}>Timing</label>
+            <select style={{...S.select,width:'100%'}} value={f.timingSystem||'FAT'} onChange={e=>setF({...f,timingSystem:e.target.value})}><option value="FAT">FAT (Fully Automatic)</option><option value="Hand">Hand Timing</option></select>
           </div>
           <div><label style={{fontSize:12,color:C.textSecondary}}>Meet Type</label>
             <select style={{...S.select,width:'100%'}} value={f.meetTypeId} onChange={e=>setF({...f,meetTypeId:e.target.value})}>
@@ -1637,7 +1640,7 @@ function MeetsPage({ data, save, nav, events }) {
       {showAdd && <MeetFormModal
         key={openCount}
         editId={(editMeet||{}).id}
-        initial={editMeet ? {name:editMeet.name||'',startDate:(editMeet.startDate||editMeet.date||'').split('T')[0],endDate:(editMeet.endDate||'').split('T')[0],venue:editMeet.venue||'',city:editMeet.city||'',state:editMeet.state||'',trackType:editMeet.trackType||'Outdoor',meetTypeId:editMeet.meetTypeId||'',maxEntriesPerEvent:editMeet.maxEntriesPerEvent||'',maxEventsPerAthlete:editMeet.maxEventsPerAthlete||''} : {name:'',startDate:'',endDate:'',venue:'',city:'',state:'',trackType:'Outdoor',meetTypeId:'',maxEntriesPerEvent:'',maxEventsPerAthlete:''}}
+        initial={editMeet ? {name:editMeet.name||'',startDate:(editMeet.startDate||editMeet.date||'').split('T')[0],endDate:(editMeet.endDate||'').split('T')[0],venue:editMeet.venue||'',city:editMeet.city||'',state:editMeet.state||'',trackType:editMeet.trackType||'Outdoor',timingSystem:editMeet.timingSystem||'FAT',meetTypeId:editMeet.meetTypeId||'',maxEntriesPerEvent:editMeet.maxEntriesPerEvent||'',maxEventsPerAthlete:editMeet.maxEventsPerAthlete||''} : {name:'',startDate:'',endDate:'',venue:'',city:'',state:'',trackType:'Outdoor',timingSystem:'FAT',meetTypeId:'',maxEntriesPerEvent:'',maxEventsPerAthlete:''}}
         meetTypes={meetTypes}
         onSave={(f)=>{
           if((editMeet||{}).id) { save({...data, meets:data.meets.map(m=>m.id===editMeet.id?{...m,...f}:m)}); }
@@ -1961,7 +1964,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
       <button style={S.backLink} onClick={()=>nav('meets')}>{"<- "}Back to Meets</button>
       <h1 style={S.h1}>{meet.name}</h1>
       <p style={S.h3}>
-        {meet.startDate}{meet.endDate?` - ${meet.endDate}`:''} - {meet.trackType}
+        {meet.startDate}{meet.endDate?` - ${meet.endDate}`:''} - {meet.trackType} - {meet.timingSystem||'FAT'}
         {meet.venue && ` - ${meet.venue}`}{meet.city && `, ${meet.city}`}{meet.state && ` ${meet.state}`}
         {meetType && <span style={{marginLeft:8,color:meetType.qualifying?C.success:C.textMuted,fontWeight:600}}>({meetType.name})</span>}
       </p>
@@ -2250,21 +2253,42 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
             return !allResultsForAth.some(rs=>rs.id!==r.id && rs.date<=r.date && rs.timeMs && rs.timeMs < r.timeMs);
           }
         };
+        const meetTiming = meet.timingSystem||'FAT';
+        const getStdTimingType = (stdName) => {
+          for(const t of (data.qualifyingStandardTypes||[])) {
+            const subs = t.subtypes||[];
+            if(subs.length===0 && t.name===stdName) return t.timingType||'Both';
+            for(const s of subs) { if(t.name+' - '+s===stdName) return (t.subtypeTimingTypes||{})[s]||'Both'; }
+          }
+          return 'Both';
+        };
+        const stdMatchesTiming = (stdName) => {
+          const tt = getStdTimingType(stdName);
+          return tt==='Both' || tt===meetTiming;
+        };
         const isQualifying = (r) => {
           const evt = events.find(e=>e.id===r.eventId);
           if(!evt || !(evt.qualifyingStandards||[]).length) return null;
-          const ath = data.athletes.find(a=>a.id===r.athleteId);
-          if(!ath) return null;
+          const applicable = (evt.qualifyingStandards||[]).filter(s=>stdMatchesTiming(s.name));
+          if(!applicable.length) return null;
           if(isFieldEvent(evt)) {
             const myVal = (r.ft||0)*12 + (r.inch||0) + (r.qtr||0);
-            return (evt.qualifyingStandards||[]).find(s=>{
+            return applicable.find(s=>{
               const sVal = (s.ft||0)*12+(s.inch||0)+(s.qtr||0);
               return sVal>0 && myVal>=sVal;
             });
           } else {
-            if(!r.timeMs) return null;
-            return (evt.qualifyingStandards||[]).find(s=>s.timeMs>0 && r.timeMs<=s.timeMs);
+            const checkMs = r.timeMs || (r._relayTotal) || 0;
+            if(!checkMs) return null;
+            return applicable.find(s=>s.timeMs>0 && checkMs<=s.timeMs);
           }
+        };
+        const isRelayQualifying = (relayResult) => {
+          const evt = events.find(e=>e.id===relayResult.eventId);
+          if(!evt || !(evt.qualifyingStandards||[]).length) return null;
+          const applicable = (evt.qualifyingStandards||[]).filter(s=>stdMatchesTiming(s.name));
+          if(!applicable.length||!relayResult.timeMs) return null;
+          return applicable.find(s=>s.timeMs>0 && relayResult.timeMs<=s.timeMs);
         };
         const resultsByAthlete = {};
         meetResults.forEach(r=>{
@@ -2373,8 +2397,9 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                       const isField = isFieldEvent(evt);
                       const valStr = r.timeMs ? (isField ? fieldToStr(r.ft,r.inch,r.qtr) : formatTime(r.timeMs)) : (isField&&(r.ft||r.inch||r.qtr)?fieldToStr(r.ft,r.inch,r.qtr):'-');
                       const pr = !r.isRelaySplit && isPR(r);
-                      const qual = !r.isRelaySplit && isQualifying(r);
+                      const qual = isQualifying(r);
                       const relayComposite = r.isRelaySplit ? (r._relayTotal ? {timeMs:r._relayTotal} : athRelays.find(rr=>rr.eventId===r.eventId&&rr.date===r.date)) : null;
+                      const relayQual = r.isRelaySplit && relayComposite ? isRelayQualifying({eventId:r.eventId,timeMs:relayComposite.timeMs}) : null;
                       const isEditing = editResultId===r.id;
                       return [
                         <tr key={r.id}>
@@ -2391,6 +2416,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                               {r.verified&&<VerifiedBadge verified={true} small />}
                               {pr && <span style={{fontSize:9,fontWeight:700,padding:'2px 6px',borderRadius:8,background:C.successMuted,color:C.success,border:`1px solid ${C.success}`}}>PR</span>}
                               {qual && <span style={{fontSize:9,fontWeight:700,padding:'2px 6px',borderRadius:8,background:C.accentMuted,color:C.accent,border:`1px solid ${C.accent}`}} title={qual.name}>Q</span>}
+                              {relayQual && <span style={{fontSize:9,fontWeight:700,padding:'2px 6px',borderRadius:8,background:C.accentMuted,color:C.accent,border:`1px solid ${C.accent}`}} title={relayQual.name}>Q</span>}
                               {r.isRelaySplit&&<span style={{fontSize:9,fontWeight:700,padding:'2px 6px',borderRadius:8,background:'#6b46c120',color:'#6b46c1',border:'1px solid #6b46c1'}}>R</span>}
                             </div>
                           </td>
@@ -2895,6 +2921,8 @@ function AthletesPage({ data, save, nav }) {
   );
 }
 function AthleteSubPage({ data, save, nav, athleteId, athFilter, events, getAthletePR, checkRecord, checkQualifying, season }) {
+  const [showQualifying, setShowQualifying] = useState(false);
+  const [expandedPerfEvents, setExpandedPerfEvents] = useState({});
   const [showEditInfo, setShowEditInfo] = useState(false);
   const [showAddNote, setShowAddNote] = useState(false);
   const [editNoteId, setEditNoteId] = useState(null);
@@ -3165,6 +3193,7 @@ function AthleteSubPage({ data, save, nav, athleteId, athFilter, events, getAthl
       <div style={S.card}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
           <h2 style={{...S.h2,marginBottom:0}}>Performances</h2>
+          <button style={{background:'none',border:'none',color:C.accent,cursor:'pointer',fontSize:11,fontWeight:600,padding:'4px 0',marginBottom:4}} onClick={()=>setShowQualifying(q=>!q)}>{showQualifying?'Hide':'Show'} qualifying progress</button>
           <button style={{...S.btn,...S.btnPrimary,fontSize:11}} onClick={()=>{setResultForm({eventId:'',date:'',min:'',sec:'',ft:'',inch:'',qtr:'',note:''});setShowAddResult(true);}}>+ Add Result</button>
         </div>
         {athleteEvents.filter(evt=>{
@@ -3182,7 +3211,7 @@ function AthleteSubPage({ data, save, nav, athleteId, athFilter, events, getAthl
                   {mostRecent && <span style={{color:C.textSecondary}}>Last: {isFieldEvent(evt) ? fieldToStr(mostRecent.ft,mostRecent.inch,mostRecent.qtr) : formatTime(mostRecent.timeMs)}</span>}
                 </div>
               </div>
-              {(()=>{
+              {showQualifying&&(()=>{
                 const stds = evt.qualifyingStandards||[];
                 if(!stds.length||!pr) return null;
                 return (<div style={{marginTop:6,display:'flex',flexDirection:'column',gap:4}}>
@@ -3209,6 +3238,35 @@ function AthleteSubPage({ data, save, nav, athleteId, athFilter, events, getAthl
                   })}
                 </div>);
               })()}
+              {evtResults.length>1&&(
+                <div style={{marginTop:6}}>
+                  <button style={{background:'none',border:'none',color:C.accent,cursor:'pointer',fontSize:11,fontWeight:600,padding:'2px 0'}} onClick={()=>setExpandedPerfEvents(p=>({...p,[evt.id]:!p[evt.id]}))}>{expandedPerfEvents[evt.id]?'Hide':'Show'} all {evtResults.length} performances</button>
+                  {expandedPerfEvents[evt.id]&&(
+                    <table style={{width:'100%',borderCollapse:'collapse',marginTop:4}}>
+                      <thead><tr><th style={{...S.th,fontSize:10,padding:'3px 6px'}}>Date</th><th style={{...S.th,fontSize:10,padding:'3px 6px'}}>Meet</th><th style={{...S.th,fontSize:10,padding:'3px 6px',textAlign:'right'}}>Mark</th><th style={{...S.th,fontSize:10,padding:'3px 6px',width:50}}></th></tr></thead>
+                      <tbody>{evtResults.map(r=>{
+                        const meetObj = r.meetId?data.meets.find(m=>m.id===r.meetId):null;
+                        const valStr = isFieldEvent(evt)?fieldToStr(r.ft,r.inch,r.qtr):formatTime(r.timeMs);
+                        const isPRResult = pr&&r.id===pr.id;
+                        const qualStds = (evt.qualifyingStandards||[]);
+                        const qual = qualStds.length>0?(isFieldEvent(evt)?qualStds.find(s=>((r.ft||0)*12+(r.inch||0)+(r.qtr||0))>=((s.ft||0)*12+(s.inch||0)+(s.qtr||0))):qualStds.find(s=>s.timeMs>0&&r.timeMs&&r.timeMs<=s.timeMs)):null;
+                        return (<tr key={r.id} style={{background:isPRResult?C.successMuted:'transparent'}}>
+                          <td style={{...S.td,fontSize:11,padding:'3px 6px'}}>{r.date}</td>
+                          <td style={{...S.td,fontSize:11,padding:'3px 6px',color:C.textSecondary}}>{meetObj?meetObj.name:r.isPractice?'Practice':'-'}</td>
+                          <td style={{...S.td,fontSize:12,padding:'3px 6px',textAlign:'right',fontWeight:600}}>{valStr}</td>
+                          <td style={{...S.td,padding:'3px 6px'}}>
+                            <div style={{display:'flex',gap:2}}>
+                              {isPRResult&&<span style={{fontSize:8,fontWeight:700,padding:'1px 4px',borderRadius:4,background:C.successMuted,color:C.success}}>PR</span>}
+                              {qual&&<span style={{fontSize:8,fontWeight:700,padding:'1px 4px',borderRadius:4,background:C.accentMuted,color:C.accent}} title={qual.name}>Q</span>}
+                              {r.verified&&<span style={{fontSize:8,fontWeight:700,padding:'1px 4px',borderRadius:4,background:'rgba(43,108,176,0.08)',color:'#2b6cb0'}}>V</span>}
+                            </div>
+                          </td>
+                        </tr>);
+                      })}</tbody>
+                    </table>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}
@@ -3242,6 +3300,7 @@ function AthleteSubPage({ data, save, nav, athleteId, athFilter, events, getAthl
                         <div style={{display:'flex',gap:8,alignItems:'center'}}>
                           <span style={{fontWeight:600}}>Leg {r.relayLeg}: {formatTime(r.timeMs)}</span>
                           {composite&&<span style={{color:C.textMuted,fontSize:11}}>({formatTime(composite.timeMs)} total)</span>}
+                          {composite&&(()=>{const stds=(evt.qualifyingStandards||[]);const q=stds.find(s=>s.timeMs>0&&composite.timeMs<=s.timeMs);return q?<span style={{fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:6,background:C.accentMuted,color:C.accent,marginLeft:4}} title={q.name}>Q</span>:null;})()}
                           {bestSplit&&r.id===bestSplit.id&&<span style={{fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:6,background:'#6b46c120',color:'#6b46c1'}}>Best</span>}
                         </div>
                       </div>
@@ -5942,7 +6001,15 @@ function BulkStandardEntry({ data, save, events, stdTypes, combos }) {
         return {...evt, qualifyingStandards:[...existing, {id:uid(), name:bulkLabel, ft, inch, qtr}]};
       }
     });
-    save({...data, events:updatedEvents});
+    save({...data, events:updatedEvents, qualifyingStandardTypes:(data.qualifyingStandardTypes||[]).map(t=>{
+      const subs = t.subtypes||[];
+      const matchesType = subs.length===0 ? t.name===bulkLabel : subs.some(s=>t.name+' - '+s===bulkLabel);
+      if(!matchesType) return t;
+      if(subs.length===0) return {...t, lastUpdated:new Date().toISOString()};
+      const subUpdates = {...(t.subtypeUpdates||{})};
+      subs.forEach(s=>{if(t.name+' - '+s===bulkLabel) subUpdates[s]=new Date().toISOString();});
+      return {...t, lastUpdated:new Date().toISOString(), subtypeUpdates:subUpdates};
+    })});
   };
   const FIELD_ORDER = {'High Jump':1,'Pole Vault':2,'Long Jump':3,'Triple Jump':4,'Shot Put':10,'Discus':11,'Javelin':12,'Hammer':13,'Weight Throw':14};
   const fieldOrder = (e) => (FIELD_ORDER[e.name]||50)*10+(e.gender==='Girl'?0:1);
@@ -5994,6 +6061,10 @@ function BulkStandardEntry({ data, save, events, stdTypes, combos }) {
             })}</tbody>
           </table>
         </div>}
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:12}}>
+          <div style={{fontSize:10,color:C.textMuted}}>{(()=>{const t=stdTypes.find(st=>allCombos.some(c=>c.label===bulkLabel&&c.typeId===st.id));if(!t) return '';const sub=allCombos.find(c=>c.label===bulkLabel);const ts=sub&&sub.subtype&&t.subtypeUpdates?t.subtypeUpdates[sub.subtype]:t.lastUpdated;return ts?'Last saved: '+new Date(ts).toLocaleDateString()+' '+new Date(ts).toLocaleTimeString():'Not yet saved';})()}</div>
+          <button style={{...S.btn,...S.btnPrimary,fontSize:14,padding:'10px 28px'}} onClick={saveBulk}>Save All Standards</button>
+        </div>
       </div>)}
     </div>
   );
@@ -6001,6 +6072,9 @@ function BulkStandardEntry({ data, save, events, stdTypes, combos }) {
 function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
   const [tab, setTab] = useState('seasons');
   const [saved, setSaved] = useState(false);
+  const [stdSortCol, setStdSortCol] = useState('event');
+  const [stdSortDir, setStdSortDir] = useState('asc');
+  const toggleStdSort = (col) => { if(stdSortCol===col) setStdSortDir(d=>d==='asc'?'desc':'asc'); else { setStdSortCol(col); setStdSortDir('asc'); } };
   const [importData, setImportData] = useState(null);
   const [importMsg, setImportMsg] = useState('');
   const [teamName, setTeamName] = useState((team||{}).name||'');
@@ -6192,8 +6266,8 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
         const allCombos = [];
         stdTypes.forEach(t=>{
           const subs = t.subtypes||[];
-          if(subs.length===0) allCombos.push({typeId:t.id,typeName:t.name,subtype:null,label:t.name});
-          else subs.forEach(s=>allCombos.push({typeId:t.id,typeName:t.name,subtype:s,label:t.name+' - '+s}));
+          if(subs.length===0) allCombos.push({typeId:t.id,typeName:t.name,subtype:null,label:t.name,timingType:t.timingType||'Both'});
+          else subs.forEach(s=>allCombos.push({typeId:t.id,typeName:t.name,subtype:s,label:t.name+' - '+s,timingType:(t.subtypeTimingTypes||{})[s]||'Both'}));
         });
         return (<div>
           <h2 style={{...S.h2,marginBottom:12}}>Qualifying Standard Types</h2>
@@ -6201,14 +6275,21 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
           <div style={{...S.card,marginBottom:16}}>
             {stdTypes.map(t=>(
               <div key={t.id} style={{padding:'8px 0',borderBottom:`1px solid ${C.borderLight}`,marginBottom:4}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                  <span style={{fontWeight:700,fontSize:13,color:C.accent}}>{t.name}</span>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
+                  <input style={{...S.input,fontWeight:700,fontSize:13,color:C.accent,border:'none',borderBottom:`1px dashed ${C.border}`,borderRadius:0,padding:'2px 4px',background:'transparent',flex:1,maxWidth:200}} value={t.name} onChange={e=>save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,name:e.target.value}:x)})} />
+                  {!(t.subtypes||[]).length&&<select style={{...S.select,fontSize:11,padding:'2px 6px',width:80}} value={t.timingType||'Both'} onChange={e=>save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,timingType:e.target.value}:x)})}>
+                    <option value="Both">All</option><option value="FAT">FAT</option><option value="Hand">Hand</option>
+                  </select>}
                   <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:11}} onClick={()=>save({...data,qualifyingStandardTypes:stdTypes.filter(x=>x.id!==t.id)})}>Remove</button>
                 </div>
+                {t.lastUpdated&&<div style={{fontSize:9,color:C.textMuted,marginTop:2}}>Last updated: {new Date(t.lastUpdated).toLocaleDateString()} {new Date(t.lastUpdated).toLocaleTimeString()}</div>}
                 <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:4}}>
                   {(t.subtypes||[]).map((s,si)=>(
                     <span key={si} style={{display:'inline-flex',alignItems:'center',gap:3,fontSize:11,padding:'2px 10px',borderRadius:12,background:C.surface2,color:C.textSecondary,border:`1px solid ${C.border}`}}>
-                      {s}
+                      <input style={{border:'none',background:'transparent',fontSize:11,color:C.textSecondary,width:Math.max(40,s.length*7),padding:0,textAlign:'center'}} value={s} onChange={e=>{const ns=[...(t.subtypes||[])];ns[si]=e.target.value;save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,subtypes:ns}:x)});}} />
+                      <select style={{border:'none',background:'transparent',fontSize:9,color:C.textMuted,padding:0,cursor:'pointer'}} value={(t.subtypeTimingTypes||{})[s]||'Both'} onChange={e=>{const st={...(t.subtypeTimingTypes||{})};st[s]=e.target.value;save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,subtypeTimingTypes:st}:x)});}}>
+                        <option value="Both">All</option><option value="FAT">FAT</option><option value="Hand">Hand</option>
+                      </select>
                       <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:10,padding:0}} onClick={()=>save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,subtypes:(x.subtypes||[]).filter((_,j)=>j!==si)}:x)})}>✕</button>
                     </span>
                   ))}
@@ -6226,18 +6307,39 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
           <h2 style={{...S.h2,marginTop:20,marginBottom:12}}>All Standards</h2>
           <div style={S.card}>
             <table style={{width:'100%',borderCollapse:'collapse'}}>
-              <thead><tr><th style={S.th}>Event</th><th style={S.th}>Gender</th><th style={S.th}>Standard</th><th style={S.th}>Mark</th><th style={{...S.th,width:30}}></th></tr></thead>
+              <thead><tr>
+                <th style={{...S.th,cursor:'pointer'}} onClick={()=>toggleStdSort('event')}>Event {stdSortCol==='event'?(stdSortDir==='asc'?'↑':'↓'):''}</th>
+                <th style={{...S.th,cursor:'pointer'}} onClick={()=>toggleStdSort('gender')}>Gender {stdSortCol==='gender'?(stdSortDir==='asc'?'↑':'↓'):''}</th>
+                <th style={{...S.th,cursor:'pointer'}} onClick={()=>toggleStdSort('standard')}>Standard {stdSortCol==='standard'?(stdSortDir==='asc'?'↑':'↓'):''}</th>
+                <th style={{...S.th,cursor:'pointer'}} onClick={()=>toggleStdSort('mark')}>Mark {stdSortCol==='mark'?(stdSortDir==='asc'?'↑':'↓'):''}</th>
+                <th style={{...S.th,width:30}}></th>
+              </tr></thead>
               <tbody>
-                {events.flatMap(evt=>(evt.qualifyingStandards||[]).map(std=>(
-                  <tr key={`${evt.id}-${std.id}`}>
-                    <td style={S.td}>{evt.name}</td>
-                    <td style={S.td}>{evt.gender}</td>
-                    <td style={{...S.td,fontWeight:600}}>{std.name}</td>
-                    <td style={S.td}>{evt.measurableType==='Time'?formatTime(std.timeMs):fieldToStr(std.ft,std.inch,std.qtr)}</td>
-                    <td style={S.td}><button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:11}} onClick={()=>save({...data,events:(data.events||[]).map(e=>e.id===evt.id?{...e,qualifyingStandards:(e.qualifyingStandards||[]).filter(s=>s.id!==std.id)}:e)})}>✕</button></td>
-                  </tr>
-                )))}
-                {events.every(e=>!(e.qualifyingStandards||[]).length)&&<tr><td colSpan={5} style={{...S.td,textAlign:'center',color:C.textMuted}}>No standards set yet.</td></tr>}
+                {(()=>{
+                  const rows = events.flatMap(evt=>(evt.qualifyingStandards||[]).map(std=>({evt,std})));
+                  rows.sort((a,b)=>{
+                    let va,vb;
+                    switch(stdSortCol){
+                      case 'event': va=a.evt.name;vb=b.evt.name;break;
+                      case 'gender': va=a.evt.gender;vb=b.evt.gender;break;
+                      case 'standard': va=a.std.name;vb=b.std.name;break;
+                      case 'mark': va=a.evt.measurableType==='Time'?(a.std.timeMs||999999):((a.std.ft||0)*12+(a.std.inch||0)); vb=b.evt.measurableType==='Time'?(b.std.timeMs||999999):((b.std.ft||0)*12+(b.std.inch||0));break;
+                      default: va=a.evt.name;vb=b.evt.name;
+                    }
+                    if(va<vb) return stdSortDir==='asc'?-1:1;
+                    if(va>vb) return stdSortDir==='asc'?1:-1;
+                    return 0;
+                  });
+                  return rows.length ? rows.map(({evt,std})=>(
+                    <tr key={`${evt.id}-${std.id}`}>
+                      <td style={S.td}>{evt.name}</td>
+                      <td style={S.td}>{evt.gender}</td>
+                      <td style={{...S.td,fontWeight:600}}>{std.name}</td>
+                      <td style={S.td}>{evt.measurableType==='Time'?formatTime(std.timeMs):fieldToStr(std.ft,std.inch,std.qtr)}</td>
+                      <td style={S.td}><button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:11}} onClick={()=>save({...data,events:(data.events||[]).map(e=>e.id===evt.id?{...e,qualifyingStandards:(e.qualifyingStandards||[]).filter(s=>s.id!==std.id)}:e)})}>✕</button></td>
+                    </tr>
+                  )) : <tr><td colSpan={5} style={{...S.td,textAlign:'center',color:C.textMuted}}>No standards set yet.</td></tr>;
+                })()}
               </tbody>
             </table>
           </div>

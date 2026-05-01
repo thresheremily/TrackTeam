@@ -1550,7 +1550,7 @@ function MeetFormModal({ editId, initial, meetTypes, onSave, onClose }) {
             <div>
               <label style={{fontSize:11,color:C.textMuted,display:'block',marginBottom:2}}>Max entries per event</label>
               <div style={{display:'flex',gap:4,alignItems:'center'}}>
-                <input style={{...S.input,fontSize:13,padding:'6px 8px'}} type="number" min="1" placeholder="Unlimited" value={f.maxEntriesPerEvent||''} onChange={e=>setF({...f,maxEntriesPerEvent:e.target.value?parseInt(e.target.value):''})} disabled={f.maxEntriesPerEventUnlimited!==false&&!f.maxEntriesPerEvent} />
+                <input style={{...S.input,fontSize:13,padding:'6px 8px'}} type="text" inputMode="numeric" placeholder="Unlimited" value={f.maxEntriesPerEvent||''} onChange={e=>setF({...f,maxEntriesPerEvent:e.target.value?parseInt(e.target.value):''})} disabled={f.maxEntriesPerEventUnlimited!==false&&!f.maxEntriesPerEvent} />
                 <label style={{display:'flex',alignItems:'center',gap:4,fontSize:11,color:C.textMuted,cursor:'pointer',whiteSpace:'nowrap'}}>
                   <input type="checkbox" checked={f.maxEntriesPerEventUnlimited!==false&&!f.maxEntriesPerEvent} onChange={e=>setF({...f,maxEntriesPerEvent:e.target.checked?'':f.maxEntriesPerEvent,maxEntriesPerEventUnlimited:e.target.checked})} />
                   Unlimited
@@ -1560,7 +1560,7 @@ function MeetFormModal({ editId, initial, meetTypes, onSave, onClose }) {
             <div>
               <label style={{fontSize:11,color:C.textMuted,display:'block',marginBottom:2}}>Max events per athlete</label>
               <div style={{display:'flex',gap:4,alignItems:'center'}}>
-                <input style={{...S.input,fontSize:13,padding:'6px 8px'}} type="number" min="1" placeholder="Unlimited" value={f.maxEventsPerAthlete||''} onChange={e=>setF({...f,maxEventsPerAthlete:e.target.value?parseInt(e.target.value):''})} disabled={f.maxEventsPerAthleteUnlimited!==false&&!f.maxEventsPerAthlete} />
+                <input style={{...S.input,fontSize:13,padding:'6px 8px'}} type="text" inputMode="numeric" placeholder="Unlimited" value={f.maxEventsPerAthlete||''} onChange={e=>setF({...f,maxEventsPerAthlete:e.target.value?parseInt(e.target.value):''})} disabled={f.maxEventsPerAthleteUnlimited!==false&&!f.maxEventsPerAthlete} />
                 <label style={{display:'flex',alignItems:'center',gap:4,fontSize:11,color:C.textMuted,cursor:'pointer',whiteSpace:'nowrap'}}>
                   <input type="checkbox" checked={f.maxEventsPerAthleteUnlimited!==false&&!f.maxEventsPerAthlete} onChange={e=>setF({...f,maxEventsPerAthlete:e.target.checked?'':f.maxEventsPerAthlete,maxEventsPerAthleteUnlimited:e.target.checked})} />
                   Unlimited
@@ -1999,19 +1999,40 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
   const openResultsEntry = (me) => {
     const evt = me.evt;
     const isField = isFieldEvent(evt);
+    const isRelay = evt.entryType==='Relay';
     const entries = me.entries||[];
-    const athleteIds = entries.flatMap(en=>en.athletes?en.athletes.map(a=>a.athleteId):[en.athleteId]).filter(Boolean);
-    const unique = [...new Set(athleteIds)];
     const pre = {};
-    unique.forEach(aid=>{
-      const existing = (data.results||[]).find(r=>r.athleteId===aid&&r.eventId===evt.id&&r.meetId===meetId&&!r.isRelay&&!r.isRelaySplit);
-      if(existing) {
-        if(isField) pre[aid] = {ft:(existing.ft||'')+'',inch:(existing.inch||'')+'',qtr:(existing.qtr||'')+'',place:(existing.place||'')+'',resultId:existing.id,verified:!!existing.verified};
-        else {const ms=existing.timeMs||0;pre[aid]={min:Math.floor(ms/60000)+'',sec:((ms%60000)/1000).toFixed(2),place:(existing.place||'')+'',resultId:existing.id,verified:!!existing.verified};}
-      } else {
-        pre[aid] = isField?{ft:'',inch:'',qtr:'',place:''}:{min:'',sec:'',place:''};
-      }
-    });
+    if(isRelay) {
+      entries.forEach((en,ei)=>{
+        const relayKey = '_relay_'+ei;
+        const athleteIds = (en.athletes||[]).map(a=>a.athleteId).filter(Boolean);
+        const existingComposite = (data.results||[]).find(r=>r.eventId===evt.id&&r.meetId===meetId&&r.isRelay&&(r.relayAthletes||[]).join(',')==athleteIds.join(','));
+        if(existingComposite) {
+          const ms = existingComposite.timeMs||0;
+          pre[relayKey] = {min:Math.floor(ms/60000)+'',sec:((ms%60000)/1000).toFixed(2),place:(existingComposite.place||'')+'',resultId:existingComposite.id,verified:!!existingComposite.verified,athleteIds};
+        } else {
+          const anyComposite = (data.results||[]).find(r=>r.eventId===evt.id&&r.meetId===meetId&&r.isRelay);
+          if(anyComposite) {
+            const ms = anyComposite.timeMs||0;
+            pre[relayKey] = {min:Math.floor(ms/60000)+'',sec:((ms%60000)/1000).toFixed(2),place:(anyComposite.place||'')+'',resultId:anyComposite.id,verified:!!anyComposite.verified,athleteIds};
+          } else {
+            pre[relayKey] = {min:'',sec:'',place:'',athleteIds};
+          }
+        }
+      });
+    } else {
+      const athleteIds = entries.flatMap(en=>[en.athleteId]).filter(Boolean);
+      const unique = [...new Set(athleteIds)];
+      unique.forEach(aid=>{
+        const existing = (data.results||[]).find(r=>r.athleteId===aid&&r.eventId===evt.id&&r.meetId===meetId&&!r.isRelay&&!r.isRelaySplit);
+        if(existing) {
+          if(isField) pre[aid] = {ft:(existing.ft||'')+'',inch:(existing.inch||'')+'',qtr:(existing.qtr||'')+'',place:(existing.place||'')+'',resultId:existing.id,verified:!!existing.verified};
+          else {const ms=existing.timeMs||0;pre[aid]={min:Math.floor(ms/60000)+'',sec:((ms%60000)/1000).toFixed(2),place:(existing.place||'')+'',resultId:existing.id,verified:!!existing.verified};}
+        } else {
+          pre[aid] = isField?{ft:'',inch:'',qtr:'',place:''}:{min:'',sec:'',place:''};
+        }
+      });
+    }
     setResultsEntryData(pre);
     setResultsEntryEvent(me.eventId);
   };
@@ -2019,22 +2040,35 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
     const evt = events.find(e=>e.id===eventId);
     if(!evt) return;
     const isField = isFieldEvent(evt);
+    const isRelay = evt.entryType==='Relay';
     const raceDate = meet.startDate||meet.date||new Date().toISOString().split('T')[0];
     let updatedResults = [...(data.results||[])];
-    Object.entries(resultsEntryData).forEach(([aid,v])=>{
-      const hasValue = isField?(v.ft||v.inch||v.qtr):(v.min||v.sec);
-      if(!hasValue) return;
-      if(v.resultId) {
-        updatedResults = updatedResults.map(r=>{
-          if(r.id!==v.resultId) return r;
-          if(isField) return {...r,ft:parseInt(v.ft)||0,inch:parseInt(v.inch)||0,qtr:parseFloat(v.qtr)||0,place:v.place||'',verified:true};
-          return {...r,timeMs:parseTimeToMs(v.min,v.sec),place:v.place||'',verified:true};
-        });
+    Object.entries(resultsEntryData).forEach(([key,v])=>{
+      if(isRelay && key.startsWith('_relay_')) {
+        const hasValue = v.min||v.sec;
+        if(!hasValue) return;
+        const timeMs = parseTimeToMs(v.min, v.sec);
+        if(v.resultId) {
+          updatedResults = updatedResults.map(r=>r.id===v.resultId?{...r,timeMs,place:v.place||'',verified:true}:r);
+        } else {
+          updatedResults.push({id:uid(),eventId,meetId,date:raceDate,timeMs,isRelay:true,relayAthletes:v.athleteIds||[],place:v.place||'',verified:true,splits:[]});
+        }
       } else {
-        const newR = {id:uid(),athleteId:aid,eventId,meetId,date:raceDate,verified:true,place:v.place||''};
-        if(isField) {newR.ft=parseInt(v.ft)||0;newR.inch=parseInt(v.inch)||0;newR.qtr=parseFloat(v.qtr)||0;}
-        else newR.timeMs=parseTimeToMs(v.min,v.sec);
-        updatedResults.push(newR);
+        const aid = key;
+        const hasValue = isField?(v.ft||v.inch||v.qtr):(v.min||v.sec);
+        if(!hasValue) return;
+        if(v.resultId) {
+          updatedResults = updatedResults.map(r=>{
+            if(r.id!==v.resultId) return r;
+            if(isField) return {...r,ft:parseInt(v.ft)||0,inch:parseInt(v.inch)||0,qtr:parseFloat(v.qtr)||0,place:v.place||'',verified:true};
+            return {...r,timeMs:parseTimeToMs(v.min,v.sec),place:v.place||'',verified:true};
+          });
+        } else {
+          const newR = {id:uid(),athleteId:aid,eventId,meetId,date:raceDate,verified:true,place:v.place||''};
+          if(isField) {newR.ft=parseInt(v.ft)||0;newR.inch=parseInt(v.inch)||0;newR.qtr=parseFloat(v.qtr)||0;}
+          else newR.timeMs=parseTimeToMs(v.min,v.sec);
+          updatedResults.push(newR);
+        }
       }
     });
     save({...data,results:updatedResults});
@@ -2248,7 +2282,41 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
             )}
             {resultsEntryEvent===me.eventId&&(()=>{
               const isField = isFieldEvent(me.evt);
-              const athleteIds = (me.entries||[]).flatMap(en=>en.athletes?en.athletes.map(a=>a.athleteId):[en.athleteId]).filter(Boolean);
+              const isRelay = me.evt.entryType==='Relay';
+              const entries = me.entries||[];
+              if(isRelay) {
+                return (<div style={{marginTop:8,padding:'10px 12px',background:C.bg,borderRadius:8,border:`1px solid ${C.accent}`}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                    <span style={{fontSize:13,fontWeight:700,color:C.accent}}>Enter Relay Results</span>
+                    <div style={{display:'flex',gap:6}}>
+                      <button style={{...S.btn,...S.btnPrimary,fontSize:12,padding:'6px 16px'}} onClick={()=>saveResultsEntry(me.eventId)}>Save All</button>
+                      <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'6px 12px'}} onClick={()=>{setResultsEntryEvent(null);setResultsEntryData({});}}>Cancel</button>
+                    </div>
+                  </div>
+                  {entries.map((en,ei)=>{
+                    const relayKey = '_relay_'+ei;
+                    const v = resultsEntryData[relayKey]||{};
+                    const hasExisting = !!v.resultId;
+                    const athleteNames = (en.athletes||[]).map(a=>{const at=data.athletes.find(x=>x.id===a.athleteId);return at?athDisplay(at):'?';}).join(' → ');
+                    return (<div key={ei} style={{padding:'8px 10px',marginBottom:8,borderRadius:8,background:hasExisting?C.successMuted:C.surface2,border:`1px solid ${hasExisting?C.success+'40':C.border}`}}>
+                      <div style={{fontSize:11,fontWeight:600,color:'#6b46c1',marginBottom:6}}>Relay #{ei+1}: <span style={{fontWeight:400,color:C.textSecondary}}>{athleteNames}</span></div>
+                      <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                        <span style={{fontSize:12,fontWeight:600,color:C.textSecondary,minWidth:80}}>Total Time:</span>
+                        <input style={{...S.input,width:60,fontSize:14,padding:'6px 8px',textAlign:'center',fontWeight:600}} type="text" inputMode="numeric" value={v.min||''} onChange={e=>{const n={...resultsEntryData};n[relayKey]={...v,min:e.target.value};setResultsEntryData(n);}} />
+                        <span style={{fontSize:16,fontWeight:700,color:C.textMuted}}>:</span>
+                        <input style={{...S.input,width:85,fontSize:14,padding:'6px 8px',textAlign:'center',fontWeight:600}} type="text" inputMode="decimal" placeholder="00.00" value={v.sec||''} onChange={e=>{const n={...resultsEntryData};n[relayKey]={...v,sec:e.target.value};setResultsEntryData(n);}} />
+                        <span style={{fontSize:12,color:C.textMuted,marginLeft:8}}>Place:</span>
+                        <input style={{...S.input,width:45,fontSize:13,padding:'6px',textAlign:'center'}} type="text" inputMode="numeric" placeholder="#" value={v.place||''} onChange={e=>{const n={...resultsEntryData};n[relayKey]={...v,place:e.target.value};setResultsEntryData(n);}} />
+                        {hasExisting&&<span style={{fontSize:10,fontWeight:700,color:C.success,marginLeft:4}}>✓ Saved</span>}
+                      </div>
+                    </div>);
+                  })}
+                  <div style={{display:'flex',justifyContent:'flex-end',marginTop:4}}>
+                    <button style={{...S.btn,...S.btnPrimary,fontSize:13,padding:'8px 24px'}} onClick={()=>saveResultsEntry(me.eventId)}>Save All Results</button>
+                  </div>
+                </div>);
+              }
+              const athleteIds = entries.flatMap(en=>[en.athleteId]).filter(Boolean);
               const unique = [...new Set(athleteIds)];
               return (<div style={{marginTop:8,padding:'10px 12px',background:C.bg,borderRadius:8,border:`1px solid ${C.accent}`}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
@@ -2273,15 +2341,15 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                     return (<tr key={aid} style={{background:hasExisting?C.successMuted+'60':'transparent'}}>
                       <td style={{...S.td,fontSize:12,fontWeight:500}}>{athDisplay(ath)}{ath.gradYear&&<span style={{color:C.textMuted,marginLeft:4,fontSize:10}}>'{(ath.gradYear+'').slice(-2)}</span>}</td>
                       {isField?<>
-                        <td style={S.td}><input style={{...S.input,width:'100%',fontSize:13,padding:'6px',textAlign:'center'}} type="number" value={v.ft||''} onChange={e=>{const n={...resultsEntryData};n[aid]={...v,ft:e.target.value};setResultsEntryData(n);}} /></td>
-                        <td style={S.td}><input style={{...S.input,width:'100%',fontSize:13,padding:'6px',textAlign:'center'}} type="number" value={v.inch||''} onChange={e=>{const n={...resultsEntryData};n[aid]={...v,inch:e.target.value};setResultsEntryData(n);}} /></td>
-                        <td style={S.td}><input style={{...S.input,width:'100%',fontSize:13,padding:'6px',textAlign:'center'}} type="number" step="0.25" value={v.qtr||''} onChange={e=>{const n={...resultsEntryData};n[aid]={...v,qtr:e.target.value};setResultsEntryData(n);}} /></td>
+                        <td style={S.td}><input style={{...S.input,width:'100%',fontSize:13,padding:'6px',textAlign:'center'}} type="text" inputMode="numeric" value={v.ft||''} onChange={e=>{const n={...resultsEntryData};n[aid]={...v,ft:e.target.value};setResultsEntryData(n);}} /></td>
+                        <td style={S.td}><input style={{...S.input,width:'100%',fontSize:13,padding:'6px',textAlign:'center'}} type="text" inputMode="numeric" value={v.inch||''} onChange={e=>{const n={...resultsEntryData};n[aid]={...v,inch:e.target.value};setResultsEntryData(n);}} /></td>
+                        <td style={S.td}><input style={{...S.input,width:'100%',fontSize:13,padding:'6px',textAlign:'center'}} type="text" inputMode="decimal" value={v.qtr||''} onChange={e=>{const n={...resultsEntryData};n[aid]={...v,qtr:e.target.value};setResultsEntryData(n);}} /></td>
                       </>:<>
-                        <td style={S.td}><input style={{...S.input,width:'100%',fontSize:13,padding:'6px',textAlign:'center'}} type="number" min="0" value={v.min||''} onChange={e=>{const n={...resultsEntryData};n[aid]={...v,min:e.target.value};setResultsEntryData(n);}} /></td>
+                        <td style={S.td}><input style={{...S.input,width:'100%',fontSize:13,padding:'6px',textAlign:'center'}} type="text" inputMode="numeric" value={v.min||''} onChange={e=>{const n={...resultsEntryData};n[aid]={...v,min:e.target.value};setResultsEntryData(n);}} /></td>
                         <td style={{...S.td,textAlign:'center',color:C.textMuted,fontSize:14,padding:0,fontWeight:700}}>:</td>
                         <td style={S.td}><input style={{...S.input,width:'100%',fontSize:13,padding:'6px',textAlign:'center'}} type="text" inputMode="decimal" placeholder="00.00" value={v.sec||''} onChange={e=>{const n={...resultsEntryData};n[aid]={...v,sec:e.target.value};setResultsEntryData(n);}} /></td>
                       </>}
-                      <td style={S.td}><input style={{...S.input,width:'100%',fontSize:12,padding:'6px',textAlign:'center'}} type="number" min="1" placeholder="#" value={v.place||''} onChange={e=>{const n={...resultsEntryData};n[aid]={...v,place:e.target.value};setResultsEntryData(n);}} /></td>
+                      <td style={S.td}><input style={{...S.input,width:'100%',fontSize:12,padding:'6px',textAlign:'center'}} type="text" inputMode="numeric" placeholder="#" value={v.place||''} onChange={e=>{const n={...resultsEntryData};n[aid]={...v,place:e.target.value};setResultsEntryData(n);}} /></td>
                       <td style={S.td}>{hasExisting&&<span style={{fontSize:9,fontWeight:700,color:C.success}}>✓</span>}</td>
                     </tr>);
                   })}</tbody>
@@ -2615,13 +2683,13 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                             <div style={{display:'flex',gap:6,alignItems:'center'}}>
                               <span style={{fontSize:11,color:C.textSecondary,fontWeight:600}}>Official time:</span>
                               {isField ? (<>
-                                <input style={{...S.input,width:50,fontSize:12,padding:'4px 6px',textAlign:'center'}} type="number" placeholder="ft" value={editResultForm.ft} onChange={e=>setEditResultForm(f=>({...f,ft:e.target.value}))} />
+                                <input style={{...S.input,width:50,fontSize:12,padding:'4px 6px',textAlign:'center'}} type="text" inputMode="numeric" placeholder="ft" value={editResultForm.ft} onChange={e=>setEditResultForm(f=>({...f,ft:e.target.value}))} />
                                 <span style={{fontSize:11,color:C.textMuted}}>'</span>
-                                <input style={{...S.input,width:50,fontSize:12,padding:'4px 6px',textAlign:'center'}} type="number" placeholder="in" value={editResultForm.inch} onChange={e=>setEditResultForm(f=>({...f,inch:e.target.value}))} />
+                                <input style={{...S.input,width:50,fontSize:12,padding:'4px 6px',textAlign:'center'}} type="text" inputMode="numeric" placeholder="in" value={editResultForm.inch} onChange={e=>setEditResultForm(f=>({...f,inch:e.target.value}))} />
                                 <span style={{fontSize:11,color:C.textMuted}}>"</span>
-                                <input style={{...S.input,width:50,fontSize:12,padding:'4px 6px',textAlign:'center'}} type="number" step="0.25" placeholder="qtr" value={editResultForm.qtr} onChange={e=>setEditResultForm(f=>({...f,qtr:e.target.value}))} />
+                                <input style={{...S.input,width:50,fontSize:12,padding:'4px 6px',textAlign:'center'}} type="text" inputMode="decimal" placeholder="qtr" value={editResultForm.qtr} onChange={e=>setEditResultForm(f=>({...f,qtr:e.target.value}))} />
                               </>) : (<>
-                                <input style={{...S.input,width:50,fontSize:12,padding:'4px 6px',textAlign:'center'}} type="number" min="0" value={editResultForm.min} onChange={e=>setEditResultForm(f=>({...f,min:e.target.value}))} />
+                                <input style={{...S.input,width:50,fontSize:12,padding:'4px 6px',textAlign:'center'}} type="text" inputMode="numeric" value={editResultForm.min} onChange={e=>setEditResultForm(f=>({...f,min:e.target.value}))} />
                                 <span style={{fontSize:11,color:C.textMuted}}>:</span>
                                 <input style={{...S.input,width:70,fontSize:12,padding:'4px 6px',textAlign:'center'}} type="text" inputMode="decimal" placeholder="00.00" value={editResultForm.sec} onChange={e=>setEditResultForm(f=>({...f,sec:e.target.value}))} />
                               </>)}
@@ -2646,15 +2714,15 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
             <div>
               <label style={{fontSize:11,color:C.textMuted,display:'block',marginBottom:2}}>Max events per athlete</label>
-              <input style={{...S.input,fontSize:13}} type="number" min="0" placeholder="No limit" value={meet.maxEventsPerAthlete||''} onChange={e=>{const v=parseInt(e.target.value)||0;save({...data,meets:data.meets.map(m=>m.id===meetId?{...m,maxEventsPerAthlete:v}:m)});}} />
+              <input style={{...S.input,fontSize:13}} type="text" inputMode="numeric" placeholder="No limit" value={meet.maxEventsPerAthlete||''} onChange={e=>{const v=parseInt(e.target.value)||0;save({...data,meets:data.meets.map(m=>m.id===meetId?{...m,maxEventsPerAthlete:v}:m)});}} />
             </div>
             <div>
               <label style={{fontSize:11,color:C.textMuted,display:'block',marginBottom:2}}>Max per individual event</label>
-              <input style={{...S.input,fontSize:13}} type="number" min="0" placeholder="No limit" value={meet.maxEntriesPerEvent||''} onChange={e=>{const v=parseInt(e.target.value)||0;save({...data,meets:data.meets.map(m=>m.id===meetId?{...m,maxEntriesPerEvent:v}:m)});}} />
+              <input style={{...S.input,fontSize:13}} type="text" inputMode="numeric" placeholder="No limit" value={meet.maxEntriesPerEvent||''} onChange={e=>{const v=parseInt(e.target.value)||0;save({...data,meets:data.meets.map(m=>m.id===meetId?{...m,maxEntriesPerEvent:v}:m)});}} />
             </div>
             <div>
               <label style={{fontSize:11,color:C.textMuted,display:'block',marginBottom:2}}>Max per relay event</label>
-              <input style={{...S.input,fontSize:13}} type="number" min="0" placeholder="No limit" value={meet.maxRelayEntries||''} onChange={e=>{const v=parseInt(e.target.value)||0;save({...data,meets:data.meets.map(m=>m.id===meetId?{...m,maxRelayEntries:v}:m)});}} />
+              <input style={{...S.input,fontSize:13}} type="text" inputMode="numeric" placeholder="No limit" value={meet.maxRelayEntries||''} onChange={e=>{const v=parseInt(e.target.value)||0;save({...data,meets:data.meets.map(m=>m.id===meetId?{...m,maxRelayEntries:v}:m)});}} />
             </div>
           </div>
           <p style={{fontSize:10,color:C.textMuted,marginTop:6,marginBottom:0}}>Set to 0 or leave blank for no limit. Violations show as warnings on the meet page.</p>
@@ -3539,17 +3607,17 @@ function AthleteSubPage({ data, save, nav, athleteId, athFilter, events, getAthl
             <div>
               <label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Distance / Height</label>
               <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                <div style={{display:'flex',alignItems:'center',gap:2}}><input style={{...S.input,width:50}} type="number" placeholder="ft" value={resultForm.ft} onChange={e=>setResultForm({...resultForm,ft:e.target.value})} /><span style={{fontSize:12,color:C.textMuted}}>'</span></div>
-                <div style={{display:'flex',alignItems:'center',gap:2}}><input style={{...S.input,width:50}} type="number" placeholder="in" value={resultForm.inch} onChange={e=>setResultForm({...resultForm,inch:e.target.value})} /><span style={{fontSize:12,color:C.textMuted}}>"</span></div>
-                <div style={{display:'flex',alignItems:'center',gap:2}}><input style={{...S.input,width:60}} type="number" step="0.25" placeholder=".00" value={resultForm.qtr} onChange={e=>setResultForm({...resultForm,qtr:e.target.value})} /></div>
+                <div style={{display:'flex',alignItems:'center',gap:2}}><input style={{...S.input,width:50}} type="text" inputMode="numeric" placeholder="ft" value={resultForm.ft} onChange={e=>setResultForm({...resultForm,ft:e.target.value})} /><span style={{fontSize:12,color:C.textMuted}}>'</span></div>
+                <div style={{display:'flex',alignItems:'center',gap:2}}><input style={{...S.input,width:50}} type="text" inputMode="numeric" placeholder="in" value={resultForm.inch} onChange={e=>setResultForm({...resultForm,inch:e.target.value})} /><span style={{fontSize:12,color:C.textMuted}}>"</span></div>
+                <div style={{display:'flex',alignItems:'center',gap:2}}><input style={{...S.input,width:60}} type="text" inputMode="decimal" placeholder=".00" value={resultForm.qtr} onChange={e=>setResultForm({...resultForm,qtr:e.target.value})} /></div>
               </div>
             </div>
           ) : resultForm.eventId ? (
             <div>
               <label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Time</label>
               <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                <div style={{display:'flex',alignItems:'center',gap:2}}><input style={{...S.input,width:50}} type="number" placeholder="min" value={resultForm.min} onChange={e=>setResultForm({...resultForm,min:e.target.value})} /><span style={{fontSize:12,color:C.textMuted}}>:</span></div>
-                <div style={{display:'flex',alignItems:'center',gap:2}}><input style={{...S.input,width:70}} type="number" step="0.01" placeholder="sec" value={resultForm.sec} onChange={e=>setResultForm({...resultForm,sec:e.target.value})} /></div>
+                <div style={{display:'flex',alignItems:'center',gap:2}}><input style={{...S.input,width:50}} type="text" inputMode="numeric" placeholder="min" value={resultForm.min} onChange={e=>setResultForm({...resultForm,min:e.target.value})} /><span style={{fontSize:12,color:C.textMuted}}>:</span></div>
+                <div style={{display:'flex',alignItems:'center',gap:2}}><input style={{...S.input,width:70}} type="text" inputMode="decimal" placeholder="sec" value={resultForm.sec} onChange={e=>setResultForm({...resultForm,sec:e.target.value})} /></div>
               </div>
             </div>
           ) : null}
@@ -6466,7 +6534,7 @@ function BulkStandardEntry({ data, save, events, stdTypes, combos }) {
               const v = bulkEntries[evt.id]||{};
               return (<tr key={evt.id}>
                 <td style={{...S.td,fontSize:13,fontWeight:500}}>{getEventLabel(evt)}</td>
-                <td style={S.td}><input style={{...S.input,width:'100%',fontSize:15,padding:'8px 10px',textAlign:'center',MozAppearance:'textfield',WebkitAppearance:'none'}} type="number" min="0" value={v.min||''} onChange={e=>{const ne={...bulkEntries};ne[evt.id]={...v,min:e.target.value};setBulkEntries(ne);}} /></td>
+                <td style={S.td}><input style={{...S.input,width:'100%',fontSize:15,padding:'8px 10px',textAlign:'center',MozAppearance:'textfield',WebkitAppearance:'none'}} type="text" inputMode="numeric" value={v.min||''} onChange={e=>{const ne={...bulkEntries};ne[evt.id]={...v,min:e.target.value};setBulkEntries(ne);}} /></td>
                 <td style={{...S.td,textAlign:'center',color:C.textMuted,fontSize:16,padding:0,fontWeight:700}}>:</td>
                 <td style={S.td}><input style={{...S.input,width:'100%',fontSize:15,padding:'8px 10px',textAlign:'center'}} type="text" inputMode="decimal" placeholder="00.00" value={v.sec||''} onChange={e=>{const ne={...bulkEntries};ne[evt.id]={...v,sec:e.target.value};setBulkEntries(ne);}} /></td>
               </tr>);
@@ -6481,9 +6549,9 @@ function BulkStandardEntry({ data, save, events, stdTypes, combos }) {
               const v = bulkEntries[evt.id]||{};
               return (<tr key={evt.id}>
                 <td style={{...S.td,fontSize:13,fontWeight:500}}>{getEventLabel(evt)}</td>
-                <td style={S.td}><input style={{...S.input,width:'100%',fontSize:15,padding:'8px 10px',textAlign:'center',MozAppearance:'textfield',WebkitAppearance:'none'}} type="number" value={v.ft||''} onChange={e=>{const ne={...bulkEntries};ne[evt.id]={...v,ft:e.target.value};setBulkEntries(ne);}} /></td>
-                <td style={S.td}><input style={{...S.input,width:'100%',fontSize:15,padding:'8px 10px',textAlign:'center',MozAppearance:'textfield',WebkitAppearance:'none'}} type="number" value={v.inch||''} onChange={e=>{const ne={...bulkEntries};ne[evt.id]={...v,inch:e.target.value};setBulkEntries(ne);}} /></td>
-                <td style={S.td}><input style={{...S.input,width:'100%',fontSize:15,padding:'8px 10px',textAlign:'center',MozAppearance:'textfield',WebkitAppearance:'none'}} type="number" step="0.25" value={v.qtr||''} onChange={e=>{const ne={...bulkEntries};ne[evt.id]={...v,qtr:e.target.value};setBulkEntries(ne);}} /></td>
+                <td style={S.td}><input style={{...S.input,width:'100%',fontSize:15,padding:'8px 10px',textAlign:'center',MozAppearance:'textfield',WebkitAppearance:'none'}} type="text" inputMode="numeric" value={v.ft||''} onChange={e=>{const ne={...bulkEntries};ne[evt.id]={...v,ft:e.target.value};setBulkEntries(ne);}} /></td>
+                <td style={S.td}><input style={{...S.input,width:'100%',fontSize:15,padding:'8px 10px',textAlign:'center',MozAppearance:'textfield',WebkitAppearance:'none'}} type="text" inputMode="numeric" value={v.inch||''} onChange={e=>{const ne={...bulkEntries};ne[evt.id]={...v,inch:e.target.value};setBulkEntries(ne);}} /></td>
+                <td style={S.td}><input style={{...S.input,width:'100%',fontSize:15,padding:'8px 10px',textAlign:'center',MozAppearance:'textfield',WebkitAppearance:'none'}} type="text" inputMode="decimal" value={v.qtr||''} onChange={e=>{const ne={...bulkEntries};ne[evt.id]={...v,qtr:e.target.value};setBulkEntries(ne);}} /></td>
               </tr>);
             })}</tbody>
           </table>

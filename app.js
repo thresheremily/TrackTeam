@@ -163,27 +163,34 @@ const getSortedMeetEventIds = (data, events, meetId) => {
   return withEntries.map(e=>e.id);
 };
 const getStdBadgeInfo = (data, stdName) => {
+  const sn = (stdName||'').trim().toLowerCase();
   for(const t of (data.qualifyingStandardTypes||[])) {
-    const subs = t.subtypes||[];
+    const tn = (t.name||'').trim().toLowerCase();
     const baseAbbrev = t.abbrev||t.name.slice(0,4).toUpperCase();
     const baseColor = t.color||'#2b6cb0';
-    if(t.name===stdName) return {abbrev:baseAbbrev,color:baseColor};
-    for(const s of subs) { if(t.name+' - '+s===stdName) return {abbrev:baseAbbrev+'-'+s.slice(0,1).toUpperCase(),color:baseColor}; }
-    if(stdName.startsWith(t.name)) return {abbrev:baseAbbrev,color:baseColor};
+    if(tn===sn) return {abbrev:baseAbbrev,color:baseColor};
+    for(const s of (t.subtypes||[])) {
+      const comboName = (t.name+' - '+s).trim().toLowerCase();
+      if(comboName===sn) return {abbrev:baseAbbrev+'-'+s.slice(0,1).toUpperCase(),color:baseColor};
+    }
+    if(sn.startsWith(tn)) return {abbrev:baseAbbrev,color:baseColor};
   }
   return {abbrev:(stdName||'').slice(0,4).toUpperCase(),color:'#2b6cb0'};
 };
 const QStdBadge = ({data,std}) => {
   if(!std) return null;
   const info = getStdBadgeInfo(data, std.name);
-  return <span style={{fontSize:9,fontWeight:700,padding:'2px 6px',borderRadius:8,background:info.color+'20',color:info.color,border:`1px solid ${info.color}`,whiteSpace:'nowrap'}} title={std.name}>{info.abbrev}</span>;
+  const hex = info.color;
+  const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+  return <span style={{fontSize:9,fontWeight:700,padding:'2px 6px',borderRadius:8,background:`rgba(${r},${g},${b},0.12)`,color:hex,border:`1px solid ${hex}`,whiteSpace:'nowrap'}} title={std.name}>{info.abbrev}</span>;
 };
 const getStdTimingTypeGlobal = (data, stdName) => {
+  const sn = (stdName||'').trim().toLowerCase();
   for(const t of (data.qualifyingStandardTypes||[])) {
-    const subs = t.subtypes||[];
-    if(t.name===stdName) return t.timingType||'Both';
-    for(const s of subs) { if(t.name+' - '+s===stdName) return (t.subtypeTimingTypes||{})[s]||'Both'; }
-    if(stdName.startsWith(t.name)) return t.timingType||'Both';
+    const tn = (t.name||'').trim().toLowerCase();
+    if(tn===sn) return t.timingType||'Both';
+    for(const s of (t.subtypes||[])) { if((t.name+' - '+s).trim().toLowerCase()===sn) return (t.subtypeTimingTypes||{})[s]||'Both'; }
+    if(sn.startsWith(tn)) return t.timingType||'Both';
   }
   return 'Both';
 };
@@ -1563,6 +1570,10 @@ function MeetFormModal({ editId, initial, meetTypes, onSave, onClose }) {
           </div>
           <div style={{fontSize:10,color:C.textMuted,marginTop:6,fontStyle:'italic'}}>Relay alternates don't count toward either limit. Relay entries count as one event toward the athlete's total.</div>
         </div>
+        <div style={{marginTop:8}}>
+          <label style={{fontSize:12,color:C.textSecondary}}>Meet Notes</label>
+          <textarea style={{...S.input,width:'100%',minHeight:60,resize:'vertical',fontFamily:'inherit',fontSize:12,padding:'8px'}} placeholder="Entry minimums, special rules, schedule notes..." value={f.notes||''} onChange={e=>setF({...f,notes:e.target.value})} />
+        </div>
         <button style={{...S.btn,...S.btnPrimary}} onClick={()=>{if(!f.name||!f.startDate)return;onSave({...f,startDate:padDate(f.startDate),endDate:padDate(f.endDate),maxEntriesPerEvent:f.maxEntriesPerEvent||null,maxEventsPerAthlete:f.maxEventsPerAthlete||null});}}>{editId?'Save Changes':'Create Meet'}</button>
       </div>
     </Modal>
@@ -1689,7 +1700,7 @@ function MeetsPage({ data, save, nav, events }) {
       {showAdd && <MeetFormModal
         key={openCount}
         editId={(editMeet||{}).id}
-        initial={editMeet ? {name:editMeet.name||'',startDate:(editMeet.startDate||editMeet.date||'').split('T')[0],endDate:(editMeet.endDate||'').split('T')[0],venue:editMeet.venue||'',city:editMeet.city||'',state:editMeet.state||'',trackType:editMeet.trackType||'Outdoor',timingSystem:editMeet.timingSystem||'FAT',meetTypeId:editMeet.meetTypeId||'',maxEntriesPerEvent:editMeet.maxEntriesPerEvent||'',maxEventsPerAthlete:editMeet.maxEventsPerAthlete||''} : {name:'',startDate:'',endDate:'',venue:'',city:'',state:'',trackType:'Outdoor',timingSystem:'FAT',meetTypeId:'',maxEntriesPerEvent:'',maxEventsPerAthlete:''}}
+        initial={editMeet ? {name:editMeet.name||'',startDate:(editMeet.startDate||editMeet.date||'').split('T')[0],endDate:(editMeet.endDate||'').split('T')[0],venue:editMeet.venue||'',city:editMeet.city||'',state:editMeet.state||'',trackType:editMeet.trackType||'Outdoor',timingSystem:editMeet.timingSystem||'FAT',meetTypeId:editMeet.meetTypeId||'',maxEntriesPerEvent:editMeet.maxEntriesPerEvent||'',maxEventsPerAthlete:editMeet.maxEventsPerAthlete||'',notes:editMeet.notes||''} : {name:'',startDate:'',endDate:'',venue:'',city:'',state:'',trackType:'Outdoor',timingSystem:'FAT',meetTypeId:'',maxEntriesPerEvent:'',maxEventsPerAthlete:'',notes:''}}
         meetTypes={meetTypes}
         onSave={(f)=>{
           if((editMeet||{}).id) { save({...data, meets:data.meets.map(m=>m.id===editMeet.id?{...m,...f}:m)}); }
@@ -1725,6 +1736,8 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
   const [meetTab, setMeetTab] = useState('events');
   const [showManageEvents, setShowManageEvents] = useState(false);
   const [newEventForm, setNewEventForm] = useState({ name:'', gender:'Boy', eventType:'Track', entryType:'Individual', measurableType:'Time' });
+  const [resultsEntryEvent, setResultsEntryEvent] = useState(null);
+  const [resultsEntryData, setResultsEntryData] = useState({});
   const [athViewSearch, setAthViewSearch] = useState('');
   const [athViewGender, setAthViewGender] = useState('');
   const [athViewSort, setAthViewSort] = useState('name');
@@ -1899,6 +1912,8 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
         const isField = isFieldEvent(me.evt);
         const isRly = me.evt.entryType==='Relay';
         body += '<tr><td colspan="99" class="evt-hdr">'+getEventLabel(me.evt)+'<span class="evt-sub">'+me.evt.eventType+' — '+me.evt.entryType+'</span></td></tr>';
+        const evtNote = (meet.eventNotes||{})[me.eventId];
+        if(evtNote) body += '<tr><td colspan="99" style="font-size:10px;color:#92400e;background:#fef3c7;padding:3px 8px;border-bottom:1px solid #f59e0b">'+evtNote+'</td></tr>';
         body += '<tr><th style="width:24px">#</th><th>Athlete</th><th>Yr</th>';
         if(!isField&&!isRly) body += '<th>Heat</th><th>Lane</th>';
         body += '<th style="text-align:right">PR</th>';
@@ -1981,6 +1996,51 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
     w.document.close();
     setTimeout(()=>w.print(),300);
   };
+  const openResultsEntry = (me) => {
+    const evt = me.evt;
+    const isField = isFieldEvent(evt);
+    const entries = me.entries||[];
+    const athleteIds = entries.flatMap(en=>en.athletes?en.athletes.map(a=>a.athleteId):[en.athleteId]).filter(Boolean);
+    const unique = [...new Set(athleteIds)];
+    const pre = {};
+    unique.forEach(aid=>{
+      const existing = (data.results||[]).find(r=>r.athleteId===aid&&r.eventId===evt.id&&r.meetId===meetId&&!r.isRelay&&!r.isRelaySplit);
+      if(existing) {
+        if(isField) pre[aid] = {ft:(existing.ft||'')+'',inch:(existing.inch||'')+'',qtr:(existing.qtr||'')+'',place:(existing.place||'')+'',resultId:existing.id,verified:!!existing.verified};
+        else {const ms=existing.timeMs||0;pre[aid]={min:Math.floor(ms/60000)+'',sec:((ms%60000)/1000).toFixed(2),place:(existing.place||'')+'',resultId:existing.id,verified:!!existing.verified};}
+      } else {
+        pre[aid] = isField?{ft:'',inch:'',qtr:'',place:''}:{min:'',sec:'',place:''};
+      }
+    });
+    setResultsEntryData(pre);
+    setResultsEntryEvent(me.eventId);
+  };
+  const saveResultsEntry = (eventId) => {
+    const evt = events.find(e=>e.id===eventId);
+    if(!evt) return;
+    const isField = isFieldEvent(evt);
+    const raceDate = meet.startDate||meet.date||new Date().toISOString().split('T')[0];
+    let updatedResults = [...(data.results||[])];
+    Object.entries(resultsEntryData).forEach(([aid,v])=>{
+      const hasValue = isField?(v.ft||v.inch||v.qtr):(v.min||v.sec);
+      if(!hasValue) return;
+      if(v.resultId) {
+        updatedResults = updatedResults.map(r=>{
+          if(r.id!==v.resultId) return r;
+          if(isField) return {...r,ft:parseInt(v.ft)||0,inch:parseInt(v.inch)||0,qtr:parseFloat(v.qtr)||0,place:v.place||'',verified:true};
+          return {...r,timeMs:parseTimeToMs(v.min,v.sec),place:v.place||'',verified:true};
+        });
+      } else {
+        const newR = {id:uid(),athleteId:aid,eventId,meetId,date:raceDate,verified:true,place:v.place||''};
+        if(isField) {newR.ft=parseInt(v.ft)||0;newR.inch=parseInt(v.inch)||0;newR.qtr=parseFloat(v.qtr)||0;}
+        else newR.timeMs=parseTimeToMs(v.min,v.sec);
+        updatedResults.push(newR);
+      }
+    });
+    save({...data,results:updatedResults});
+    setResultsEntryEvent(null);
+    setResultsEntryData({});
+  };
   const goToRecord = (me) => {
     const entries = me.entries || [];
     const athleteIds = entries.flatMap(en => en.athletes ? en.athletes.map(a=>a.athleteId) : [en.athleteId]).filter(Boolean);
@@ -2017,6 +2077,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
         {meet.venue && ` - ${meet.venue}`}{meet.city && `, ${meet.city}`}{meet.state && ` ${meet.state}`}
         {meetType && <span style={{marginLeft:8,color:meetType.qualifying?C.success:C.textMuted,fontWeight:600}}>({meetType.name})</span>}
       </p>
+      {meet.notes&&<div style={{fontSize:12,color:C.textSecondary,padding:'6px 12px',background:'#fef3c7',border:'1px solid #f59e0b',borderRadius:6,marginBottom:8,whiteSpace:'pre-wrap',lineHeight:1.4}}>{meet.notes}</div>}
       {(meet.maxEntriesPerEvent||meet.maxEventsPerAthlete||meet.maxRelayEntries)&&(
         <div style={{display:'flex',gap:6,marginBottom:10,flexWrap:'wrap'}}>
           {meet.maxEntriesPerEvent&&<span style={{fontSize:11,fontWeight:600,color:C.accent,padding:'3px 10px',borderRadius:10,background:C.accentMuted,border:`1px solid ${C.accent}`}}>Max {meet.maxEntriesPerEvent} per individual event</span>}
@@ -2119,8 +2180,19 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
               <div style={{display:'flex',gap:6}}>
                 <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'6px 14px'}} onClick={()=>{setEditEntryIdx(null);setShowEntryModal(me.eventId);}}>+ Entry</button>
                 {hasEntries && <button style={{...S.btn,...S.btnPrimary,fontSize:12,padding:'6px 14px'}} onClick={()=>goToRecord(me)}>Record</button>}
+                {hasEntries && <button style={{...S.btn,fontSize:12,padding:'6px 14px',background:resultsEntryEvent===me.eventId?C.accent+'20':C.surface2,color:resultsEntryEvent===me.eventId?C.accent:C.textSecondary,border:`1px solid ${resultsEntryEvent===me.eventId?C.accent:C.border}`}} onClick={()=>{if(resultsEntryEvent===me.eventId){setResultsEntryEvent(null);setResultsEntryData({});}else openResultsEntry(me);}}>Results</button>}
               </div>
             </div>
+            {(()=>{
+              const evtNote = (meet.eventNotes||{})[me.eventId]||'';
+              return (<div style={{marginBottom:evtNote||isFieldEvent(me.evt)?6:0}}>
+                {evtNote&&<div style={{fontSize:11,padding:'4px 10px',background:'#fef3c7',border:'1px solid #f59e0b',borderRadius:6,color:'#92400e',marginBottom:4,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                  <span>{evtNote}</span>
+                  <button style={{background:'none',border:'none',color:'#92400e',cursor:'pointer',fontSize:10,padding:'0 4px',fontWeight:700}} onClick={()=>{const v=prompt('Event note:',evtNote);if(v!==null)save({...data,meets:data.meets.map(m=>m.id===meetId?{...m,eventNotes:{...(m.eventNotes||{}),[me.eventId]:v}}:m)});}}>✎</button>
+                </div>}
+                {!evtNote&&<button style={{background:'none',border:'none',color:C.textMuted,cursor:'pointer',fontSize:10,padding:'2px 0'}} onClick={()=>{const v=prompt('Add note (e.g. minimum height, entry requirement):');if(v)save({...data,meets:data.meets.map(m=>m.id===meetId?{...m,eventNotes:{...(m.eventNotes||{}),[me.eventId]:v}}:m)});}}>+ Add note</button>}
+              </div>);
+            })()}
             {hasEntries && (
               <table style={{width:'100%',borderCollapse:'collapse'}}>
                 <thead><tr><th style={S.th}>Athlete</th><th style={S.th}>PR</th><th style={S.th}>Goal</th><th style={{...S.th,width:70}}></th></tr></thead>
@@ -2174,6 +2246,51 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                 </tbody>
               </table>
             )}
+            {resultsEntryEvent===me.eventId&&(()=>{
+              const isField = isFieldEvent(me.evt);
+              const athleteIds = (me.entries||[]).flatMap(en=>en.athletes?en.athletes.map(a=>a.athleteId):[en.athleteId]).filter(Boolean);
+              const unique = [...new Set(athleteIds)];
+              return (<div style={{marginTop:8,padding:'10px 12px',background:C.bg,borderRadius:8,border:`1px solid ${C.accent}`}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                  <span style={{fontSize:13,fontWeight:700,color:C.accent}}>Enter Results</span>
+                  <div style={{display:'flex',gap:6}}>
+                    <button style={{...S.btn,...S.btnPrimary,fontSize:12,padding:'6px 16px'}} onClick={()=>saveResultsEntry(me.eventId)}>Save All</button>
+                    <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'6px 12px'}} onClick={()=>{setResultsEntryEvent(null);setResultsEntryData({});}}>Cancel</button>
+                  </div>
+                </div>
+                <table style={{width:'100%',borderCollapse:'collapse'}}>
+                  <thead><tr>
+                    <th style={{...S.th,textAlign:'left'}}>Athlete</th>
+                    {isField?<><th style={{...S.th,width:55}}>Ft</th><th style={{...S.th,width:55}}>In</th><th style={{...S.th,width:55}}>Qtr</th></>:<><th style={{...S.th,width:55}}>Min</th><th style={{...S.th,width:10}}></th><th style={{...S.th,width:75}}>Sec</th></>}
+                    <th style={{...S.th,width:45}}>Pl</th>
+                    <th style={{...S.th,width:20}}></th>
+                  </tr></thead>
+                  <tbody>{unique.map(aid=>{
+                    const ath = data.athletes.find(a=>a.id===aid);
+                    if(!ath) return null;
+                    const v = resultsEntryData[aid]||{};
+                    const hasExisting = !!v.resultId;
+                    return (<tr key={aid} style={{background:hasExisting?C.successMuted+'60':'transparent'}}>
+                      <td style={{...S.td,fontSize:12,fontWeight:500}}>{athDisplay(ath)}{ath.gradYear&&<span style={{color:C.textMuted,marginLeft:4,fontSize:10}}>'{(ath.gradYear+'').slice(-2)}</span>}</td>
+                      {isField?<>
+                        <td style={S.td}><input style={{...S.input,width:'100%',fontSize:13,padding:'6px',textAlign:'center'}} type="number" value={v.ft||''} onChange={e=>{const n={...resultsEntryData};n[aid]={...v,ft:e.target.value};setResultsEntryData(n);}} /></td>
+                        <td style={S.td}><input style={{...S.input,width:'100%',fontSize:13,padding:'6px',textAlign:'center'}} type="number" value={v.inch||''} onChange={e=>{const n={...resultsEntryData};n[aid]={...v,inch:e.target.value};setResultsEntryData(n);}} /></td>
+                        <td style={S.td}><input style={{...S.input,width:'100%',fontSize:13,padding:'6px',textAlign:'center'}} type="number" step="0.25" value={v.qtr||''} onChange={e=>{const n={...resultsEntryData};n[aid]={...v,qtr:e.target.value};setResultsEntryData(n);}} /></td>
+                      </>:<>
+                        <td style={S.td}><input style={{...S.input,width:'100%',fontSize:13,padding:'6px',textAlign:'center'}} type="number" min="0" value={v.min||''} onChange={e=>{const n={...resultsEntryData};n[aid]={...v,min:e.target.value};setResultsEntryData(n);}} /></td>
+                        <td style={{...S.td,textAlign:'center',color:C.textMuted,fontSize:14,padding:0,fontWeight:700}}>:</td>
+                        <td style={S.td}><input style={{...S.input,width:'100%',fontSize:13,padding:'6px',textAlign:'center'}} type="text" inputMode="decimal" placeholder="00.00" value={v.sec||''} onChange={e=>{const n={...resultsEntryData};n[aid]={...v,sec:e.target.value};setResultsEntryData(n);}} /></td>
+                      </>}
+                      <td style={S.td}><input style={{...S.input,width:'100%',fontSize:12,padding:'6px',textAlign:'center'}} type="number" min="1" placeholder="#" value={v.place||''} onChange={e=>{const n={...resultsEntryData};n[aid]={...v,place:e.target.value};setResultsEntryData(n);}} /></td>
+                      <td style={S.td}>{hasExisting&&<span style={{fontSize:9,fontWeight:700,color:C.success}}>✓</span>}</td>
+                    </tr>);
+                  })}</tbody>
+                </table>
+                <div style={{display:'flex',justifyContent:'flex-end',marginTop:8}}>
+                  <button style={{...S.btn,...S.btnPrimary,fontSize:13,padding:'8px 24px'}} onClick={()=>saveResultsEntry(me.eventId)}>Save All Results</button>
+                </div>
+              </div>);
+            })()}
           </div>
         );
       })}
@@ -2304,10 +2421,12 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
         };
         const meetTiming = meet.timingSystem||'FAT';
         const getStdTimingType = (stdName) => {
+          const sn = (stdName||'').trim().toLowerCase();
           for(const t of (data.qualifyingStandardTypes||[])) {
-            if(t.name===stdName) return t.timingType||'Both';
-            for(const s of (t.subtypes||[])) { if(t.name+' - '+s===stdName) return (t.subtypeTimingTypes||{})[s]||'Both'; }
-            if(stdName.startsWith(t.name)) return t.timingType||'Both';
+            const tn = (t.name||'').trim().toLowerCase();
+            if(tn===sn) return t.timingType||'Both';
+            for(const s of (t.subtypes||[])) { if((t.name+' - '+s).trim().toLowerCase()===sn) return (t.subtypeTimingTypes||{})[s]||'Both'; }
+            if(sn.startsWith(tn)) return t.timingType||'Both';
           }
           return 'Both';
         };
@@ -6098,10 +6217,10 @@ function SeasonResultsPage({ data, save, nav, events, getAthletePR, season }) {
             events.forEach(evt=>{
               const allEvtStds = evt.qualifyingStandards||[];
               if(!allEvtStds.length) return;
-              const matchStd = allEvtStds.find(s=>s.name===combo.label)
-                || allEvtStds.find(s=>s.name===combo.typeName)
-                || allEvtStds.find(s=>combo.typeName && s.name.startsWith(combo.typeName))
-                || (combo.subtype && allEvtStds.find(s=>s.name.includes(combo.subtype)));
+              const matchStd = allEvtStds.find(s=>(s.name||'').trim().toLowerCase()===(combo.label||'').trim().toLowerCase())
+                || allEvtStds.find(s=>(s.name||'').trim().toLowerCase()===(combo.typeName||'').trim().toLowerCase())
+                || allEvtStds.find(s=>combo.typeName && (s.name||'').trim().toLowerCase().startsWith((combo.typeName||'').trim().toLowerCase()))
+                || (combo.subtype && allEvtStds.find(s=>(s.name||'').toLowerCase().includes((combo.subtype||'').toLowerCase())));
               if(!matchStd) return;
               const isField = isFieldEvent(evt);
               const stdVal = isField ? (matchStd.ft||0)*12+(matchStd.inch||0)+(matchStd.qtr||0) : matchStd.timeMs;

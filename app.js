@@ -442,24 +442,33 @@ const useStore = (teamId) => {
         setLoading(false);
       }, () => { setData(defaultData()); setLoading(false); });
   }, [teamId]);
+  const [syncStatus, setSyncStatus] = useState('idle');
+  const syncTimerRef = useRef(null);
   const save = useCallback(async (newData) => {
     setData(newData);
+    setSyncStatus('saving');
     if(!HAS_FIREBASE) {
-      try { await appStorage.set(STORE_KEY, JSON.stringify(newData)); } catch(e) { console.error(e); }
+      try { await appStorage.set(STORE_KEY, JSON.stringify(newData)); setSyncStatus('saved'); } catch(e) { console.error(e); setSyncStatus('error'); }
+      if(syncTimerRef.current) clearTimeout(syncTimerRef.current);
+      syncTimerRef.current = setTimeout(()=>setSyncStatus('idle'),3000);
       return;
     }
     if(teamId) {
       try {
         await db.collection('teams').doc(teamId).collection('data').doc('main').set(newData);
+        setSyncStatus('saved');
       }
       catch(e) {
         console.error('Save error:', e);
+        setSyncStatus('error');
         const sizeKB = Math.round(JSON.stringify(newData).length/1024);
         alert('Save failed! Data size: '+sizeKB+'KB. Error: '+e.message+'\n\nIf data is near 1MB, you may need to archive old results.');
       }
+      if(syncTimerRef.current) clearTimeout(syncTimerRef.current);
+      syncTimerRef.current = setTimeout(()=>setSyncStatus('idle'),3000);
     }
   }, [teamId]);
-  return { data, save, loading };
+  return { data, save, loading, syncStatus };
 };
 const getActiveSeason = (data) => ((data||{}).seasons||[]).find(s=>s.active);
 const isInSeason = (date, season) => {
@@ -827,7 +836,7 @@ function App() {
   const { user, loading: authLoading } = authHook;
   const teamHook = useTeam((user||{}).uid);
   const { team, teamLoading } = teamHook;
-  const { data, save, loading: dataLoading } = useStore((team||{}).id);
+  const { data, save, loading: dataLoading, syncStatus } = useStore((team||{}).id);
   const [page, setPage] = useState('dashboard');
   const [pageParams, setPageParams] = useState({});
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -970,7 +979,12 @@ function App() {
             {(team||{}).logo && <img src={team.logo} style={{width:32,height:32,borderRadius:6,objectFit:'contain'}} />}
             <div>
               <div style={{fontSize:15,fontWeight:700,color:C.text,textTransform:'uppercase',letterSpacing:'0.04em',fontFamily:HEADING_FONT}}>{teamDisplayName}</div>
-              <div style={{fontSize:11,color:C.textMuted,marginTop:2}}>{teamSchool}</div>
+              <div style={{display:'flex',alignItems:'center',gap:6,marginTop:2}}>
+                <span style={{fontSize:11,color:C.textMuted}}>{teamSchool}</span>
+                <span style={{width:8,height:8,borderRadius:'50%',background:syncStatus==='error'?C.danger:syncStatus==='saving'?'#b8860b':syncStatus==='saved'?C.success:C.border,transition:'background 0.3s',flexShrink:0}} title={syncStatus==='error'?'Save failed — changes not synced':syncStatus==='saving'?'Saving...':syncStatus==='saved'?'Saved':'Ready'} />
+                {syncStatus==='error'&&<span style={{fontSize:9,color:C.danger,fontWeight:700}}>NOT SAVED</span>}
+                {syncStatus==='saving'&&<span style={{fontSize:9,color:'#b8860b',fontWeight:600}}>Saving...</span>}
+              </div>
             </div>
           </div>
         </div>
@@ -998,6 +1012,8 @@ function App() {
             <span style={{fontSize:13,fontWeight:600,color:C.text,textTransform:'uppercase',letterSpacing:'0.04em',fontFamily:HEADING_FONT}}>{pageLabel}</span>
           </div>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
+            <span style={{width:8,height:8,borderRadius:'50%',background:syncStatus==='error'?C.danger:syncStatus==='saving'?'#b8860b':syncStatus==='saved'?C.success:C.border,transition:'background 0.3s'}} />
+            {syncStatus==='error'&&<span style={{fontSize:9,color:C.danger,fontWeight:700}}>!</span>}
             {season && <span style={{fontSize:10,color:C.accent,fontWeight:600,background:C.accentMuted,padding:'2px 8px',borderRadius:10}}>{season.name}</span>}
             {(team||{}).logo && <img src={team.logo} style={{width:24,height:24,borderRadius:4,objectFit:'contain'}} />}
           </div>

@@ -181,10 +181,11 @@ const getStdBadgeInfo = (data, stdName) => {
     const tn = (t.name||'').trim().toLowerCase();
     const baseAbbrev = t.abbrev||t.name.slice(0,4).toUpperCase();
     const baseColor = t.color||'#2b6cb0';
-    const snWords = sn.split(/[\s\-]+/);
-    const tnWords = tn.split(/[\s\-]+/);
-    if(tnWords.length>0 && tnWords.every(w=>snWords.includes(w))) return {abbrev:baseAbbrev,color:baseColor};
-    if(sn.includes(tn)) return {abbrev:baseAbbrev,color:baseColor};
+    if(sn.includes(tn) || tn.includes(sn)) return {abbrev:baseAbbrev,color:baseColor};
+    const snWords = sn.split(/[\s\-\_\:]+/).filter(w=>w.length>2);
+    const tnWords = tn.split(/[\s\-\_\:]+/).filter(w=>w.length>2);
+    if(tnWords.length>0 && tnWords.some(w=>snWords.includes(w))) return {abbrev:baseAbbrev,color:baseColor};
+    if(snWords.length>0 && snWords.some(w=>tnWords.includes(w))) return {abbrev:baseAbbrev,color:baseColor};
   }
   return {abbrev:(stdName||'Q').slice(0,4).toUpperCase(),color:'#2b6cb0'};
 };
@@ -198,7 +199,8 @@ const safeHexToRgba = (hex, alpha) => {
 const QStdBadge = ({data,std}) => {
   if(!std) return null;
   const info = getStdBadgeInfo(data, std.name);
-  return <span style={{fontSize:9,fontWeight:700,padding:'2px 6px',borderRadius:8,background:safeHexToRgba(info.color,0.12),color:info.color||'#2b6cb0',border:`1px solid ${info.color||'#2b6cb0'}`,whiteSpace:'nowrap'}} title={std.name}>{info.abbrev}</span>;
+  const matched = info.color!=='#2b6cb0' || (data.qualifyingStandardTypes||[]).length===0;
+  return <span style={{fontSize:9,fontWeight:700,padding:'2px 6px',borderRadius:8,background:safeHexToRgba(info.color,0.15),color:info.color||'#2b6cb0',border:`1px solid ${info.color||'#2b6cb0'}`,whiteSpace:'nowrap',opacity:matched?1:0.7}} title={std.name+(matched?'':' [unmatched - check Settings > Qualifying type names]')}>{info.abbrev}</span>;
 };
 const getStdTimingTypeGlobal = (data, stdName) => {
   const sn = (stdName||'').trim().toLowerCase();
@@ -222,7 +224,9 @@ const stdMatchesResultTiming = (data, stdName, meetId) => {
 const handToFAT = (ms) => {
   if(!ms) return 0;
   const sec = ms / 1000;
-  const roundedUp = Math.ceil(sec * 10) / 10;
+  const tenths = Math.round(sec * 10);
+  const remainder = Math.round(sec * 100) - tenths * 10;
+  const roundedUp = remainder > 0 ? (tenths + 1) / 10 : tenths / 10;
   return Math.round((roundedUp + 0.24) * 1000);
 };
 const getResultTimingSystem = (data, r) => {
@@ -231,6 +235,7 @@ const getResultTimingSystem = (data, r) => {
   return (meet||{}).timingSystem||'FAT';
 };
 const getAllQualifyingForResult = (data, events, r, filterTiming) => {
+  if(r.isRelaySplit) return [];
   const evt = events.find(e=>e.id===r.eventId);
   if(!evt||!(evt.qualifyingStandards||[]).length) return [];
   const stds = evt.qualifyingStandards||[];
@@ -2561,6 +2566,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
           return tt==='Both' || tt===meetTiming;
         };
         const isQualifying = (r) => {
+          if(r.isRelaySplit) return null;
           const evt = events.find(e=>e.id===r.eventId);
           if(!evt || !(evt.qualifyingStandards||[]).length) return null;
           const applicable = (evt.qualifyingStandards||[]).filter(s=>stdMatchesTiming(s.name));
@@ -2584,6 +2590,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
           }
         };
         const getAllQualifying = (r) => {
+          if(r.isRelaySplit) return [];
           const evt = events.find(e=>e.id===r.eventId);
           if(!evt || !(evt.qualifyingStandards||[]).length) return [];
           const applicable = (evt.qualifyingStandards||[]).filter(s=>stdMatchesTiming(s.name));
@@ -2724,7 +2731,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                       const pr = !r.isRelaySplit && isPR(r);
                       const allQuals = getAllQualifying(r);
                       const relayComposite = r.isRelaySplit ? (r._relayTotal ? {timeMs:r._relayTotal} : athRelays.find(rr=>rr.eventId===r.eventId&&rr.date===r.date)) : null;
-                      const relayQuals = r.isRelaySplit && relayComposite ? getAllQualifying({eventId:r.eventId,timeMs:relayComposite.timeMs}) : [];
+                      const relayQuals = r.isRelaySplit && relayComposite ? getAllQualifying({eventId:r.eventId,timeMs:relayComposite.timeMs,meetId:meetId,isRelay:true}) : [];
                       const isEditing = editResultId===r.id;
                       return [
                         <tr key={r.id}>

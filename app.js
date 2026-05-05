@@ -449,8 +449,14 @@ const useStore = (teamId) => {
       return;
     }
     if(teamId) {
-      try { await db.collection('teams').doc(teamId).collection('data').doc('main').set(newData); }
-      catch(e) { console.error('Save error:', e); }
+      try {
+        await db.collection('teams').doc(teamId).collection('data').doc('main').set(newData);
+      }
+      catch(e) {
+        console.error('Save error:', e);
+        const sizeKB = Math.round(JSON.stringify(newData).length/1024);
+        alert('Save failed! Data size: '+sizeKB+'KB. Error: '+e.message+'\n\nIf data is near 1MB, you may need to archive old results.');
+      }
     }
   }, [teamId]);
   return { data, save, loading };
@@ -6906,6 +6912,30 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
         </div>
       </div>)}
       {tab==='data' && (<div>
+        <div style={{...S.card,marginBottom:16}}>
+          <h2 style={{...S.h2,marginBottom:8}}>Sync Status</h2>
+          {(()=>{
+            const sizeBytes = JSON.stringify(data).length;
+            const sizeKB = Math.round(sizeBytes/1024);
+            const pctFull = Math.round(sizeBytes/1048576*100);
+            const isWarning = pctFull > 70;
+            const isDanger = pctFull > 90;
+            return (<div>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                <span style={{fontSize:13,fontWeight:600}}>Data Size: {sizeKB} KB / 1,024 KB</span>
+                <span style={{fontSize:12,fontWeight:700,color:isDanger?C.danger:isWarning?'#b8860b':C.success}}>{pctFull}% full</span>
+              </div>
+              <div style={{height:8,background:C.surface2,borderRadius:4,overflow:'hidden',marginBottom:8}}>
+                <div style={{width:Math.min(100,pctFull)+'%',height:'100%',background:isDanger?C.danger:isWarning?'#b8860b':C.success,borderRadius:4}} />
+              </div>
+              {isDanger&&<div style={{fontSize:11,color:C.danger,fontWeight:600,marginBottom:6}}>Your data is near the Firestore limit. Saves may fail and changes won't sync. Consider archiving old meet results.</div>}
+              {isWarning&&!isDanger&&<div style={{fontSize:11,color:'#b8860b',fontWeight:600,marginBottom:6}}>Data is getting large. Monitor this to avoid sync issues.</div>}
+              <div style={{fontSize:11,color:C.textMuted}}>
+                Athletes: {(data.athletes||[]).length} · Meets: {(data.meets||[]).length} · Results: {(data.results||[]).length} · Attendance: {(data.attendance||[]).length}
+              </div>
+            </div>);
+          })()}
+        </div>
         <div style={S.card}>
           <h2 style={{...S.h2,marginBottom:8}}>Export Data</h2>
           <p style={{fontSize:13,color:C.textSecondary,marginBottom:12}}>Download all your data as a JSON file. Use this to transfer between devices or as a backup.</p>

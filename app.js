@@ -164,25 +164,41 @@ const getSortedMeetEventIds = (data, events, meetId) => {
 };
 const getStdBadgeInfo = (data, stdName) => {
   const sn = (stdName||'').trim().toLowerCase();
-  for(const t of (data.qualifyingStandardTypes||[])) {
+  if(!sn) return {abbrev:'Q',color:'#2b6cb0'};
+  const types = (data.qualifyingStandardTypes||[]);
+  for(const t of types) {
     const tn = (t.name||'').trim().toLowerCase();
     const baseAbbrev = t.abbrev||t.name.slice(0,4).toUpperCase();
     const baseColor = t.color||'#2b6cb0';
     if(tn===sn) return {abbrev:baseAbbrev,color:baseColor};
     for(const s of (t.subtypes||[])) {
-      const comboName = (t.name+' - '+s).trim().toLowerCase();
-      if(comboName===sn) return {abbrev:baseAbbrev+'-'+s.slice(0,1).toUpperCase(),color:baseColor};
+      if((t.name+' - '+s).trim().toLowerCase()===sn) return {abbrev:baseAbbrev+'-'+s.slice(0,1).toUpperCase(),color:baseColor};
+      if((t.name+' '+s).trim().toLowerCase()===sn) return {abbrev:baseAbbrev+'-'+s.slice(0,1).toUpperCase(),color:baseColor};
     }
-    if(sn.startsWith(tn)) return {abbrev:baseAbbrev,color:baseColor};
+    if(sn.startsWith(tn+' ') || sn.startsWith(tn+'-')) return {abbrev:baseAbbrev,color:baseColor};
   }
-  return {abbrev:(stdName||'').slice(0,4).toUpperCase(),color:'#2b6cb0'};
+  for(const t of types) {
+    const tn = (t.name||'').trim().toLowerCase();
+    const baseAbbrev = t.abbrev||t.name.slice(0,4).toUpperCase();
+    const baseColor = t.color||'#2b6cb0';
+    const snWords = sn.split(/[\s\-]+/);
+    const tnWords = tn.split(/[\s\-]+/);
+    if(tnWords.length>0 && tnWords.every(w=>snWords.includes(w))) return {abbrev:baseAbbrev,color:baseColor};
+    if(sn.includes(tn)) return {abbrev:baseAbbrev,color:baseColor};
+  }
+  return {abbrev:(stdName||'Q').slice(0,4).toUpperCase(),color:'#2b6cb0'};
+};
+const safeHexToRgba = (hex, alpha) => {
+  const h = (hex||'#2b6cb0').replace('#','');
+  const r = parseInt(h.slice(0,2),16)||43;
+  const g = parseInt(h.slice(2,4),16)||108;
+  const b = parseInt(h.slice(4,6),16)||176;
+  return `rgba(${r},${g},${b},${alpha})`;
 };
 const QStdBadge = ({data,std}) => {
   if(!std) return null;
   const info = getStdBadgeInfo(data, std.name);
-  const hex = info.color;
-  const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
-  return <span style={{fontSize:9,fontWeight:700,padding:'2px 6px',borderRadius:8,background:`rgba(${r},${g},${b},0.12)`,color:hex,border:`1px solid ${hex}`,whiteSpace:'nowrap'}} title={std.name}>{info.abbrev}</span>;
+  return <span style={{fontSize:9,fontWeight:700,padding:'2px 6px',borderRadius:8,background:safeHexToRgba(info.color,0.12),color:info.color||'#2b6cb0',border:`1px solid ${info.color||'#2b6cb0'}`,whiteSpace:'nowrap'}} title={std.name}>{info.abbrev}</span>;
 };
 const getStdTimingTypeGlobal = (data, stdName) => {
   const sn = (stdName||'').trim().toLowerCase();
@@ -203,6 +219,17 @@ const stdMatchesResultTiming = (data, stdName, meetId) => {
   const meetTiming = meet.timingSystem||'FAT';
   return tt===meetTiming;
 };
+const handToFAT = (ms) => {
+  if(!ms) return 0;
+  const sec = ms / 1000;
+  const roundedUp = Math.ceil(sec * 10) / 10;
+  return Math.round((roundedUp + 0.24) * 1000);
+};
+const getResultTimingSystem = (data, r) => {
+  if(!r.meetId) return 'FAT';
+  const meet = (data.meets||[]).find(m=>m.id===r.meetId);
+  return (meet||{}).timingSystem||'FAT';
+};
 const getAllQualifyingForResult = (data, events, r, filterTiming) => {
   const evt = events.find(e=>e.id===r.eventId);
   if(!evt||!(evt.qualifyingStandards||[]).length) return [];
@@ -213,9 +240,18 @@ const getAllQualifyingForResult = (data, events, r, filterTiming) => {
     const myVal = (r.ft||0)*12+(r.inch||0)+(r.qtr||0);
     return applicable.filter(s=>{const sVal=(s.ft||0)*12+(s.inch||0)+(s.qtr||0);return sVal>0&&myVal>=sVal;});
   } else {
-    const checkMs = r.timeMs||(r._relayTotal)||0;
-    if(!checkMs) return [];
-    return applicable.filter(s=>s.timeMs>0&&checkMs<=s.timeMs);
+    const rawMs = r.timeMs||(r._relayTotal)||0;
+    if(!rawMs) return [];
+    const resultTiming = getResultTimingSystem(data, r);
+    return applicable.filter(s=>{
+      if(!s.timeMs||s.timeMs<=0) return false;
+      const stdTiming = getStdTimingTypeGlobal(data, s.name);
+      let checkMs = rawMs;
+      if(resultTiming==='Hand' && (stdTiming==='FAT'||stdTiming==='Both')) {
+        checkMs = handToFAT(rawMs);
+      }
+      return checkMs <= s.timeMs;
+    });
   }
 };
 const parseCSV = (text) => {
@@ -2536,9 +2572,15 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
               return sVal>0 && myVal>=sVal;
             });
           } else {
-            const checkMs = r.timeMs || (r._relayTotal) || 0;
-            if(!checkMs) return null;
-            return applicable.find(s=>s.timeMs>0 && checkMs<=s.timeMs);
+            const rawMs = r.timeMs || (r._relayTotal) || 0;
+            if(!rawMs) return null;
+            return applicable.find(s=>{
+              if(!s.timeMs||s.timeMs<=0) return false;
+              const stdTT = getStdTimingType(s.name);
+              let checkMs = rawMs;
+              if(meetTiming==='Hand' && (stdTT==='FAT'||stdTT==='Both')) checkMs = handToFAT(rawMs);
+              return checkMs<=s.timeMs;
+            });
           }
         };
         const getAllQualifying = (r) => {
@@ -2549,9 +2591,15 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
             const myVal = (r.ft||0)*12 + (r.inch||0) + (r.qtr||0);
             return applicable.filter(s=>{const sVal=(s.ft||0)*12+(s.inch||0)+(s.qtr||0);return sVal>0&&myVal>=sVal;});
           } else {
-            const checkMs = r.timeMs || (r._relayTotal) || 0;
-            if(!checkMs) return [];
-            return applicable.filter(s=>s.timeMs>0&&checkMs<=s.timeMs);
+            const rawMs = r.timeMs || (r._relayTotal) || 0;
+            if(!rawMs) return [];
+            return applicable.filter(s=>{
+              if(!s.timeMs||s.timeMs<=0) return false;
+              const stdTT = getStdTimingType(s.name);
+              let checkMs = rawMs;
+              if(meetTiming==='Hand' && (stdTT==='FAT'||stdTT==='Both')) checkMs = handToFAT(rawMs);
+              return checkMs<=s.timeMs;
+            });
           }
         };
         const isRelayQualifying = (relayResult) => {
@@ -2559,7 +2607,13 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
           if(!evt || !(evt.qualifyingStandards||[]).length) return null;
           const applicable = (evt.qualifyingStandards||[]).filter(s=>stdMatchesTiming(s.name));
           if(!applicable.length||!relayResult.timeMs) return null;
-          return applicable.find(s=>s.timeMs>0 && relayResult.timeMs<=s.timeMs);
+          return applicable.find(s=>{
+            if(!s.timeMs||s.timeMs<=0) return false;
+            const stdTT = getStdTimingType(s.name);
+            let checkMs = relayResult.timeMs;
+            if(meetTiming==='Hand' && (stdTT==='FAT'||stdTT==='Both')) checkMs = handToFAT(relayResult.timeMs);
+            return checkMs<=s.timeMs;
+          });
         };
         const resultsByAthlete = {};
         meetResults.forEach(r=>{
@@ -6319,19 +6373,27 @@ function SeasonResultsPage({ data, save, nav, events, getAthletePR, season }) {
               const allRes = (data.results||[]).filter(r=>r.eventId===evt.id&&(!season||isInSeason(r.date,season))&&!r.isPractice);
               if(evt.entryType==='Relay') {
                 allRes.filter(r=>r.isRelay).forEach(rr=>{
-                  if(!isField && rr.timeMs>0 && rr.timeMs<=stdVal) qualified.push({isRelay:true,result:rr,athletes:rr.relayAthletes||[]});
+                  const rrMeetTiming = getResultTimingSystem(data, rr);
+                  let checkMs = rr.timeMs;
+                  if(rrMeetTiming==='Hand' && (combo.timingType==='FAT'||combo.timingType==='Both')) checkMs = handToFAT(rr.timeMs);
+                  if(!isField && checkMs>0 && checkMs<=stdVal) qualified.push({isRelay:true,result:rr,athletes:rr.relayAthletes||[],convertedMs:rrMeetTiming==='Hand'?checkMs:null});
                 });
               } else {
                 const bestByAthlete = {};
                 allRes.filter(r=>r.athleteId&&!r.isRelay&&!r.isRelaySplit).forEach(r=>{
                   const a = data.athletes.find(at=>at.id===r.athleteId);
                   if(!a||!athMatch(a)) return;
+                  const rMeetTiming = getResultTimingSystem(data, r);
+                  let checkMs = r.timeMs;
+                  if(!isField && rMeetTiming==='Hand' && (combo.timingType==='FAT'||combo.timingType==='Both')) checkMs = handToFAT(r.timeMs);
                   let met = false;
                   if(isField) met = ((r.ft||0)*12+(r.inch||0)+(r.qtr||0)) >= stdVal;
-                  else met = r.timeMs>0 && r.timeMs<=stdVal;
+                  else met = checkMs>0 && checkMs<=stdVal;
                   if(met) {
-                    if(!bestByAthlete[r.athleteId]||(!isField&&r.timeMs<bestByAthlete[r.athleteId].timeMs)||(isField&&((r.ft||0)*12+(r.inch||0)+(r.qtr||0))>((bestByAthlete[r.athleteId].ft||0)*12+(bestByAthlete[r.athleteId].inch||0)+(bestByAthlete[r.athleteId].qtr||0))))
-                      bestByAthlete[r.athleteId] = r;
+                    const compareMs = isField ? 0 : checkMs;
+                    const bestCompareMs = isField ? 0 : (bestByAthlete[r.athleteId]?bestByAthlete[r.athleteId]._checkMs:Infinity);
+                    if(!bestByAthlete[r.athleteId]||(!isField&&compareMs<bestCompareMs)||(isField&&((r.ft||0)*12+(r.inch||0)+(r.qtr||0))>((bestByAthlete[r.athleteId].ft||0)*12+(bestByAthlete[r.athleteId].inch||0)+(bestByAthlete[r.athleteId].qtr||0))))
+                      bestByAthlete[r.athleteId] = {...r, _checkMs:checkMs, _converted:rMeetTiming==='Hand'&&!isField?checkMs:null};
                   }
                 });
                 Object.entries(bestByAthlete).forEach(([aid,r])=>qualified.push({isRelay:false,athleteId:aid,result:r}));
@@ -6347,7 +6409,7 @@ function SeasonResultsPage({ data, save, nav, events, getAthletePR, season }) {
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}} onClick={()=>setExpandedStds(p=>({...p,[combo.label]:!p[combo.label]}))}>
                   <div style={{display:'flex',alignItems:'center',gap:8}}>
                     <span style={{fontSize:12,color:combo.color,fontWeight:700}}>{isExpanded?'▼':'▶'}</span>
-                    <span style={{fontSize:10,fontWeight:700,padding:'3px 10px',borderRadius:10,background:combo.color+'20',color:combo.color,border:`1px solid ${combo.color}`}}>{combo.abbrev}</span>
+                    <span style={{fontSize:10,fontWeight:700,padding:'3px 10px',borderRadius:10,background:safeHexToRgba(combo.color,0.12),color:combo.color,border:`1px solid ${combo.color}`}}>{combo.abbrev}</span>
                     <span style={{fontWeight:700,fontSize:15,color:C.text}}>{combo.label}</span>
                     <span style={{fontSize:10,color:C.textMuted,padding:'2px 6px',borderRadius:8,background:C.surface2}}>{combo.timingType}</span>
                   </div>
@@ -6376,6 +6438,7 @@ function SeasonResultsPage({ data, save, nav, events, getAthletePR, season }) {
                         if(!a) return null;
                         const meetObj = q.result.meetId?data.meets.find(m=>m.id===q.result.meetId):null;
                         const valStr = isField?fieldToStr(q.result.ft,q.result.inch,q.result.qtr):formatTime(q.result.timeMs);
+                        const converted = q.result._converted;
                         return (
                           <div key={q.athleteId} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 10px',fontSize:12,cursor:'pointer',background:C.successMuted,borderRadius:6,marginBottom:3,border:`1px solid ${C.success}30`}} onClick={()=>nav('athleteSub',{athleteId:a.id})}>
                             <div style={{display:'flex',alignItems:'center',gap:6}}>
@@ -6386,6 +6449,7 @@ function SeasonResultsPage({ data, save, nav, events, getAthletePR, season }) {
                             <div style={{display:'flex',gap:8,alignItems:'center'}}>
                               <span style={{color:C.textSecondary,fontSize:11}}>{meetObj?meetObj.name:q.result.date}</span>
                               <span style={{fontWeight:700,color:C.success}}>{valStr}</span>
+                              {converted&&<span style={{fontSize:9,color:C.textMuted,fontWeight:600}}>(FAT: {formatTime(converted)})</span>}
                             </div>
                           </div>
                         );
@@ -6403,6 +6467,7 @@ function SeasonResultsPage({ data, save, nav, events, getAthletePR, season }) {
                             <div style={{display:'flex',gap:8,alignItems:'center'}}>
                               <span style={{color:C.textSecondary,fontSize:11}}>{meetObj?meetObj.name:q.result.date}</span>
                               <span style={{fontWeight:700,color:C.success}}>{formatTime(q.result.timeMs)}</span>
+                              {q.convertedMs&&<span style={{fontSize:9,color:C.textMuted,fontWeight:600}}>(FAT: {formatTime(q.convertedMs)})</span>}
                               {diff>0&&<span style={{fontSize:10,color:C.success,fontWeight:600}}>(-{formatTime(diff)})</span>}
                             </div>
                           </div>
@@ -6798,7 +6863,7 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
                   <div style={{display:'flex',alignItems:'center',gap:6,flex:1}}>
                     <input style={{...S.input,fontWeight:700,fontSize:14,color:t.color||'#2b6cb0',border:'none',borderBottom:`2px solid ${t.color||'#2b6cb0'}`,borderRadius:0,padding:'4px 6px',background:'transparent',maxWidth:200}} value={t.name} onChange={e=>save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,name:e.target.value}:x)})} />
                     <input style={{...S.input,width:55,fontSize:12,padding:'4px 6px',textAlign:'center',fontWeight:700,border:`2px solid ${C.border}`,borderRadius:6}} value={t.abbrev||''} placeholder="ABBR" onChange={e=>save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,abbrev:e.target.value.slice(0,5)}:x)})} title="Short abbreviation for badges" />
-                    <span style={{fontSize:10,fontWeight:700,padding:'3px 10px',borderRadius:10,background:(t.color||'#2b6cb0')+'20',color:t.color||'#2b6cb0',border:`1px solid ${t.color||'#2b6cb0'}`}}>{t.abbrev||t.name.slice(0,4).toUpperCase()}</span>
+                    <span style={{fontSize:10,fontWeight:700,padding:'3px 10px',borderRadius:10,background:safeHexToRgba(t.color||'#2b6cb0',0.12),color:t.color||'#2b6cb0',border:`1px solid ${t.color||'#2b6cb0'}`}}>{t.abbrev||t.name.slice(0,4).toUpperCase()}</span>
                   </div>
                   <button style={{...S.btn,...S.btnDanger,fontSize:11,padding:'4px 10px'}} onClick={()=>save({...data,qualifyingStandardTypes:stdTypes.filter(x=>x.id!==t.id)})}>Remove</button>
                 </div>

@@ -2883,6 +2883,7 @@ function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, ge
   const [focusField, setFocusField] = useState('');
   const [dragLeg, setDragLeg] = useState(null);
   const [dragOverLeg, setDragOverLeg] = useState(null);
+  const [sortByRank, setSortByRank] = useState(false);
   const initRef = useRef(null);
   const blurRef = useRef(null);
   const handleFocus = (f) => { clearTimeout(blurRef.current); setFocusField(f); };
@@ -3023,9 +3024,28 @@ function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, ge
     arr.splice(to, 0, moved);
     setRelayAthletes(arr);
   };
-  const filteredAthletes = (search, excludeIds=[]) => genderMatch.filter(a=>
-    !excludeIds.includes(a.id) && (!search || athSearch(a, search))
-  );
+  const filteredAthletes = (search, excludeIds=[]) => {
+    let list = genderMatch.filter(a=>
+      !excludeIds.includes(a.id) && (!search || athSearch(a, search))
+    );
+    if(sortByRank) {
+      const isField = isFieldEvent(evt);
+      list = list.map(a=>{
+        const pr = getAthletePR(a.id, eventId);
+        let rankVal = null;
+        if(pr) rankVal = isField ? (pr.ft||0)*12+(pr.inch||0)+(pr.qtr||0) : pr.timeMs;
+        return {a, pr, rankVal};
+      });
+      list.sort((x,y)=>{
+        if(x.rankVal===null && y.rankVal===null) return athLast(x.a).localeCompare(athLast(y.a));
+        if(x.rankVal===null) return 1;
+        if(y.rankVal===null) return 1;
+        return isField ? y.rankVal-x.rankVal : x.rankVal-y.rankVal;
+      });
+      list = list.map(x=>x.a);
+    }
+    return list;
+  };
   const renderRow = (row, index, fieldPrefix, rows, setRows, excludeIds) => {
     const fieldName = `${fieldPrefix}-${index}`;
     const opts = filteredAthletes(row.search, excludeIds);
@@ -3037,11 +3057,13 @@ function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, ge
           <input style={{...S.input,padding:'10px 12px',fontSize:14}} placeholder="Type athlete name..." value={row.search} onChange={e=>{const c=[...rows];c[index]={...c[index],search:e.target.value,athleteId:''};setRows(c);}} onFocus={()=>handleFocus(fieldName)} onBlur={handleBlur} />
           {focusField===fieldName && opts.length>0 && (
             <div style={{position:'absolute',top:'100%',left:0,right:0,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,0.1)',zIndex:20,maxHeight:200,overflowY:'auto'}}>
-              {opts.map(a=>{
+              {opts.map((a,oi)=>{
                 const aPr = getAthletePR(a.id, eventId);
-                return <div key={a.id} style={{padding:'10px 14px',fontSize:14,cursor:'pointer',borderBottom:`1px solid ${C.borderLight}`,display:'flex',justifyContent:'space-between'}} onMouseDown={()=>{const c=[...rows];c[index]={...c[index],athleteId:a.id,search:athName(a)};setRows(c);setFocusField('');}}>
-                  <span>{athName(a)}{a.gradYear&&<span style={{color:C.textMuted,marginLeft:6,fontSize:12}}>{"'"+((a.gradYear+'').slice(-2))}</span>}</span>
-                  {aPr && <span style={{fontSize:12,color:C.accent}}>{isFieldEvent(evt)?fieldToStr(aPr.ft,aPr.inch,aPr.qtr):formatTime(aPr.timeMs)}</span>}
+                return <div key={a.id} style={{padding:'10px 14px',fontSize:14,cursor:'pointer',borderBottom:`1px solid ${C.borderLight}`,display:'flex',alignItems:'center',gap:8}} onMouseDown={()=>{const c=[...rows];c[index]={...c[index],athleteId:a.id,search:athName(a)};setRows(c);setFocusField('');}}>
+                  {sortByRank&&<span style={{fontSize:11,fontWeight:700,color:aPr?(oi<3?'#c9a830':C.textMuted):C.border,minWidth:20,textAlign:'center'}}>{aPr?(oi+1):'-'}</span>}
+                  <span style={{flex:1}}>{athName(a)}{a.gradYear&&<span style={{color:C.textMuted,marginLeft:6,fontSize:12}}>{"'"+((a.gradYear+'').slice(-2))}</span>}</span>
+                  {aPr && <span style={{fontSize:12,color:C.accent,fontWeight:sortByRank?700:400}}>{isFieldEvent(evt)?fieldToStr(aPr.ft,aPr.inch,aPr.qtr):formatTime(aPr.timeMs)}</span>}
+                  {sortByRank&&!aPr&&<span style={{fontSize:10,color:C.textMuted,fontStyle:'italic'}}>No PR</span>}
                 </div>;
               })}
             </div>
@@ -3055,7 +3077,12 @@ function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, ge
   };
   return (
     <Modal open={open} onClose={()=>{initRef.current=null;onClose();}} width={550}>
-      <h2 style={S.h2}>{isEditing?'Edit':'Add'} - {getEventLabel(evt)}</h2>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+        <h2 style={{...S.h2,margin:0}}>{isEditing?'Edit':'Add'} - {getEventLabel(evt)}</h2>
+        <button style={{...S.btn,fontSize:11,padding:'4px 10px',background:sortByRank?C.accent:C.surface2,color:sortByRank?'#fff':C.textSecondary,border:`1px solid ${sortByRank?C.accent:C.border}`,borderRadius:6}} onClick={()=>setSortByRank(p=>!p)}>
+          {sortByRank?'★ Ranked':'Sort by Rank'}
+        </button>
+      </div>
       <p style={{fontSize:13,color:C.textSecondary,marginBottom:8}}>{(meet||{}).name}</p>
       {(maxEntries||maxEvents)&&(
         <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>

@@ -3030,16 +3030,28 @@ function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, ge
     );
     if(sortByRank) {
       const isField = isFieldEvent(evt);
-      list = list.map(a=>{
-        const pr = getAthletePR(a.id, eventId);
-        let rankVal = null;
-        if(pr) rankVal = isField ? (pr.ft||0)*12+(pr.inch||0)+(pr.qtr||0) : pr.timeMs;
-        return {a, pr, rankVal};
-      });
+      const isRelayEvt = evt.entryType==='Relay';
+      const baseDistance = isRelayEvt ? getDistance(evt)/4 : 0;
+      const getIndividualRank = (athId) => {
+        if(isRelayEvt && baseDistance>0) {
+          const indivEvt = events.find(e=>e.entryType==='Individual'&&getDistance(e)===baseDistance&&(e.gender===evt.gender||evt.gender==='Mixed'));
+          if(indivEvt) {
+            const pr = getAthletePR(athId, indivEvt.id);
+            if(pr) return isFieldEvent(indivEvt)?(pr.ft||0)*12+(pr.inch||0)+(pr.qtr||0):pr.timeMs;
+          }
+          const splits = (data.results||[]).filter(r=>r.athleteId===athId&&r.eventId===eventId&&r.isRelaySplit);
+          if(splits.length) return splits.reduce((best,r)=>(!best||r.timeMs<best.timeMs)?r:best,null).timeMs;
+          return null;
+        }
+        const pr = getAthletePR(athId, eventId);
+        if(!pr) return null;
+        return isField ? (pr.ft||0)*12+(pr.inch||0)+(pr.qtr||0) : pr.timeMs;
+      };
+      list = list.map(a=>({a, rankVal:getIndividualRank(a.id)}));
       list.sort((x,y)=>{
         if(x.rankVal===null && y.rankVal===null) return athLast(x.a).localeCompare(athLast(y.a));
         if(x.rankVal===null) return 1;
-        if(y.rankVal===null) return 1;
+        if(y.rankVal===null) return -1;
         return isField ? y.rankVal-x.rankVal : x.rankVal-y.rankVal;
       });
       list = list.map(x=>x.a);
@@ -3058,11 +3070,24 @@ function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, ge
           {focusField===fieldName && opts.length>0 && (
             <div style={{position:'absolute',top:'100%',left:0,right:0,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,0.1)',zIndex:20,maxHeight:200,overflowY:'auto'}}>
               {opts.map((a,oi)=>{
-                const aPr = getAthletePR(a.id, eventId);
+                const isRelayEvt2 = evt.entryType==='Relay';
+                const baseD = isRelayEvt2 ? getDistance(evt)/4 : 0;
+                let aPr = null, aPrLabel = '';
+                if(isRelayEvt2 && baseD>0) {
+                  const indEvt = events.find(e=>e.entryType==='Individual'&&getDistance(e)===baseD&&(e.gender===evt.gender||evt.gender==='Mixed'));
+                  if(indEvt) { aPr = getAthletePR(a.id, indEvt.id); if(aPr) aPrLabel = formatTime(aPr.timeMs)+' ('+indEvt.name+')'; }
+                  if(!aPr) {
+                    const spl = (data.results||[]).filter(r=>r.athleteId===a.id&&r.eventId===eventId&&r.isRelaySplit);
+                    if(spl.length) { const best=spl.reduce((b,r)=>(!b||r.timeMs<b.timeMs)?r:b,null); aPrLabel=formatTime(best.timeMs)+' (split)'; aPr=best; }
+                  }
+                } else {
+                  aPr = getAthletePR(a.id, eventId);
+                  if(aPr) aPrLabel = isFieldEvent(evt)?fieldToStr(aPr.ft,aPr.inch,aPr.qtr):formatTime(aPr.timeMs);
+                }
                 return <div key={a.id} style={{padding:'10px 14px',fontSize:14,cursor:'pointer',borderBottom:`1px solid ${C.borderLight}`,display:'flex',alignItems:'center',gap:8}} onMouseDown={()=>{const c=[...rows];c[index]={...c[index],athleteId:a.id,search:athName(a)};setRows(c);setFocusField('');}}>
                   {sortByRank&&<span style={{fontSize:11,fontWeight:700,color:aPr?(oi<3?'#c9a830':C.textMuted):C.border,minWidth:20,textAlign:'center'}}>{aPr?(oi+1):'-'}</span>}
                   <span style={{flex:1}}>{athName(a)}{a.gradYear&&<span style={{color:C.textMuted,marginLeft:6,fontSize:12}}>{"'"+((a.gradYear+'').slice(-2))}</span>}</span>
-                  {aPr && <span style={{fontSize:12,color:C.accent,fontWeight:sortByRank?700:400}}>{isFieldEvent(evt)?fieldToStr(aPr.ft,aPr.inch,aPr.qtr):formatTime(aPr.timeMs)}</span>}
+                  {aPr && <span style={{fontSize:12,color:C.accent,fontWeight:sortByRank?700:400}}>{aPrLabel}</span>}
                   {sortByRank&&!aPr&&<span style={{fontSize:10,color:C.textMuted,fontStyle:'italic'}}>No PR</span>}
                 </div>;
               })}
@@ -3597,10 +3622,10 @@ function AthleteSubPage({ data, save, nav, athleteId, athFilter, events, getAthl
                   })}
                 </div>);
               })()}
-              {evtResults.length>1&&(
+              {evtResults.length>0&&(
                 <div style={{marginTop:6}}>
-                  <button style={{background:'none',border:'none',color:C.accent,cursor:'pointer',fontSize:11,fontWeight:600,padding:'2px 0'}} onClick={()=>setExpandedPerfEvents(p=>({...p,[evt.id]:!p[evt.id]}))}>{expandedPerfEvents[evt.id]?'Hide':'Show'} all {evtResults.length} performances</button>
-                  {expandedPerfEvents[evt.id]&&(
+                  {evtResults.length>1&&<button style={{background:'none',border:'none',color:C.accent,cursor:'pointer',fontSize:11,fontWeight:600,padding:'2px 0'}} onClick={()=>setExpandedPerfEvents(p=>({...p,[evt.id]:!p[evt.id]}))}>{expandedPerfEvents[evt.id]?'Hide':'Show'} all {evtResults.length} performances</button>}
+                  {(evtResults.length===1||expandedPerfEvents[evt.id])&&(
                     <table style={{width:'100%',borderCollapse:'collapse',marginTop:4}}>
                       <thead><tr><th style={{...S.th,fontSize:10,padding:'3px 6px'}}>Date</th><th style={{...S.th,fontSize:10,padding:'3px 6px'}}>Meet</th><th style={{...S.th,fontSize:10,padding:'3px 6px',textAlign:'right'}}>Mark</th><th style={{...S.th,fontSize:10,padding:'3px 6px',width:50}}></th></tr></thead>
                       <tbody>{evtResults.map(r=>{

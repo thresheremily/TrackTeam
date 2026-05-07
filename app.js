@@ -1207,14 +1207,16 @@ function Dashboard({ data, save, nav, season, team, events, activeAthletes, feat
       {(()=>{
         const qualEvents = events.filter(e=>(e.qualifyingStandards||[]).length>0);
         if(!qualEvents.length) return null;
-        let totalQual=0, totalClose=0, totalEvents=0;
+        const qualifiedAthletes = new Set();
+        const closeAthletes = new Set();
+        let totalQualPerfs=0, totalClosePerfs=0;
         qualEvents.forEach(evt=>{
           const stds = evt.qualifyingStandards||[];
           const matchingAthletes = activeAthletes.filter(a=>evt.gender==='Mixed'||(a.gender==='M'&&evt.gender==='Boy')||(a.gender==='F'&&evt.gender==='Girl'));
           matchingAthletes.forEach(a=>{
             const pr = getAthletePR(a.id, evt.id);
             if(!pr) return;
-            totalEvents++;
+            let anyMet=false, anyClose=false;
             stds.forEach(std=>{
               let met=false, pct=0;
               if(isFieldEvent(evt)){
@@ -1226,19 +1228,20 @@ function Dashboard({ data, save, nav, season, team, events, activeAthletes, feat
                 const stdMs=std.timeMs||0;
                 if(stdMs>0){met=prMs<=stdMs;pct=Math.round(stdMs/(prMs||1)*100);}
               }
-              if(met) totalQual++;
-              else if(pct>=90) totalClose++;
+              if(met){totalQualPerfs++;anyMet=true;}
+              else if(pct>=90){totalClosePerfs++;anyClose=true;}
             });
+            if(anyMet) qualifiedAthletes.add(a.id);
+            if(anyClose && !anyMet) closeAthletes.add(a.id);
           });
         });
-        if(!totalEvents) return null;
+        if(!qualifiedAthletes.size && !closeAthletes.size) return null;
         return (
-          <div style={{...S.card,padding:'12px 14px'}}>
+          <div style={{...S.card,padding:'12px 14px',cursor:'pointer'}} onClick={()=>nav('seasonResults')}>
             <h2 style={{...S.h2,marginBottom:8,fontSize:14}}>Qualifying Progress</h2>
             <div style={{display:'flex',gap:16,flexWrap:'wrap'}}>
-              <div style={{textAlign:'center'}}><div style={{fontSize:20,fontWeight:700,color:C.success}}>{totalQual}</div><div style={{fontSize:10,color:C.textMuted,textTransform:'uppercase'}}>Qualified</div></div>
-              <div style={{textAlign:'center'}}><div style={{fontSize:20,fontWeight:700,color:'#b8860b'}}>{totalClose}</div><div style={{fontSize:10,color:C.textMuted,textTransform:'uppercase'}}>Close (90%+)</div></div>
-              <div style={{textAlign:'center'}}><div style={{fontSize:20,fontWeight:700,color:C.textSecondary}}>{totalEvents}</div><div style={{fontSize:10,color:C.textMuted,textTransform:'uppercase'}}>With PRs</div></div>
+              <div style={{textAlign:'center'}}><div style={{fontSize:22,fontWeight:700,color:C.success}}>{qualifiedAthletes.size}</div><div style={{fontSize:10,color:C.textMuted,textTransform:'uppercase'}}>Athletes Qualified</div><div style={{fontSize:10,color:C.success,fontWeight:600}}>{totalQualPerfs} mark{totalQualPerfs!==1?'s':''}</div></div>
+              <div style={{textAlign:'center'}}><div style={{fontSize:22,fontWeight:700,color:'#b8860b'}}>{closeAthletes.size}</div><div style={{fontSize:10,color:C.textMuted,textTransform:'uppercase'}}>Athletes Close</div><div style={{fontSize:10,color:'#b8860b',fontWeight:600}}>{totalClosePerfs} mark{totalClosePerfs!==1?'s':''} (90%+)</div></div>
             </div>
           </div>
         );
@@ -6005,22 +6008,31 @@ function FieldEventPage({ data, save, nav, events, addResult, getAthletePR, chec
 function RelayTimer({ data, save, nav, events, addResult, addResults, getAthletePR, preset }) {
   const [meetId, setMeetId] = useState((preset||{}).meetId||'');
   const [eventId, setEventId] = useState((preset||{}).eventId||'');
-  const [trackType, setTrackType] = useState('Outdoor');
-  const [legs, setLegs] = useState(()=>{
+  const [teams, setTeams] = useState(()=>{
     const entries = (preset||{}).entries||[];
-    const relay = entries.find(e=>e.athletes);
-    if(relay) return relay.athletes.map(a=>({id:uid(),athleteId:a.athleteId,goalMs:a.goalMs||0,splitMs:null,cumMs:null}));
-    const ids = (preset||{}).athleteIds||[];
-    if(ids.length>0) return ids.map(id=>({id:uid(),athleteId:id,goalMs:0,splitMs:null,cumMs:null}));
-    return [{id:uid(),athleteId:'',goalMs:0,splitMs:null,cumMs:null},{id:uid(),athleteId:'',goalMs:0,splitMs:null,cumMs:null},{id:uid(),athleteId:'',goalMs:0,splitMs:null,cumMs:null},{id:uid(),athleteId:'',goalMs:0,splitMs:null,cumMs:null}];
+    const relayEntries = entries.filter(e=>e.athletes&&e.athletes.length>0);
+    if(relayEntries.length>0) return relayEntries.map((re,i)=>({
+      id:uid(), name:'Team '+(i+1), 
+      legs:re.athletes.map(a=>({id:uid(),athleteId:a.athleteId,goalMs:a.goalMs||0,splitMs:null,cumMs:null})),
+      activeLeg:0, finished:false
+    }));
+    return [{id:uid(),name:'Team 1',legs:[{id:uid(),athleteId:'',goalMs:0,splitMs:null,cumMs:null},{id:uid(),athleteId:'',goalMs:0,splitMs:null,cumMs:null},{id:uid(),athleteId:'',goalMs:0,splitMs:null,cumMs:null},{id:uid(),athleteId:'',goalMs:0,splitMs:null,cumMs:null}],activeLeg:0,finished:false}];
   });
   const [running, setRunning] = useState(false);
   const [startTime, setStartTime] = useState(null);
   const [elapsed, setElapsed] = useState(0);
-  const [activeLeg, setActiveLeg] = useState(0);
-  const [finished, setFinished] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [saved2, setSaved2] = useState(false);
+  const [selectedTeams, setSelectedTeams] = useState(()=>{
+    const sel = {};
+    const entries = (preset||{}).entries||[];
+    entries.filter(e=>e.athletes&&e.athletes.length>0).forEach((re,i)=>{
+      const aids = re.athletes.map(a=>a.athleteId).filter(Boolean);
+      const hasResult = (data.results||[]).some(r=>r.eventId===(preset||{}).eventId&&r.meetId===(preset||{}).meetId&&r.isRelay&&(r.relayAthletes||[]).join(',')==aids.join(','));
+      if(!hasResult) sel[i]=true;
+    });
+    return sel;
+  });
   const presetKeyR = useRef((preset||{}).eventId||'');
   const presetEventId = (preset||{}).eventId||'';
   const presetMeetId = (preset||{}).meetId||'';
@@ -6030,176 +6042,181 @@ function RelayTimer({ data, save, nav, events, addResult, addResults, getAthlete
       setMeetId(presetMeetId);
       setEventId(presetEventId);
       const entries = (preset||{}).entries||[];
-      const relay = entries.find(e=>e.athletes);
-      if(relay) setLegs(relay.athletes.map(a=>({id:uid(),athleteId:a.athleteId,goalMs:a.goalMs||0,splitMs:null,cumMs:null})));
-      else {
-        const ids = (preset||{}).athleteIds||[];
-        if(ids.length>0) setLegs(ids.map(id=>({id:uid(),athleteId:id,goalMs:0,splitMs:null,cumMs:null})));
-        else setLegs([{id:uid(),athleteId:'',goalMs:0,splitMs:null,cumMs:null},{id:uid(),athleteId:'',goalMs:0,splitMs:null,cumMs:null},{id:uid(),athleteId:'',goalMs:0,splitMs:null,cumMs:null},{id:uid(),athleteId:'',goalMs:0,splitMs:null,cumMs:null}]);
-      }
+      const relayEntries = entries.filter(e=>e.athletes&&e.athletes.length>0);
+      if(relayEntries.length>0) setTeams(relayEntries.map((re,i)=>({id:uid(),name:'Team '+(i+1),legs:re.athletes.map(a=>({id:uid(),athleteId:a.athleteId,goalMs:a.goalMs||0,splitMs:null,cumMs:null})),activeLeg:0,finished:false})));
+      const newSel = {};
+      relayEntries.forEach((re,i)=>{
+        const aids = re.athletes.map(a=>a.athleteId).filter(Boolean);
+        const hasResult = (data.results||[]).some(r=>r.eventId===presetEventId&&r.meetId===presetMeetId&&r.isRelay&&(r.relayAthletes||[]).join(',')==aids.join(','));
+        if(!hasResult) newSel[i]=true;
+      });
+      setSelectedTeams(newSel);
       clearInterval(timerRef.current);
-      setRunning(false); setStartTime(null); setElapsed(0); setActiveLeg(0); setFinished(false); setCollapsed(false); setSaved2(false);
+      setRunning(false);setStartTime(null);setElapsed(0);setCollapsed(false);setSaved2(false);
     }
   },[presetEventId]);
   const timerRef = useRef(null);
   const evt = events.find(e=>e.id===eventId);
-  const lapDist = trackType==='Indoor'?INDOOR_LAP:OUTDOOR_LAP;
-  const totalDist = getDistance(evt);
-  const totalLaps = totalDist>0?Math.ceil(totalDist/lapDist):4;
-  const lapsPerLeg = Math.ceil(totalLaps/legs.length);
-  const COLORS = ['#2b6cb0','#c96a1f','#25763b','#c53030','#6b46c1','#b8860b'];
   const activeAthletes = data.athletes.filter(a=>a.active!==false);
-  const trackEvents = events.filter(e=>isTrackEvent(e)&&e.entryType==='Relay');
-  const gender = (evt||{}).gender;
-  useEffect(()=>{
-    if(running&&startTime){timerRef.current=setInterval(()=>setElapsed(Date.now()-startTime),10);return()=>clearInterval(timerRef.current);}
-    return()=>clearInterval(timerRef.current);
-  },[running,startTime]);
-  const handleStart = ()=>{setStartTime(Date.now());setRunning(true);setElapsed(0);setActiveLeg(0);setFinished(false);setSaved2(false);setCollapsed(true);setLegs(l=>l.map(lg=>({...lg,splitMs:null,cumMs:null})));};
-  const handleSplit = ()=>{
-    if(!running) return;
-    const now=Date.now();const cumMs=now-startTime;
-    const prevCum=activeLeg>0?legs[activeLeg-1].cumMs||0:0;
-    const splitMs=cumMs-prevCum;
-    setLegs(prev=>{const c=[...prev];c[activeLeg]={...c[activeLeg],splitMs,cumMs};return c;});
-    if(activeLeg>=legs.length-1){clearInterval(timerRef.current);setRunning(false);setElapsed(cumMs);setFinished(true);}
-    else{setActiveLeg(activeLeg+1);}
+  const gender = (evt||{}).gender||'';
+  const allFinished = teams.every((t,i)=>!selectedTeams[i]||t.finished);
+  const anySelected = Object.values(selectedTeams).some(v=>v);
+  const handleStart = ()=>{setStartTime(Date.now());setRunning(true);setElapsed(0);setSaved2(false);setCollapsed(true);
+    setTeams(ts=>ts.map((t,i)=>selectedTeams[i]?{...t,activeLeg:0,finished:false,legs:t.legs.map(l=>({...l,splitMs:null,cumMs:null}))}:t));
   };
-  const handleStop = ()=>{clearInterval(timerRef.current);setRunning(false);setFinished(true);};
-  const handleReset = ()=>{clearInterval(timerRef.current);setRunning(false);setElapsed(0);setActiveLeg(0);setFinished(false);setSaved2(false);setCollapsed(false);setLegs(l=>l.map(lg=>({...lg,splitMs:null,cumMs:null})));};
+  const handleLegTap = (teamIdx)=>{
+    if(!running) return;
+    const now = Date.now()-startTime;
+    setTeams(ts=>ts.map((t,ti)=>{
+      if(ti!==teamIdx||t.finished) return t;
+      const newLegs = [...t.legs];
+      const al = t.activeLeg;
+      if(al>=newLegs.length) return t;
+      const prevCum = al>0?newLegs[al-1].cumMs:0;
+      newLegs[al] = {...newLegs[al], splitMs:now-prevCum, cumMs:now};
+      const nextLeg = al+1;
+      const done = nextLeg>=newLegs.length;
+      return {...t, legs:newLegs, activeLeg:nextLeg, finished:done};
+    }));
+  };
+  const handleStop = ()=>{clearInterval(timerRef.current);setRunning(false);setElapsed(Date.now()-startTime);
+    setTeams(ts=>ts.map(t=>({...t,finished:true})));
+  };
+  const handleReset = ()=>{clearInterval(timerRef.current);setRunning(false);setStartTime(null);setElapsed(0);setSaved2(false);setCollapsed(false);
+    setTeams(ts=>ts.map(t=>({...t,activeLeg:0,finished:false,legs:t.legs.map(l=>({...l,splitMs:null,cumMs:null}))})));
+  };
   const handleSave = ()=>{
-    const isPractice=meetId==='practice'||meetId==='practice-custom';
-    const meet2=isPractice?null:data.meets.find(m=>m.id===meetId);
-    const raceDate=isPractice?(meetId==='practice-custom'?(document.getElementById('relayPracticeDate')||{}).value||new Date().toISOString().split('T')[0]:new Date().toISOString().split('T')[0]):(meet2||{}).startDate||(meet2||{}).date||new Date().toISOString().split('T')[0];
-    const saveMeetId=isPractice?null:meetId;
-    const relayAthleteIds=[];
-    const allSplits=[];
-    const newResults=[];
-    legs.forEach((lg,i)=>{
-      if(!lg.athleteId||lg.splitMs===null) return;
-      newResults.push({id:uid(),athleteId:lg.athleteId,eventId,meetId:saveMeetId,date:raceDate,timeMs:lg.splitMs,isRelaySplit:true,relayLeg:i+1,splits:[{lap:i+1,split:lg.splitMs,cumulative:lg.cumMs}],isPractice});
-      relayAthleteIds.push(lg.athleteId);
-      allSplits.push({lap:i+1,split:lg.splitMs,cumulative:lg.cumMs,athleteId:lg.athleteId});
+    const raceDate = (data.meets.find(m=>m.id===meetId)||{}).startDate||new Date().toISOString().split('T')[0];
+    const newResults = [];
+    teams.forEach((team,ti)=>{
+      if(!selectedTeams[ti]) return;
+      const validLegs = team.legs.filter(l=>l.athleteId&&l.splitMs!==null);
+      if(!validLegs.length) return;
+      const relayAthleteIds = [];
+      const allSplits = [];
+      validLegs.forEach((lg,i)=>{
+        newResults.push({id:uid(),athleteId:lg.athleteId,eventId,meetId,date:raceDate,timeMs:lg.splitMs,isRelaySplit:true,relayLeg:i+1,splits:[{lap:i+1,split:lg.splitMs,cumulative:lg.cumMs}]});
+        relayAthleteIds.push(lg.athleteId);
+        allSplits.push({lap:i+1,split:lg.splitMs,cumulative:lg.cumMs,athleteId:lg.athleteId});
+      });
+      const totalTime = validLegs[validLegs.length-1].cumMs;
+      newResults.push({id:uid(),eventId,meetId,date:raceDate,timeMs:totalTime,isRelay:true,relayAthletes:relayAthleteIds,splits:allSplits});
     });
-    if(relayAthleteIds.length>0){
-      const totalTime=legs.filter(l=>l.cumMs!==null).reduce((m,l)=>Math.max(m,l.cumMs),0);
-      newResults.push({id:uid(),eventId,meetId:saveMeetId,date:raceDate,timeMs:totalTime,isRelay:true,relayAthletes:relayAthleteIds,splits:allSplits,isPractice});
-    }
-    if(newResults.length>0) {
-      if(addResults) addResults(newResults);
-      else newResults.forEach(r=>addResult(r));
-    }
+    if(newResults.length) addResults(newResults);
     setSaved2(true);
   };
-  const totalGoal = legs.reduce((s,l)=>s+(l.goalMs||0),0);
+  useEffect(()=>{
+    if(running){timerRef.current=setInterval(()=>setElapsed(Date.now()-startTime),47);}
+    return ()=>clearInterval(timerRef.current);
+  },[running,startTime]);
+  const TEAM_COLORS = ['#2b6cb0','#c53030','#25763b','#c96a1f','#6b46c1','#0d9488'];
   return (
     <div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8,flexWrap:'wrap',gap:8}}>
         <button style={S.backLink} onClick={()=>(preset||{}).meetId?nav('meetSub',{meetId:preset.meetId}):nav('tools')}>{"<- "}Back to Meet</button>
         {(preset||{}).meetId&&((preset||{}).prevEventId||(preset||{}).nextEventId)&&(
           <div style={{display:'flex',gap:6}}>
-            {(preset||{}).prevEventId&&<button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'6px 12px'}} onClick={()=>navToMeetEvent(data,events,nav,preset,preset.prevEventId)}>← {preset.prevEventLabel}</button>}
-            {(preset||{}).nextEventId&&<button style={{...S.btn,...S.btnPrimary,fontSize:11,padding:'6px 12px'}} onClick={()=>navToMeetEvent(data,events,nav,preset,preset.nextEventId)}>{preset.nextEventLabel} →</button>}
+            {(preset||{}).prevEventId&&<button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'6px 12px'}} onClick={()=>navToMeetEvent(data,events,nav,preset,preset.prevEventId)}>{"\u2190"} {preset.prevEventLabel}</button>}
+            {(preset||{}).nextEventId&&<button style={{...S.btn,...S.btnPrimary,fontSize:11,padding:'6px 12px'}} onClick={()=>navToMeetEvent(data,events,nav,preset,preset.nextEventId)}>{preset.nextEventLabel} {"\u2192"}</button>}
           </div>
         )}
       </div>
-      <h1 style={S.h1}>Relay Timer</h1>
+      <h1 style={S.h1}>Relay Timer{evt?' — '+getEventLabel(evt):''}</h1>
+      <div style={{fontSize:36,fontWeight:700,fontVariantNumeric:'tabular-nums',textAlign:'center',padding:'12px 0',color:C.text,letterSpacing:'0.02em'}}>{formatTime(running?(Date.now()-startTime):elapsed)}</div>
       {!collapsed && (
         <div style={S.card}>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
-            <div><label style={{fontSize:12,color:C.textSecondary}}>Meet</label><select style={{...S.select,width:'100%'}} value={meetId} onChange={e=>setMeetId(e.target.value)}><option value="">Select</option><option value="practice">Practice (Today)</option><option value="practice-custom">Practice (Custom Date)</option>{data.meets.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select></div>
-            <div><label style={{fontSize:12,color:C.textSecondary}}>Event</label><select style={{...S.select,width:'100%'}} value={eventId} onChange={e=>setEventId(e.target.value)}><option value="">Select</option>{trackEvents.map(e=><option key={e.id} value={e.id}>{getEventLabel(e)}</option>)}</select></div>
-            <div><label style={{fontSize:12,color:C.textSecondary}}>Track</label><select style={{...S.select,width:'100%'}} value={trackType} onChange={e=>setTrackType(e.target.value)}><option>Indoor</option><option>Outdoor</option></select></div>
-            {meetId==='practice-custom'&&<div><label style={{fontSize:12,color:C.textSecondary}}>Date</label><input style={S.input} type="date" id="relayPracticeDate" defaultValue={new Date().toISOString().split('T')[0]} /></div>}
-          </div>
-          <div style={{marginTop:16}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-              <span style={{fontSize:14,fontWeight:600,color:C.textSecondary}}>Legs</span>
-              <div style={{display:'flex',gap:6}}>
-                <button style={{...S.btn,...S.btnSecondary,padding:'4px 12px',fontSize:12}} onClick={()=>setLegs(l=>[...l,{id:uid(),athleteId:'',goalMs:0,splitMs:null,cumMs:null}])}>+ Leg</button>
-                <button style={{...S.btn,...S.btnDanger,padding:'4px 12px',fontSize:11}} onClick={()=>setLegs([{id:uid(),athleteId:'',goalMs:0,splitMs:null,cumMs:null},{id:uid(),athleteId:'',goalMs:0,splitMs:null,cumMs:null},{id:uid(),athleteId:'',goalMs:0,splitMs:null,cumMs:null},{id:uid(),athleteId:'',goalMs:0,splitMs:null,cumMs:null}])}>Reset</button>
+          {teams.map((team,ti)=>{
+            const aids = team.legs.map(l=>l.athleteId).filter(Boolean);
+            const hasResult = aids.length>0 && (data.results||[]).some(r=>r.eventId===eventId&&r.meetId===meetId&&r.isRelay&&(r.relayAthletes||[]).join(',')==aids.join(','));
+            const isSelected = !!selectedTeams[ti];
+            return (
+            <div key={team.id} style={{marginBottom:12,paddingBottom:8,borderBottom:ti<teams.length-1?'1px solid '+C.borderLight:'none',opacity:hasResult?0.5:1,background:hasResult?C.surface2:'transparent',padding:hasResult?'6px':'0',borderRadius:hasResult?8:0}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+                {!hasResult&&<input type="checkbox" checked={isSelected} onChange={()=>setSelectedTeams(p=>({...p,[ti]:!p[ti]}))} />}
+                {hasResult&&<span style={{fontSize:11,fontWeight:700,color:C.success}}>✓</span>}
+                <span style={{fontWeight:700,fontSize:13,color:TEAM_COLORS[ti%TEAM_COLORS.length]}}>
+                  {team.name} ({team.legs.length} legs)
+                </span>
+                {hasResult&&<span style={{fontSize:10,color:C.success,fontWeight:600}}>Already recorded</span>}
               </div>
-            </div>
-            {legs.map((lg,i)=>(
-              <div key={lg.id} style={{display:'flex',gap:8,marginBottom:8,alignItems:'center',flexWrap:'wrap'}}>
-                <div style={{display:'flex',flexDirection:'column',gap:2,flexShrink:0}}>
-                  <button style={{background:'none',border:`1px solid ${C.border}`,borderRadius:4,cursor:'pointer',padding:'1px 6px',fontSize:10,color:i===0?C.border:C.textSecondary,lineHeight:1}} disabled={i===0} onClick={()=>{const c=[...legs];[c[i],c[i-1]]=[c[i-1],c[i]];setLegs(c);}}>↑</button>
-                  <button style={{background:'none',border:`1px solid ${C.border}`,borderRadius:4,cursor:'pointer',padding:'1px 6px',fontSize:10,color:i>=legs.length-1?C.border:C.textSecondary,lineHeight:1}} disabled={i>=legs.length-1} onClick={()=>{const c=[...legs];[c[i],c[i+1]]=[c[i+1],c[i]];setLegs(c);}}>↓</button>
-                </div>
-                <div style={{width:8,height:32,borderRadius:4,background:COLORS[i%COLORS.length],flexShrink:0}} />
-                <span style={{fontSize:12,fontWeight:700,color:COLORS[i%COLORS.length],minWidth:40}}>Leg {i+1}</span>
-                <select style={{...S.select,flex:1,minWidth:100}} value={lg.athleteId} onChange={e=>{const c=[...legs];c[i]={...c[i],athleteId:e.target.value};setLegs(c);}}>
-                  <option value="">Select athlete</option>
-                  {activeAthletes.filter(a=>!gender||gender==='Mixed'||a.gender===(gender==='Boy'?'M':'F')).map(a=><option key={a.id} value={a.id}>{athDisplay(a)}</option>)}
-                </select>
-                <div style={{display:'flex',alignItems:'center',gap:4}}>
-                  <span style={{fontSize:10,color:C.textMuted}}>Goal</span>
-                  <select style={{...S.select,width:50,padding:'4px 2px',fontSize:12}} value={Math.floor((lg.goalMs||0)/60000)} onChange={e=>{const c=[...legs];const oldSec=((lg.goalMs||0)%60000)/1000;c[i]={...c[i],goalMs:(parseInt(e.target.value)*60+oldSec)*1000};setLegs(c);}}>
-                    {Array.from({length:31},(_,n)=><option key={n} value={n}>{n}</option>)}
+              {team.legs.map((lg,i)=>(
+                <div key={lg.id} style={{display:'flex',gap:8,marginBottom:4,alignItems:'center'}}>
+                  <div style={{display:'flex',flexDirection:'column',gap:2,flexShrink:0}}>
+                    <button style={{background:'none',border:'1px solid '+C.border,borderRadius:4,cursor:'pointer',padding:'1px 6px',fontSize:10,color:i===0?C.border:C.textSecondary,lineHeight:1}} disabled={i===0} onClick={()=>{setTeams(ts=>ts.map((t,j)=>{if(j!==ti)return t;const c=[...t.legs];[c[i],c[i-1]]=[c[i-1],c[i]];return{...t,legs:c};}));}}>↑</button>
+                    <button style={{background:'none',border:'1px solid '+C.border,borderRadius:4,cursor:'pointer',padding:'1px 6px',fontSize:10,color:i>=team.legs.length-1?C.border:C.textSecondary,lineHeight:1}} disabled={i>=team.legs.length-1} onClick={()=>{setTeams(ts=>ts.map((t,j)=>{if(j!==ti)return t;const c=[...t.legs];[c[i],c[i+1]]=[c[i+1],c[i]];return{...t,legs:c};}));}}>↓</button>
+                  </div>
+                  <div style={{width:8,height:24,borderRadius:4,background:TEAM_COLORS[ti%TEAM_COLORS.length],flexShrink:0}} />
+                  <span style={{fontSize:11,fontWeight:700,color:TEAM_COLORS[ti%TEAM_COLORS.length],minWidth:40}}>Leg {i+1}</span>
+                  <select style={{...S.select,flex:1,minWidth:100,fontSize:12}} value={lg.athleteId} onChange={e=>{setTeams(ts=>ts.map((t,j)=>{if(j!==ti)return t;const c=[...t.legs];c[i]={...c[i],athleteId:e.target.value};return{...t,legs:c};}));}}>
+                    <option value="">Select athlete</option>
+                    {activeAthletes.filter(a=>!gender||gender==='Mixed'||a.gender===(gender==='Boy'?'M':'F')).map(a=><option key={a.id} value={a.id}>{athDisplay(a)}</option>)}
                   </select>
-                  <span style={{fontSize:12,color:C.textMuted}}>:</span>
-                  <input type="text" inputMode="decimal" style={{...S.input,width:60,padding:'4px 2px',fontSize:12,textAlign:'center'}} value={(((lg.goalMs||0)%60000)/1000).toFixed(2)} onChange={e=>{const c=[...legs];const min=Math.floor((lg.goalMs||0)/60000);c[i]={...c[i],goalMs:(min*60+parseFloat(e.target.value||0))*1000};setLegs(c);}} placeholder="00.00" />
                 </div>
-                {legs.length>2&&<button style={{background:'none',border:'none',color:C.danger,cursor:'pointer'}} onClick={()=>setLegs(l=>l.filter((_,j)=>j!==i))}>✕</button>}
-              </div>
-            ))}
-            {!!totalGoal&&<div style={{fontSize:12,color:C.textMuted,marginTop:4}}>Total target: {formatTime(totalGoal)}</div>}
-          </div>
+              ))}
+            </div>);
+          })}
         </div>
       )}
-      {collapsed && (
-        <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:8,alignItems:'center'}}>
-          {evt && <span style={{...S.pill(false),fontSize:11}}>{getEventLabel(evt)}</span>}
-          <span style={{...S.pill(false),fontSize:11}}>{trackType}</span>
-          {!!totalGoal&&<span style={{...S.pill(false),fontSize:11}}>Target: {formatTime(totalGoal)}</span>}
-          <button style={{background:'none',border:'none',color:C.textSecondary,cursor:'pointer',fontSize:12}} onClick={()=>setCollapsed(false)}>v Expand</button>
-        </div>
-      )}
-      <div style={{textAlign:'center',padding:'16px 0'}}>
-        <div style={{fontSize:40,fontWeight:600,fontVariantNumeric:'tabular-nums',color:running?C.accent:C.text}}>{formatTime(elapsed)}</div>
-        {running&&activeLeg<legs.length&&(()=>{
-          const lg=legs[activeLeg];const prevCum=activeLeg>0?legs[activeLeg-1].cumMs||0:0;const legElapsed=elapsed-prevCum;
-          const ath=data.athletes.find(a=>a.id===lg.athleteId);
-          return <div style={{fontSize:14,color:COLORS[activeLeg%COLORS.length],fontWeight:600,marginTop:4}}>Leg {activeLeg+1}: {ath?athDisplay(ath):'?'} — {formatTime(legElapsed)}</div>;
-        })()}
-      </div>
-      <div style={{display:'flex',gap:12,justifyContent:'center',flexWrap:'wrap',marginBottom:16}}>
-        {!running&&!finished&&<button style={{...S.btn,...S.btnPrimary,fontSize:18,padding:'14px 40px'}} onClick={handleStart}> Start</button>}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:14,marginBottom:16,marginTop:8}}>
+        {!running&&!allFinished&&anySelected&&<button style={{...S.btn,...S.btnPrimary,fontSize:22,padding:'20px 40px',gridColumn:'1 / -1',justifySelf:'center',fontWeight:700}} onClick={handleStart}>▶ Start Heat</button>}
+        {!running&&!allFinished&&!anySelected&&<div style={{gridColumn:'1 / -1',textAlign:'center',color:C.textMuted,fontSize:13}}>Select teams for this heat above</div>}
         {running&&<>
-          <button style={{...S.btn,background:COLORS[activeLeg%COLORS.length],color:C.white,fontSize:16,padding:'16px 32px',minWidth:200}} onClick={handleSplit}>
-            {(()=>{const ath=data.athletes.find(a=>a.id===legs[activeLeg].athleteId);return ath?athDisplay(ath):`Leg ${activeLeg+1}`;})()}
-            {activeLeg<legs.length-1?' — Split':' — Finish'}
-          </button>
-          <button style={{...S.btn,...S.btnDanger,fontSize:14,padding:'12px 20px'}} onClick={handleStop}>Stop</button>
+          {teams.map((team,ti)=>{
+            if(!selectedTeams[ti]) return null;
+            const al = team.activeLeg;
+            const curAth = al<team.legs.length?data.athletes.find(a=>a.id===team.legs[al].athleteId):null;
+            const done = team.finished;
+            const lastSplit = al>0?team.legs[al-1]:null;
+            return (<button key={team.id} disabled={done} style={{...S.btn,background:done?C.surface2:TEAM_COLORS[ti%TEAM_COLORS.length],color:done?C.textMuted:'#fff',fontSize:20,padding:'28px 16px',minHeight:120,opacity:done?0.4:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:8,fontWeight:700,borderRadius:14,border:'none',boxShadow:done?'none':'0 2px 6px rgba(0,0,0,0.15)',touchAction:'manipulation',userSelect:'none'}} onClick={()=>handleLegTap(ti)}>
+              <span style={{fontSize:14,opacity:0.85}}>{team.name}</span>
+              <span style={{fontSize:22,fontWeight:800}}>{done?'✓ DONE':curAth?athDisplay(curAth):'Leg '+(al+1)}</span>
+              <span style={{fontSize:14,opacity:0.9}}>Leg {Math.min(al+1,team.legs.length)}/{team.legs.length}</span>
+              {lastSplit&&<span style={{fontSize:12,opacity:0.8}}>Last: {formatTime(lastSplit.splitMs)}</span>}
+            </button>);
+          })}
+          <button style={{...S.btn,...S.btnDanger,fontSize:18,padding:'28px 16px',minHeight:120,fontWeight:700,borderRadius:14,touchAction:'manipulation'}} onClick={handleStop}>■ Stop</button>
         </>}
-        {finished&&<>{!saved2&&<button style={{...S.btn,...S.btnSuccess}} onClick={handleSave}>Save All</button>}<button style={{...S.btn,...S.btnDanger}} onClick={handleReset}>Reset</button></>}
-        {saved2&&<SavedIndicator saved={true} />}
       </div>
-      {legs.some(l=>l.splitMs!==null)&&(
-        <div style={S.card}>
-          <table style={{width:'100%',borderCollapse:'collapse'}}>
-            <thead><tr><th style={S.th}>Leg</th><th style={S.th}>Athlete</th><th style={S.th}>Split</th><th style={S.th}>Cumulative</th><th style={S.th}>vs Goal</th></tr></thead>
-            <tbody>{legs.map((lg,i)=>{
-              if(lg.splitMs===null) return null;
-              const ath=data.athletes.find(a=>a.id===lg.athleteId);
-              const goalDiff=lg.goalMs?lg.splitMs-lg.goalMs:0;
-              const cumGoal=legs.slice(0,i+1).reduce((s,l)=>s+(l.goalMs||0),0);
-              const cumDiff=cumGoal?lg.cumMs-cumGoal:0;
-              const prevSplit=i>0&&legs[i-1].splitMs!==null?legs[i-1].splitMs:null;
-              const faster=prevSplit!==null&&lg.splitMs<prevSplit;
-              const slower=prevSplit!==null&&lg.splitMs>prevSplit;
-              return (<tr key={i}>
-                <td style={S.td}><span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',minWidth:28,padding:'2px 8px',borderRadius:20,fontSize:12,fontWeight:700,background:C.white,color:COLORS[i%COLORS.length],border:`2px solid ${COLORS[i%COLORS.length]}`}}>{i+1}</span></td>
-                <td style={{...S.td,fontWeight:500}}>{ath?athDisplay(ath):'-'}</td>
-                <td style={S.td}>{formatTime(lg.splitMs)}{prevSplit!==null&&<span style={{fontSize:10,fontWeight:600,color:faster?C.success:slower?C.danger:C.textMuted,marginLeft:6}}>{faster?'\u25BC':'\u25B2'}{formatDiff(lg.splitMs-prevSplit)}</span>}</td>
-                <td style={S.td}>{formatTime(lg.cumMs)}</td>
-                <td style={S.td}>{lg.goalMs?<span style={{fontWeight:600,color:goalDiff<=0?C.success:C.danger}}>{formatDiff(goalDiff)}</span>:'-'}</td>
-              </tr>);
-            })}</tbody>
-          </table>
-          {finished&&!!totalGoal&&(()=>{const finalTime=legs.filter(l=>l.cumMs!==null).reduce((m,l)=>Math.max(m,l.cumMs),0);const diff=finalTime-totalGoal;return <div style={{textAlign:'center',padding:'8px 0',fontSize:14,fontWeight:600,color:diff<=0?C.success:C.danger}}>Final: {formatTime(finalTime)} ({formatDiff(diff)} vs target)</div>;})()}
+      {allFinished&&<div style={{marginBottom:16}}>
+        {teams.map((team,ti)=>{
+          if(!selectedTeams[ti]) return null;
+          const totalTime = team.legs.filter(l=>l.cumMs).reduce((max,l)=>Math.max(max,l.cumMs),0);
+          return (<div key={team.id} style={{...S.card,marginBottom:8,borderLeft:'4px solid '+TEAM_COLORS[ti%TEAM_COLORS.length]}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+              <span style={{fontWeight:700,fontSize:14,color:TEAM_COLORS[ti%TEAM_COLORS.length]}}>{team.name}</span>
+              <span style={{fontWeight:700,fontSize:18}}>{formatTime(totalTime)}</span>
+            </div>
+            <table style={{width:'100%',borderCollapse:'collapse'}}>
+              <thead><tr><th style={S.th}>Leg</th><th style={S.th}>Athlete</th><th style={S.th}>Split</th><th style={S.th}>Cumulative</th></tr></thead>
+              <tbody>{team.legs.map((lg,i)=>{
+                const ath=data.athletes.find(a=>a.id===lg.athleteId);
+                return (<tr key={lg.id}>
+                  <td style={S.td}>{i+1}</td>
+                  <td style={S.td}>{ath?athDisplay(ath):'-'}</td>
+                  <td style={{...S.td,fontWeight:600}}>{lg.splitMs!==null?formatTime(lg.splitMs):'-'}</td>
+                  <td style={S.td}>{lg.cumMs!==null?formatTime(lg.cumMs):'-'}</td>
+                </tr>);
+              })}</tbody>
+            </table>
+          </div>);
+        })}
+        <div style={{display:'flex',gap:12,justifyContent:'center',flexWrap:'wrap'}}>
+          {!saved2&&<button style={{...S.btn,...S.btnSuccess,fontSize:14,padding:'10px 24px'}} onClick={handleSave}>Save All Teams</button>}
+          <button style={{...S.btn,...S.btnDanger,fontSize:14,padding:'10px 24px'}} onClick={handleReset}>Reset</button>
+          {saved2&&<SavedIndicator saved={true} />}
+          {saved2&&<button style={{...S.btn,...S.btnPrimary,fontSize:14,padding:'10px 24px'}} onClick={()=>{
+            clearInterval(timerRef.current);setRunning(false);setElapsed(0);setSaved2(false);setCollapsed(false);
+            setTeams(ts=>ts.map(t=>({...t,activeLeg:0,finished:false,legs:t.legs.map(l=>({...l,splitMs:null,cumMs:null}))})));
+            const newSel={};
+            teams.forEach((t,i)=>{
+              const aids=t.legs.map(l=>l.athleteId).filter(Boolean);
+              const hasResult=aids.length>0&&(data.results||[]).some(r=>r.eventId===eventId&&r.meetId===meetId&&r.isRelay&&(r.relayAthletes||[]).join(',')==aids.join(','));
+              if(!hasResult) newSel[i]=true;
+            });
+            setSelectedTeams(newSel);
+          }}>Next Heat</button>}
         </div>
-      )}
+      </div>}
     </div>
   );
 }

@@ -1804,6 +1804,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
   const [newEventForm, setNewEventForm] = useState({ name:'', gender:'Boy', eventType:'Track', entryType:'Individual', measurableType:'Time' });
   const [resultsEntryEvent, setResultsEntryEvent] = useState(null);
   const [resultsEntryData, setResultsEntryData] = useState({});
+  const [dayFilter, setDayFilter] = useState(null);
   const [athViewSearch, setAthViewSearch] = useState('');
   const [athViewGender, setAthViewGender] = useState('');
   const [athViewSort, setAthViewSort] = useState('name');
@@ -1876,12 +1877,26 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
   const defaultApplicable = events.filter(e => (e.trackType === meet.trackType || e.trackType === 'Both') && !e.meetSpecific);
   const customEvents = events.filter(e => customEventIds.includes(e.id));
   const applicableEvents = [...defaultApplicable, ...customEvents.filter(ce => !defaultApplicable.some(de => de.id === ce.id))].filter(e => !excludedEvents.includes(e.id));
+  const meetDayCount = (() => {
+    const sd = meet.startDate, ed = meet.endDate;
+    if(sd && ed) {
+      const a = new Date(sd+'T12:00:00').getTime();
+      const b = new Date(ed+'T12:00:00').getTime();
+      if(!isNaN(a) && !isNaN(b) && b >= a) return Math.round((b-a)/86400000) + 1;
+    }
+    return 1;
+  })();
   const storedEntries = {};
-  (meet.events||[]).forEach(me => { storedEntries[me.eventId] = me.entries || []; });
+  const storedDays = {};
+  (meet.events||[]).forEach(me => {
+    storedEntries[me.eventId] = me.entries || [];
+    if(me.day) storedDays[me.eventId] = me.day;
+  });
   const meetEvents = applicableEvents.map(evt => ({
     eventId: evt.id,
     evt,
     entries: storedEntries[evt.id] || [],
+    day: Math.min(storedDays[evt.id] || 1, meetDayCount),
   }));
   const eventOrder = meet.eventOrder || [];
   const filtered = meetEvents.filter(me => {
@@ -1889,6 +1904,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
     if(typeFilter && me.evt.eventType !== typeFilter) return false;
     if(entryTypeFilter && me.evt.entryType !== entryTypeFilter) return false;
     if(filter && !me.evt.name.toLowerCase().includes(filter.toLowerCase())) return false;
+    if(meetDayCount > 1 && dayFilter && me.day !== dayFilter) return false;
     return true;
   }).sort((a,b) => {
     const idxA = eventOrder.indexOf(a.eventId);
@@ -1916,6 +1932,13 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
     const idx = updatedMeetEvents.findIndex(me=>me.eventId===eventId);
     if(idx>=0) updatedMeetEvents[idx] = {...updatedMeetEvents[idx], entries:newEntries};
     else updatedMeetEvents.push({eventId, entries:newEntries});
+    save({...data, meets:data.meets.map(m=>m.id===meetId?{...m, events:updatedMeetEvents}:m)});
+  };
+  const setEventDay = (eventId, day) => {
+    const updatedMeetEvents = [...(meet.events||[])];
+    const idx = updatedMeetEvents.findIndex(me=>me.eventId===eventId);
+    if(idx>=0) updatedMeetEvents[idx] = {...updatedMeetEvents[idx], day};
+    else updatedMeetEvents.push({eventId, entries:[], day});
     save({...data, meets:data.meets.map(m=>m.id===meetId?{...m, events:updatedMeetEvents}:m)});
   };
   const swapRelayLegs = (eventId, entryIdx, legA, legB) => {
@@ -2207,6 +2230,17 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
         </select>
         {eventOrder.length > 0 && <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'4px 10px'}} onClick={()=>saveEventOrder([])}>Reset Order</button>}
       </div>
+      {meetDayCount > 1 && (
+        <div style={{display:'flex',gap:6,marginBottom:10,flexWrap:'wrap',alignItems:'center'}}>
+          <span style={{fontSize:10,fontWeight:700,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.05em',marginRight:4}}>Day:</span>
+          {[null, ...Array.from({length:meetDayCount},(_,i)=>i+1)].map(d=>{
+            const active = dayFilter === d;
+            return (
+              <button key={d===null?'all':d} onClick={()=>setDayFilter(d)} style={{fontSize:11,fontWeight:600,padding:'4px 12px',borderRadius:14,cursor:'pointer',border:`1px solid ${active?C.accent:C.border}`,background:active?C.accent:'transparent',color:active?'#fff':C.textSecondary}}>{d===null?'All Days':`Day ${d}`}</button>
+            );
+          })}
+        </div>
+      )}
       {(()=>{
         const activeAthletes = data.athletes.filter(a=>a.active!==false);
         const notParticipating = meet.notParticipating||[];
@@ -2259,16 +2293,29 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
           </div>
         );
       })()}
-      {filtered.map((me, meIdx) => {
+      {(()=>{
+        const showDayGroups = meetDayCount > 1 && dayFilter === null;
+        const list = showDayGroups ? [...filtered].sort((a,b)=>(a.day||1)-(b.day||1)) : filtered;
+        let lastDay = null;
+        return list.map((me, meIdx) => {
         const entries = me.entries;
         const hasEntries = entries.length > 0;
+        const showHeader = showDayGroups && me.day !== lastDay;
+        lastDay = me.day;
         return (
-          <div key={me.eventId} draggable style={{...S.card,padding:'14px 16px',borderLeft:`3px solid ${me.evt.gender==='Boy'?C.blue:me.evt.gender==='Girl'?'#d53f8c':C.accent}`, opacity:dragIdx===meIdx?0.5:1, border:dragOverIdx===meIdx?`2px dashed ${C.accent}`:`1px solid ${C.border}`}} onDragStart={()=>setDragIdx(meIdx)} onDragOver={e=>{e.preventDefault();setDragOverIdx(meIdx);}} onDragLeave={()=>setDragOverIdx(null)} onDrop={e=>{e.preventDefault();handleDrop(dragIdx,meIdx);setDragIdx(null);setDragOverIdx(null);}} onDragEnd={()=>{setDragIdx(null);setDragOverIdx(null);}}>
+          <React.Fragment key={me.eventId}>
+          {showHeader && <div style={{fontSize:11,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',letterSpacing:'0.05em',padding:'10px 4px 4px',borderBottom:`2px solid ${C.border}`,marginTop:meIdx===0?0:12,marginBottom:6}}>Day {me.day}</div>}
+          <div draggable style={{...S.card,padding:'14px 16px',borderLeft:`3px solid ${me.evt.gender==='Boy'?C.blue:me.evt.gender==='Girl'?'#d53f8c':C.accent}`, opacity:dragIdx===meIdx?0.5:1, border:dragOverIdx===meIdx?`2px dashed ${C.accent}`:`1px solid ${C.border}`}} onDragStart={()=>setDragIdx(meIdx)} onDragOver={e=>{e.preventDefault();setDragOverIdx(meIdx);}} onDragLeave={()=>setDragOverIdx(null)} onDrop={e=>{e.preventDefault();handleDrop(dragIdx,meIdx);setDragIdx(null);setDragOverIdx(null);}} onDragEnd={()=>{setDragIdx(null);setDragOverIdx(null);}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:hasEntries?8:0}}>
               <div style={{display:'flex',alignItems:'center',gap:8}}>
                 <span style={{cursor:'grab',fontSize:16,color:C.textMuted,userSelect:'none',marginRight:4}}>:::</span>
                 <span style={{fontWeight:700,fontSize:15}}>{getEventLabel(me.evt)}</span>
                 <span style={{fontSize:10,color:C.textMuted}}>{me.evt.eventType} - {me.evt.entryType}</span>
+                {meetDayCount > 1 && (
+                  <select value={me.day} onChange={e=>setEventDay(me.eventId, parseInt(e.target.value))} style={{fontSize:10,fontWeight:600,padding:'2px 4px',borderRadius:10,border:`1px solid ${C.accent}`,background:C.accentMuted,color:C.accent,cursor:'pointer'}}>
+                    {Array.from({length:meetDayCount},(_,i)=>i+1).map(d=><option key={d} value={d}>Day {d}</option>)}
+                  </select>
+                )}
                 {me.entries.length>0&&(()=>{const mx=getMaxForEvent(me.eventId);const over=mx>0&&me.entries.length>mx;return <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,fontWeight:700,background:over?C.dangerMuted:C.surface2,color:over?C.danger:C.textSecondary,border:over?`1px solid ${C.danger}`:'none'}}>{me.entries.length}{mx>0?`/${mx}`:''}{over?' ⚠':''}</span>;})()}
               </div>
               <div style={{display:'flex',gap:6}}>
@@ -2420,8 +2467,10 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
               </div>);
             })()}
           </div>
+          </React.Fragment>
         );
-      })}
+        });
+      })()}
       {!filtered.length && <div style={{...S.card,textAlign:'center',padding:20,color:C.textMuted}}>No events match your filters.</div>}
       </>)}
       {meetTab==='athletes' && (()=>{

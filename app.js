@@ -2077,13 +2077,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
           const ms = existingComposite.timeMs||0;
           pre[relayKey] = {min:Math.floor(ms/60000)+'',sec:((ms%60000)/1000).toFixed(2),place:(existingComposite.place||'')+'',resultId:existingComposite.id,verified:!!existingComposite.verified,athleteIds};
         } else {
-          const anyComposite = (data.results||[]).find(r=>r.eventId===evt.id&&r.meetId===meetId&&r.isRelay);
-          if(anyComposite) {
-            const ms = anyComposite.timeMs||0;
-            pre[relayKey] = {min:Math.floor(ms/60000)+'',sec:((ms%60000)/1000).toFixed(2),place:(anyComposite.place||'')+'',resultId:anyComposite.id,verified:!!anyComposite.verified,athleteIds};
-          } else {
-            pre[relayKey] = {min:'',sec:'',place:'',athleteIds};
-          }
+          pre[relayKey] = {min:'',sec:'',place:'',athleteIds};
         }
       });
     } else {

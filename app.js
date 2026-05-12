@@ -1207,19 +1207,21 @@ function Dashboard({ data, save, nav, season, team, events, activeAthletes, feat
       {(()=>{
         const qualEvents = events.filter(e=>(e.qualifyingStandards||[]).length>0);
         if(!qualEvents.length) return null;
+        const NMP = data.nearMissPct||90;
         const qualifiedAthletes = new Set();
         const closeAthletes = new Set();
         let totalQualPerfs=0, totalClosePerfs=0;
         qualEvents.forEach(evt=>{
           const stds = evt.qualifyingStandards||[];
+          const isField = isFieldEvent(evt);
           const matchingAthletes = activeAthletes.filter(a=>evt.gender==='Mixed'||(a.gender==='M'&&evt.gender==='Boy')||(a.gender==='F'&&evt.gender==='Girl'));
-          matchingAthletes.forEach(a=>{
-            const pr = getAthletePR(a.id, evt.id);
-            if(!pr) return;
-            let anyMet=false, anyClose=false;
-            stds.forEach(std=>{
+          const athPRs = matchingAthletes.map(a=>({a,pr:getAthletePR(a.id,evt.id)})).filter(x=>x.pr);
+          stds.forEach(std=>{
+            const minQ = Math.max(1, std.minQualifiers||1);
+            const metIds=[], closeIds=[];
+            athPRs.forEach(({a,pr})=>{
               let met=false, pct=0;
-              if(isFieldEvent(evt)){
+              if(isField){
                 const prIn=fieldToInches(pr.ft||0,pr.inch||0,pr.qtr||0);
                 const stdIn=fieldToInches(std.ft||0,std.inch||0,std.qtr||0);
                 if(stdIn>0){met=prIn>=stdIn;pct=Math.round(prIn/stdIn*100);}
@@ -1228,20 +1230,23 @@ function Dashboard({ data, save, nav, season, team, events, activeAthletes, feat
                 const stdMs=std.timeMs||0;
                 if(stdMs>0){met=prMs<=stdMs;pct=Math.round(stdMs/(prMs||1)*100);}
               }
-              if(met){totalQualPerfs++;anyMet=true;}
-              else if(pct>=90){totalClosePerfs++;anyClose=true;}
+              if(met) metIds.push(a.id);
+              else if(pct>=NMP) closeIds.push(a.id);
             });
-            if(anyMet) qualifiedAthletes.add(a.id);
-            if(anyClose && !anyMet) closeAthletes.add(a.id);
+            if(metIds.length>=minQ){metIds.forEach(id=>qualifiedAthletes.add(id));totalQualPerfs+=metIds.length;}
+            else closeIds.push(...metIds);
+            closeIds.forEach(id=>closeAthletes.add(id));
+            totalClosePerfs+=closeIds.length;
           });
         });
+        closeAthletes.forEach(id=>{if(qualifiedAthletes.has(id))closeAthletes.delete(id);});
         if(!qualifiedAthletes.size && !closeAthletes.size) return null;
         return (
           <div style={{...S.card,padding:'12px 14px',cursor:'pointer'}} onClick={()=>nav('seasonResults')}>
             <h2 style={{...S.h2,marginBottom:8,fontSize:14}}>Qualifying Progress</h2>
             <div style={{display:'flex',gap:16,flexWrap:'wrap'}}>
               <div style={{textAlign:'center'}}><div style={{fontSize:22,fontWeight:700,color:C.success}}>{qualifiedAthletes.size}</div><div style={{fontSize:10,color:C.textMuted,textTransform:'uppercase'}}>Athletes Qualified</div><div style={{fontSize:10,color:C.success,fontWeight:600}}>{totalQualPerfs} mark{totalQualPerfs!==1?'s':''}</div></div>
-              <div style={{textAlign:'center'}}><div style={{fontSize:22,fontWeight:700,color:'#b8860b'}}>{closeAthletes.size}</div><div style={{fontSize:10,color:C.textMuted,textTransform:'uppercase'}}>Athletes Close</div><div style={{fontSize:10,color:'#b8860b',fontWeight:600}}>{totalClosePerfs} mark{totalClosePerfs!==1?'s':''} (90%+)</div></div>
+              <div style={{textAlign:'center'}}><div style={{fontSize:22,fontWeight:700,color:'#b8860b'}}>{closeAthletes.size}</div><div style={{fontSize:10,color:C.textMuted,textTransform:'uppercase'}}>Athletes Close</div><div style={{fontSize:10,color:'#b8860b',fontWeight:600}}>{totalClosePerfs} mark{totalClosePerfs!==1?'s':''} ({data.nearMissPct||90}%+)</div></div>
             </div>
           </div>
         );
@@ -3657,13 +3662,13 @@ function AthleteSubPage({ data, save, nav, athleteId, athFilter, events, getAthl
                       if(stdMs>0){met=prMs<=stdMs;diff=stdMs-prMs;pct=Math.min(100,Math.round(stdMs/(prMs||1)*100));diffStr=met?'Qualified':formatTime(prMs-stdMs)+' away';}
                     }
                     if(!pct) return null;
-                    const barColor=met?C.success:pct>=90?'#b8860b':C.accent;
+                    const barColor=met?C.success:pct>=(data.nearMissPct||90)?'#b8860b':C.accent;
                     return (<div key={std.id} style={{display:'flex',alignItems:'center',gap:8,fontSize:11}}>
                       <span style={{width:70,color:C.textMuted,flexShrink:0}}>{std.name}</span>
                       <div style={{flex:1,height:6,background:C.surface2,borderRadius:3,overflow:'hidden'}}>
                         <div style={{width:pct+'%',height:'100%',background:barColor,borderRadius:3,transition:'width 0.3s'}} />
                       </div>
-                      <span style={{width:80,textAlign:'right',flexShrink:0,fontWeight:600,color:met?C.success:pct>=90?'#b8860b':C.textMuted}}>{diffStr}</span>
+                      <span style={{width:80,textAlign:'right',flexShrink:0,fontWeight:600,color:met?C.success:pct>=(data.nearMissPct||90)?'#b8860b':C.textMuted}}>{diffStr}</span>
                     </div>);
                   })}
                 </div>);
@@ -3734,7 +3739,7 @@ function AthleteSubPage({ data, save, nav, athleteId, athFilter, events, getAthl
                         const diff=stdMs-prMs;
                         const pct=Math.min(100,Math.round(stdMs/(prMs||1)*100));
                         const diffStr=met?'Qualified':formatTime(prMs-stdMs)+' away';
-                        const barColor=met?C.success:pct>=90?'#b8860b':C.accent;
+                        const barColor=met?C.success:pct>=(data.nearMissPct||90)?'#b8860b':C.accent;
                         const info=getStdBadgeInfo(data,std.name);
                         return (<div key={std.id} style={{display:'flex',alignItems:'center',gap:8,fontSize:11}}>
                           <span style={{width:70,color:info.color,fontWeight:600,flexShrink:0}}>{info.abbrev}</span>
@@ -3742,7 +3747,7 @@ function AthleteSubPage({ data, save, nav, athleteId, athFilter, events, getAthl
                           <div style={{flex:1,height:6,background:C.surface2,borderRadius:3,overflow:'hidden'}}>
                             <div style={{width:pct+'%',height:'100%',background:barColor,borderRadius:3,transition:'width 0.3s'}} />
                           </div>
-                          <span style={{width:85,textAlign:'right',flexShrink:0,fontWeight:600,color:met?C.success:pct>=90?'#b8860b':C.textMuted}}>{diffStr}</span>
+                          <span style={{width:85,textAlign:'right',flexShrink:0,fontWeight:600,color:met?C.success:pct>=(data.nearMissPct||90)?'#b8860b':C.textMuted}}>{diffStr}</span>
                         </div>);
                       })}
                     </div>);
@@ -5391,7 +5396,7 @@ function EventsPage({ data, save, nav }) {
   const [delId, setDelId] = useState(null);
   const [expandedEvent, setExpandedEvent] = useState(null);
   const [showAddStandard, setShowAddStandard] = useState(null);
-  const [stdForm, setStdForm] = useState({ name:'', customName:'', timeMs:0, ft:0, inch:0, qtr:0, min:0, sec:0 });
+  const [stdForm, setStdForm] = useState({ name:'', customName:'', timeMs:0, ft:0, inch:0, qtr:0, min:0, sec:0, minQual:1 });
   const [showAddRecord, setShowAddRecord] = useState(null);
   const [recForm, setRecForm] = useState({ athleteId:'', timeMs:0, ft:0, inch:0, qtr:0, min:0, sec:0, date:'', type:'School Record' });
   const toggleSort = (col) => { if(sortCol===col) setSortDir(d=>d==='asc'?'desc':'asc'); else { setSortCol(col); setSortDir('asc'); } };
@@ -5442,11 +5447,12 @@ function EventsPage({ data, save, nav }) {
     const timeMs = parseTimeToMs(stdForm.min, stdForm.sec);
     const stdName = stdForm.name==='__custom' ? (stdForm.customName||'Custom').trim() : stdForm.name;
     if(!stdName) return;
-    const std = { id:uid(), name:stdName, timeMs, ft:parseInt(stdForm.ft)||0, inch:parseInt(stdForm.inch)||0, qtr:parseFloat(stdForm.qtr)||0 };
+    const std = { id:uid(), name:stdName, timeMs, ft:parseInt(stdForm.ft)||0, inch:parseInt(stdForm.inch)||0, qtr:parseFloat(stdForm.qtr)||0, minQualifiers:Math.max(1, parseInt(stdForm.minQual)||1) };
     save({...data, events:(data.events||[]).map(e=>e.id===eventId?{...e,qualifyingStandards:[...(e.qualifyingStandards||[]),std]}:e)});
-    setShowAddStandard(null); setStdForm({ name:'', customName:'', timeMs:0, ft:0, inch:0, qtr:0, min:0, sec:0 });
+    setShowAddStandard(null); setStdForm({ name:'', customName:'', timeMs:0, ft:0, inch:0, qtr:0, min:0, sec:0, minQual:1 });
   };
   const removeStandard = (eventId, stdId) => save({...data, events:(data.events||[]).map(e=>e.id===eventId?{...e,qualifyingStandards:(e.qualifyingStandards||[]).filter(s=>s.id!==stdId)}:e)});
+  const setStandardMinQual = (eventId, stdId, n) => save({...data, events:(data.events||[]).map(e=>e.id===eventId?{...e,qualifyingStandards:(e.qualifyingStandards||[]).map(s=>s.id===stdId?{...s,minQualifiers:Math.max(1,parseInt(n)||1)}:s)}:e)});
   const addRecord = (eventId) => {
     const timeMs = parseTimeToMs(recForm.min, recForm.sec);
     const rec = { id:uid(), type:recForm.type, athleteId:recForm.athleteId, timeMs, ft:parseInt(recForm.ft)||0, inch:parseInt(recForm.inch)||0, qtr:parseFloat(recForm.qtr)||0, date:recForm.date };
@@ -5515,8 +5521,13 @@ function EventsPage({ data, save, nav }) {
                           <button style={{...S.btn,...S.btnSuccess,fontSize:10,padding:'3px 10px'}} onClick={()=>setShowAddStandard(evt.id)}>+ Add</button>
                         </div>
                         {(evt.qualifyingStandards||[]).map(std=>(
-                          <div key={std.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'4px 0',fontSize:12}}>
-                            <span><span style={{fontWeight:600}}>{std.name}</span> - {evt.measurableType==='Time'?formatTime(std.timeMs):fieldToStr(std.ft,std.inch,std.qtr)}</span>
+                          <div key={std.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'4px 0',fontSize:12}}>
+                            <span style={{flex:1}}><span style={{fontWeight:600}}>{std.name}</span> - {evt.measurableType==='Time'?formatTime(std.timeMs):fieldToStr(std.ft,std.inch,std.qtr)}</span>
+                            <span style={{display:'flex',alignItems:'center',gap:4,whiteSpace:'nowrap'}} title="Standard is only treated as met once this many athletes/relays hit the mark">
+                              <span style={{fontSize:10,color:C.textMuted}}>show when</span>
+                              <input type="text" inputMode="numeric" value={(std.minQualifiers||1)+''} onChange={e=>setStandardMinQual(evt.id,std.id,e.target.value)} style={{width:34,fontSize:11,padding:'2px 4px',textAlign:'center',border:`1px solid ${C.border}`,borderRadius:4}} />
+                              <span style={{fontSize:10,color:C.textMuted}}>qualify</span>
+                            </span>
                             <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12}} onClick={()=>removeStandard(evt.id,std.id)}>✕</button>
                           </div>
                         ))}
@@ -5585,6 +5596,11 @@ function EventsPage({ data, save, nav }) {
           {(()=>{const evt=(data.events||[]).find(e=>e.id===showAddStandard);
             return (evt||{}).measurableType==='Time' ? <TimeDropdown min={stdForm.min} sec={stdForm.sec} onMinChange={v=>setStdForm({...stdForm,min:v})} onSecChange={v=>setStdForm({...stdForm,sec:v})} label="Time" /> : <FieldMeasure ft={stdForm.ft} inch={stdForm.inch} qtr={stdForm.qtr} onFtChange={v=>setStdForm({...stdForm,ft:v})} onInchChange={v=>setStdForm({...stdForm,inch:v})} onQtrChange={v=>setStdForm({...stdForm,qtr:v})} />;
           })()}
+          <div>
+            <label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Show as met only after this many qualify</label>
+            <input style={{...S.input,width:80}} type="text" inputMode="numeric" value={stdForm.minQual+''} onChange={e=>setStdForm({...stdForm,minQual:e.target.value})} />
+            <span style={{fontSize:11,color:C.textMuted,marginLeft:8}}>Use e.g. 3 for "3rd entry" standards. Default 1.</span>
+          </div>
           <button style={{...S.btn,...S.btnPrimary}} onClick={()=>addStandard(showAddStandard)}>Add Standard</button>
         </div>
       </Modal>
@@ -6351,7 +6367,7 @@ function SeasonResultsPage({ data, save, nav, events, getAthletePR, season }) {
                       const met=bestMs<=stdMs;
                       const pct=Math.min(100,Math.round(stdMs/(bestMs||1)*100));
                       const diffStr=met?'Qualified':formatTime(bestMs-stdMs)+' away';
-                      const barColor=met?C.success:pct>=90?'#b8860b':C.accent;
+                      const barColor=met?C.success:pct>=(data.nearMissPct||90)?'#b8860b':C.accent;
                       const info=getStdBadgeInfo(data,std.name);
                       return (<div key={std.id} style={{display:'flex',alignItems:'center',gap:8,fontSize:11}}>
                         <span style={{width:65,color:info.color,fontWeight:600,flexShrink:0}}>{info.abbrev}</span>
@@ -6359,7 +6375,7 @@ function SeasonResultsPage({ data, save, nav, events, getAthletePR, season }) {
                         <div style={{flex:1,height:6,background:C.surface2,borderRadius:3,overflow:'hidden'}}>
                           <div style={{width:pct+'%',height:'100%',background:barColor,borderRadius:3,transition:'width 0.3s'}} />
                         </div>
-                        <span style={{width:85,textAlign:'right',flexShrink:0,fontWeight:600,color:met?C.success:pct>=90?'#b8860b':C.textMuted}}>{diffStr}</span>
+                        <span style={{width:85,textAlign:'right',flexShrink:0,fontWeight:600,color:met?C.success:pct>=(data.nearMissPct||90)?'#b8860b':C.textMuted}}>{diffStr}</span>
                       </div>);
                     })}
                   </div>
@@ -6517,10 +6533,11 @@ function SeasonResultsPage({ data, save, nav, events, getAthletePR, season }) {
                 });
                 Object.entries(bestByAthlete).forEach(([aid,r])=>qualified.push({isRelay:false,athleteId:aid,result:r}));
               }
-              qualifiedByEvent[evt.id] = {evt,std:matchStd,stdVal,qualified};
+              qualifiedByEvent[evt.id] = {evt,std:matchStd,stdVal,qualified,minQual:Math.max(1,matchStd.minQualifiers||1)};
             });
             const evtIds = Object.keys(qualifiedByEvent);
             const totalQualified = evtIds.reduce((s,id)=>s+qualifiedByEvent[id].qualified.length,0);
+            const evtsThresholdMet = evtIds.filter(id=>qualifiedByEvent[id].qualified.length>=qualifiedByEvent[id].minQual).length;
             if(eventFilter && !evtIds.includes(eventFilter)) return null;
             const isExpanded = !!expandedStds[combo.label];
             return (
@@ -6533,24 +6550,28 @@ function SeasonResultsPage({ data, save, nav, events, getAthletePR, season }) {
                     <span style={{fontSize:10,color:C.textMuted,padding:'2px 6px',borderRadius:8,background:C.surface2}}>{combo.timingType}</span>
                   </div>
                   <div style={{display:'flex',alignItems:'center',gap:6}}>
-                    {totalQualified>0&&<span style={{fontSize:11,fontWeight:700,padding:'3px 12px',borderRadius:12,background:C.success,color:'#fff'}}>{totalQualified} qualified</span>}
+                    {evtsThresholdMet>0&&<span style={{fontSize:11,fontWeight:700,padding:'3px 12px',borderRadius:12,background:C.success,color:'#fff'}}>{evtsThresholdMet} event{evtsThresholdMet!==1?'s':''} met</span>}
+                    {totalQualified>0&&<span style={{fontSize:11,fontWeight:600,padding:'3px 10px',borderRadius:12,background:C.surface2,color:C.textSecondary}}>{totalQualified} mark{totalQualified!==1?'s':''}</span>}
                     {totalQualified===0&&<span style={{fontSize:11,fontWeight:600,color:C.textMuted}}>{evtIds.length} events</span>}
                   </div>
                 </div>
                 {isExpanded&&<div style={{marginTop:10}}>
                 {(()=>{const typ=stdTypes.find(t=>t.id===combo.typeId);return typ&&typ.notes?<div style={{fontSize:11,color:C.textSecondary,padding:'6px 10px',background:C.bg,borderRadius:6,marginBottom:10,whiteSpace:'pre-wrap',lineHeight:1.4,borderLeft:`3px solid ${combo.color}`}}>{typ.notes}</div>:null;})()}
                 {(eventFilter?evtIds.filter(id=>id===eventFilter):evtIds).map(evtId=>{
-                  const {evt,std,stdVal,qualified} = qualifiedByEvent[evtId];
+                  const {evt,std,stdVal,qualified,minQual} = qualifiedByEvent[evtId];
                   const isField = isFieldEvent(evt);
                   const stdStr = isField?fieldToStr(std.ft,std.inch,std.qtr):formatTime(std.timeMs);
+                  const thresholdMet = qualified.length >= minQual;
                   return (
-                    <div key={evtId} style={{marginBottom:10,paddingBottom:8,borderBottom:`1px solid ${C.borderLight}`}}>
+                    <div key={evtId} style={{marginBottom:10,paddingBottom:8,borderBottom:`1px solid ${C.borderLight}`,opacity:(qualified.length>0&&!thresholdMet)?0.85:1}}>
                       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
                         <div style={{display:'flex',alignItems:'center',gap:6}}>
                           <span style={{fontWeight:600,fontSize:13}}>{getEventLabel(evt)}</span>
-                          {qualified.length>0&&<span style={{fontSize:9,fontWeight:700,padding:'2px 8px',borderRadius:10,background:C.success,color:'#fff'}}>{qualified.length}</span>}
+                          {minQual>1
+                            ? <span style={{fontSize:9,fontWeight:700,padding:'2px 8px',borderRadius:10,background:thresholdMet?C.success:'#b8860b',color:'#fff'}} title={thresholdMet?'Enough athletes have hit this mark':`Needs ${minQual} qualifiers to count`}>{qualified.length} of {minQual} qualified</span>
+                            : (qualified.length>0&&<span style={{fontSize:9,fontWeight:700,padding:'2px 8px',borderRadius:10,background:C.success,color:'#fff'}}>{qualified.length}</span>)}
                         </div>
-                        <span style={{fontSize:11,color:C.textMuted}}>Standard: <strong>{stdStr}</strong></span>
+                        <span style={{fontSize:11,color:C.textMuted}}>Standard: <strong>{stdStr}</strong>{minQual>1?<span style={{marginLeft:6,color:'#b8860b'}}>(needs {minQual})</span>:null}</span>
                       </div>
                       {qualified.filter(q=>!q.isRelay).sort((a,b)=>isField?((b.result.ft||0)*12+(b.result.inch||0)+(b.result.qtr||0))-((a.result.ft||0)*12+(a.result.inch||0)+(a.result.qtr||0)):a.result.timeMs-b.result.timeMs).map((q,qi)=>{
                         const a = data.athletes.find(at=>at.id===q.athleteId);
@@ -6596,7 +6617,7 @@ function SeasonResultsPage({ data, save, nav, events, getAthletePR, season }) {
                         if(evt.entryType!=='Relay') return null;
                         const allRelays = seasonRelays.filter(r=>r.eventId===evt.id).sort((a,b)=>a.timeMs-b.timeMs);
                         const notQualified = allRelays.filter(rr=>!qualified.some(q=>q.isRelay&&q.result.id===rr.id));
-                        const close = notQualified.filter(rr=>{const pct=Math.round(stdVal/(rr.timeMs||1)*100);return pct>=90;});
+                        const close = notQualified.filter(rr=>{const pct=Math.round(stdVal/(rr.timeMs||1)*100);return pct>=(data.nearMissPct||90);});
                         if(!close.length) return qualified.length?null:<div style={{fontSize:11,color:C.textMuted,padding:'3px 8px',fontStyle:'italic'}}>No relay results within range</div>;
                         const rKey = `rclose-${evt.id}-${combo.label}`;
                         const closest = close[0];
@@ -6620,22 +6641,23 @@ function SeasonResultsPage({ data, save, nav, events, getAthletePR, season }) {
                           </div>
                         </div>);
                       })()}
-                      {!qualified.length&&evt.entryType!=='Relay'&&(()=>{
+                      {evt.entryType!=='Relay'&&(()=>{
+                        const qualifiedIds = new Set(qualified.filter(q=>!q.isRelay).map(q=>q.athleteId));
                         const allRes = (data.results||[]).filter(r=>r.eventId===evt.id&&r.athleteId&&!r.isRelay&&!r.isRelaySplit&&!r.isPractice&&(!season||isInSeason(r.date,season)));
                         const isField = isFieldEvent(evt);
                         const bestByAth = {};
                         allRes.forEach(r=>{
                           const a = data.athletes.find(at=>at.id===r.athleteId);
-                          if(!a||!athMatch(a)) return;
+                          if(!a||!athMatch(a)||qualifiedIds.has(r.athleteId)) return;
                           if(!bestByAth[r.athleteId]||(!isField&&r.timeMs<bestByAth[r.athleteId].timeMs)||(isField&&((r.ft||0)*12+(r.inch||0)+(r.qtr||0))>((bestByAth[r.athleteId].ft||0)*12+(bestByAth[r.athleteId].inch||0)+(bestByAth[r.athleteId].qtr||0))))
                             bestByAth[r.athleteId]=r;
                         });
                         const sorted = Object.values(bestByAth).sort((a,b)=>isField?((b.ft||0)*12+(b.inch||0)+(b.qtr||0))-((a.ft||0)*12+(a.inch||0)+(a.qtr||0)):a.timeMs-b.timeMs);
                         const close = sorted.filter(r=>{
                           const pct=isField?Math.round(((r.ft||0)*12+(r.inch||0)+(r.qtr||0))/stdVal*100):Math.round(stdVal/(r.timeMs||1)*100);
-                          return pct>=90;
+                          return pct>=(data.nearMissPct||90);
                         }).slice(0,5);
-                        if(!close.length) return <div style={{fontSize:11,color:C.textMuted,padding:'3px 8px',fontStyle:'italic'}}>No results within range yet</div>;
+                        if(!close.length) return <div style={{fontSize:11,color:C.textMuted,padding:'3px 8px',fontStyle:'italic'}}>{qualified.length?'No other athletes close to this standard':'No results within range yet'}</div>;
                         const cKey = `close-${evt.id}-${combo.label}`;
                         return (<div>
                           <button style={{background:'none',border:'none',color:C.textMuted,cursor:'pointer',fontSize:10,fontWeight:600,padding:'3px 8px'}} onClick={()=>{const el=document.getElementById(cKey);if(el)el.style.display=el.style.display==='none'?'block':'none';}}>Closest to qualifying ({close.length}) ▸</button>
@@ -6975,6 +6997,14 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
         return (<div>
           <h2 style={{...S.h2,marginBottom:12}}>Qualifying Standard Types</h2>
           <p style={{fontSize:12,color:C.textMuted,marginBottom:10}}>Define standard types (e.g. IAC Qualifier, State Qualifier) with optional sub-types (e.g. FAT, Hand Timing, Automatic, Provisional). Then bulk-enter marks.</p>
+          <div style={{...S.card,marginBottom:16,padding:'10px 14px',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+            <span style={{fontSize:13,fontWeight:600,color:C.text}}>"Close to qualifying" cutoff</span>
+            <div style={{display:'flex',alignItems:'center',gap:4}}>
+              <input style={{...S.input,width:60,textAlign:'center'}} type="text" inputMode="numeric" value={(data.nearMissPct||90)+''} onChange={e=>{const v=Math.min(100,Math.max(1,parseInt(e.target.value)||90));save({...data,nearMissPct:v});}} />
+              <span style={{fontSize:13,color:C.textSecondary}}>% of the standard</span>
+            </div>
+            <span style={{fontSize:11,color:C.textMuted}}>Athletes whose mark is within this much of a standard show as "close" — even if someone else already qualified.</span>
+          </div>
           <div style={{...S.card,marginBottom:16}}>
             {stdTypes.map(t=>(
               <div key={t.id} style={{padding:'8px 0',borderBottom:`1px solid ${C.borderLight}`,marginBottom:4}}>

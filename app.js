@@ -1234,7 +1234,7 @@ function Dashboard({ data, save, nav, season, team, events, activeAthletes, feat
           const matchingAthletes = activeAthletes.filter(a=>evt.gender==='Mixed'||(a.gender==='M'&&evt.gender==='Boy')||(a.gender==='F'&&evt.gender==='Girl'));
           const athPRs = matchingAthletes.map(a=>({a,pr:getAthletePR(a.id,evt.id)})).filter(x=>x.pr);
           stds.forEach(std=>{
-            const minQ = std.minQualifiers || getStdMinQualifiers(data, std.name);
+            const minQ = Math.max(parseInt(std.minQualifiers)||1, getStdMinQualifiers(data, std.name));
             const metIds=[], closeIds=[];
             athPRs.forEach(({a,pr})=>{
               let met=false, pct=0;
@@ -5537,7 +5537,7 @@ function EventsPage({ data, save, nav }) {
                           <button style={{...S.btn,...S.btnSuccess,fontSize:10,padding:'3px 10px'}} onClick={()=>setShowAddStandard(evt.id)}>+ Add</button>
                         </div>
                         {(evt.qualifyingStandards||[]).map(std=>{
-                          const mq = std.minQualifiers || getStdMinQualifiers(data, std.name);
+                          const mq = Math.max(parseInt(std.minQualifiers)||1, getStdMinQualifiers(data, std.name));
                           return (
                           <div key={std.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'4px 0',fontSize:12}}>
                             <span style={{flex:1}}><span style={{fontWeight:600}}>{std.name}</span> - {evt.measurableType==='Time'?formatTime(std.timeMs):fieldToStr(std.ft,std.inch,std.qtr)}{mq>1&&<span style={{marginLeft:6,fontSize:10,color:'#b8860b',fontWeight:600}} title="Set under Settings → Qualifying">needs {mq} to count</span>}</span>
@@ -6543,7 +6543,9 @@ function SeasonResultsPage({ data, save, nav, events, getAthletePR, season }) {
                 });
                 Object.entries(bestByAthlete).forEach(([aid,r])=>qualified.push({isRelay:false,athleteId:aid,result:r}));
               }
-              qualifiedByEvent[evt.id] = {evt,std:matchStd,stdVal,qualified,minQual:(matchStd.minQualifiers||getStdMinQualifiers(data,matchStd.name))};
+              const _stdType = stdTypes.find(t=>t.id===combo.typeId);
+              const _comboMinQual = _stdType ? Math.max(1, (combo.subtype ? (parseInt((_stdType.subtypeMinQualifiers||{})[combo.subtype]) || parseInt(_stdType.minQualifiers) || 1) : (parseInt(_stdType.minQualifiers) || 1))) : 1;
+              qualifiedByEvent[evt.id] = {evt,std:matchStd,stdVal,qualified,minQual:Math.max(parseInt(matchStd.minQualifiers)||1, _comboMinQual)};
             });
             const evtIds = Object.keys(qualifiedByEvent);
             const totalQualified = evtIds.reduce((s,id)=>s+qualifiedByEvent[id].qualified.length,0);
@@ -7008,7 +7010,7 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
         });
         return (<div>
           <h2 style={{...S.h2,marginBottom:12}}>Qualifying Standard Types</h2>
-          <p style={{fontSize:12,color:C.textMuted,marginBottom:10}}>Define standard types (e.g. IAC Qualifier, State Qualifier) with optional sub-types (e.g. FAT, Hand Timing, Automatic, Provisional). Then bulk-enter marks.</p>
+          <p style={{fontSize:12,color:C.textMuted,marginBottom:10}}>Define standard types (e.g. IAC Qualifier, State Qualifier) with optional sub-types (e.g. FAT, Hand Timing, Automatic, Provisional). Then bulk-enter marks. The <strong>"Min. qualifiers"</strong> box (or <strong>"min"</strong> on a sub-type) is how many athletes/relays must hit a standard before it shows as met on the Results page — set it to 3 for a "3rd entry" rule, or leave it at 1 for a normal standard.</p>
           <div style={{...S.card,marginBottom:16,padding:'10px 14px',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
             <span style={{fontSize:13,fontWeight:600,color:C.text}}>"Close to qualifying" cutoff</span>
             <div style={{display:'flex',alignItems:'center',gap:4}}>
@@ -7037,10 +7039,9 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
                   {!(t.subtypes||[]).length&&<select style={{...S.select,fontSize:11,padding:'4px 8px',width:110}} value={t.timingType||'Both'} onChange={e=>save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,timingType:e.target.value}:x)})}>
                     <option value="Both">All Timing</option><option value="FAT">FAT Only</option><option value="Hand">Hand Only</option>
                   </select>}
-                  {!(t.subtypes||[]).length&&<span style={{display:'flex',alignItems:'center',gap:4}} title="Standards of this type only count as met once this many athletes/relays hit the mark">
-                    <span style={{fontSize:10,color:C.textMuted,textTransform:'uppercase',fontWeight:600}}>Show when</span>
+                  {!(t.subtypes||[]).length&&<span style={{display:'flex',alignItems:'center',gap:4}} title="How many athletes (or relays) must hit a standard of this type before it counts as met — e.g. 3 for a '3rd entry' rule. Leave at 1 for normal standards.">
+                    <span style={{fontSize:10,color:C.textMuted,fontWeight:600}}>Min. qualifiers to count:</span>
                     <input style={{...S.input,width:38,fontSize:11,padding:'3px 4px',textAlign:'center'}} type="text" inputMode="numeric" value={(t.minQualifiers||1)+''} onChange={e=>save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,minQualifiers:Math.max(1,parseInt(e.target.value)||1)}:x)})} />
-                    <span style={{fontSize:10,color:C.textMuted}}>qualify</span>
                   </span>}
                 </div>
                 {t.lastUpdated&&<div style={{fontSize:9,color:C.textMuted,marginTop:4}}>Last updated: {new Date(t.lastUpdated).toLocaleDateString()} {new Date(t.lastUpdated).toLocaleTimeString()}</div>}
@@ -7053,8 +7054,8 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
                         <select style={{border:'none',background:'transparent',fontSize:10,color:C.textMuted,padding:0,cursor:'pointer'}} value={(t.subtypeTimingTypes||{})[s]||'Both'} onChange={e=>{const st={...(t.subtypeTimingTypes||{})};st[s]=e.target.value;save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,subtypeTimingTypes:st}:x)});}}>
                           <option value="Both">All</option><option value="FAT">FAT</option><option value="Hand">Hand</option>
                         </select>
-                        <span style={{fontSize:9,color:C.textMuted}} title="Show as met only after this many qualify">≥</span>
-                        <input style={{border:`1px solid ${C.border}`,borderRadius:3,background:C.surface,fontSize:10,color:C.text,width:24,padding:'1px 2px',textAlign:'center'}} type="text" inputMode="numeric" value={(((t.subtypeMinQualifiers||{})[s])||1)+''} onChange={e=>{const sm={...(t.subtypeMinQualifiers||{})};sm[s]=Math.max(1,parseInt(e.target.value)||1);save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,subtypeMinQualifiers:sm}:x)});}} title="Show as met only after this many qualify" />
+                        <span style={{fontSize:9,color:C.textMuted,fontWeight:600}} title="Minimum athletes (or relays) who must hit this standard before it counts as met">min</span>
+                        <input style={{border:`1px solid ${C.border}`,borderRadius:3,background:C.surface,fontSize:10,color:C.text,width:24,padding:'1px 2px',textAlign:'center'}} type="text" inputMode="numeric" value={(((t.subtypeMinQualifiers||{})[s])||1)+''} onChange={e=>{const sm={...(t.subtypeMinQualifiers||{})};sm[s]=Math.max(1,parseInt(e.target.value)||1);save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,subtypeMinQualifiers:sm}:x)});}} title="Minimum athletes (or relays) who must hit this standard before it counts as met" />
                         <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12,padding:0,fontWeight:700}} onClick={()=>save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,subtypes:(x.subtypes||[]).filter((_,j)=>j!==si)}:x)})}>✕</button>
                       </div>
                     ))}

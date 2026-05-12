@@ -202,6 +202,23 @@ const QStdBadge = ({data,std}) => {
   const matched = info.color!=='#2b6cb0' || (data.qualifyingStandardTypes||[]).length===0;
   return <span style={{fontSize:9,fontWeight:700,padding:'2px 6px',borderRadius:8,background:safeHexToRgba(info.color,0.15),color:info.color||'#2b6cb0',border:`1px solid ${info.color||'#2b6cb0'}`,whiteSpace:'nowrap',opacity:matched?1:0.7}} title={std.name+(matched?'':' [unmatched - check Settings > Qualifying type names]')}>{info.abbrev}</span>;
 };
+const getStdMinQualifiers = (data, stdName) => {
+  const sn = (stdName||'').trim().toLowerCase();
+  if(!sn) return 1;
+  for(const t of (data.qualifyingStandardTypes||[])) {
+    const tn = (t.name||'').trim().toLowerCase();
+    const typeDef = Math.max(1, parseInt(t.minQualifiers)||1);
+    if(tn===sn) return typeDef;
+    for(const s of (t.subtypes||[])) {
+      if((t.name+' - '+s).trim().toLowerCase()===sn || (t.name+' '+s).trim().toLowerCase()===sn) {
+        const subVal = parseInt((t.subtypeMinQualifiers||{})[s]);
+        return Math.max(1, subVal>0 ? subVal : typeDef);
+      }
+    }
+    if(sn.startsWith(tn+' ') || sn.startsWith(tn+'-')) return typeDef;
+  }
+  return 1;
+};
 const getStdTimingTypeGlobal = (data, stdName) => {
   const sn = (stdName||'').trim().toLowerCase();
   for(const t of (data.qualifyingStandardTypes||[])) {
@@ -1217,7 +1234,7 @@ function Dashboard({ data, save, nav, season, team, events, activeAthletes, feat
           const matchingAthletes = activeAthletes.filter(a=>evt.gender==='Mixed'||(a.gender==='M'&&evt.gender==='Boy')||(a.gender==='F'&&evt.gender==='Girl'));
           const athPRs = matchingAthletes.map(a=>({a,pr:getAthletePR(a.id,evt.id)})).filter(x=>x.pr);
           stds.forEach(std=>{
-            const minQ = Math.max(1, std.minQualifiers||1);
+            const minQ = std.minQualifiers || getStdMinQualifiers(data, std.name);
             const metIds=[], closeIds=[];
             athPRs.forEach(({a,pr})=>{
               let met=false, pct=0;
@@ -5396,7 +5413,7 @@ function EventsPage({ data, save, nav }) {
   const [delId, setDelId] = useState(null);
   const [expandedEvent, setExpandedEvent] = useState(null);
   const [showAddStandard, setShowAddStandard] = useState(null);
-  const [stdForm, setStdForm] = useState({ name:'', customName:'', timeMs:0, ft:0, inch:0, qtr:0, min:0, sec:0, minQual:1 });
+  const [stdForm, setStdForm] = useState({ name:'', customName:'', timeMs:0, ft:0, inch:0, qtr:0, min:0, sec:0 });
   const [showAddRecord, setShowAddRecord] = useState(null);
   const [recForm, setRecForm] = useState({ athleteId:'', timeMs:0, ft:0, inch:0, qtr:0, min:0, sec:0, date:'', type:'School Record' });
   const toggleSort = (col) => { if(sortCol===col) setSortDir(d=>d==='asc'?'desc':'asc'); else { setSortCol(col); setSortDir('asc'); } };
@@ -5447,12 +5464,11 @@ function EventsPage({ data, save, nav }) {
     const timeMs = parseTimeToMs(stdForm.min, stdForm.sec);
     const stdName = stdForm.name==='__custom' ? (stdForm.customName||'Custom').trim() : stdForm.name;
     if(!stdName) return;
-    const std = { id:uid(), name:stdName, timeMs, ft:parseInt(stdForm.ft)||0, inch:parseInt(stdForm.inch)||0, qtr:parseFloat(stdForm.qtr)||0, minQualifiers:Math.max(1, parseInt(stdForm.minQual)||1) };
+    const std = { id:uid(), name:stdName, timeMs, ft:parseInt(stdForm.ft)||0, inch:parseInt(stdForm.inch)||0, qtr:parseFloat(stdForm.qtr)||0 };
     save({...data, events:(data.events||[]).map(e=>e.id===eventId?{...e,qualifyingStandards:[...(e.qualifyingStandards||[]),std]}:e)});
-    setShowAddStandard(null); setStdForm({ name:'', customName:'', timeMs:0, ft:0, inch:0, qtr:0, min:0, sec:0, minQual:1 });
+    setShowAddStandard(null); setStdForm({ name:'', customName:'', timeMs:0, ft:0, inch:0, qtr:0, min:0, sec:0 });
   };
   const removeStandard = (eventId, stdId) => save({...data, events:(data.events||[]).map(e=>e.id===eventId?{...e,qualifyingStandards:(e.qualifyingStandards||[]).filter(s=>s.id!==stdId)}:e)});
-  const setStandardMinQual = (eventId, stdId, n) => save({...data, events:(data.events||[]).map(e=>e.id===eventId?{...e,qualifyingStandards:(e.qualifyingStandards||[]).map(s=>s.id===stdId?{...s,minQualifiers:Math.max(1,parseInt(n)||1)}:s)}:e)});
   const addRecord = (eventId) => {
     const timeMs = parseTimeToMs(recForm.min, recForm.sec);
     const rec = { id:uid(), type:recForm.type, athleteId:recForm.athleteId, timeMs, ft:parseInt(recForm.ft)||0, inch:parseInt(recForm.inch)||0, qtr:parseFloat(recForm.qtr)||0, date:recForm.date };
@@ -5520,17 +5536,15 @@ function EventsPage({ data, save, nav }) {
                           <span style={{fontSize:13,fontWeight:600,color:C.success}}>Qualifying Standards</span>
                           <button style={{...S.btn,...S.btnSuccess,fontSize:10,padding:'3px 10px'}} onClick={()=>setShowAddStandard(evt.id)}>+ Add</button>
                         </div>
-                        {(evt.qualifyingStandards||[]).map(std=>(
+                        {(evt.qualifyingStandards||[]).map(std=>{
+                          const mq = std.minQualifiers || getStdMinQualifiers(data, std.name);
+                          return (
                           <div key={std.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'4px 0',fontSize:12}}>
-                            <span style={{flex:1}}><span style={{fontWeight:600}}>{std.name}</span> - {evt.measurableType==='Time'?formatTime(std.timeMs):fieldToStr(std.ft,std.inch,std.qtr)}</span>
-                            <span style={{display:'flex',alignItems:'center',gap:4,whiteSpace:'nowrap'}} title="Standard is only treated as met once this many athletes/relays hit the mark">
-                              <span style={{fontSize:10,color:C.textMuted}}>show when</span>
-                              <input type="text" inputMode="numeric" value={(std.minQualifiers||1)+''} onChange={e=>setStandardMinQual(evt.id,std.id,e.target.value)} style={{width:34,fontSize:11,padding:'2px 4px',textAlign:'center',border:`1px solid ${C.border}`,borderRadius:4}} />
-                              <span style={{fontSize:10,color:C.textMuted}}>qualify</span>
-                            </span>
+                            <span style={{flex:1}}><span style={{fontWeight:600}}>{std.name}</span> - {evt.measurableType==='Time'?formatTime(std.timeMs):fieldToStr(std.ft,std.inch,std.qtr)}{mq>1&&<span style={{marginLeft:6,fontSize:10,color:'#b8860b',fontWeight:600}} title="Set under Settings → Qualifying">needs {mq} to count</span>}</span>
                             <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12}} onClick={()=>removeStandard(evt.id,std.id)}>✕</button>
                           </div>
-                        ))}
+                          );
+                        })}
                         {!(evt.qualifyingStandards||[]).length&&<span style={{fontSize:12,color:C.textMuted}}>None set</span>}
                       </div>
                       <div>
@@ -5596,11 +5610,7 @@ function EventsPage({ data, save, nav }) {
           {(()=>{const evt=(data.events||[]).find(e=>e.id===showAddStandard);
             return (evt||{}).measurableType==='Time' ? <TimeDropdown min={stdForm.min} sec={stdForm.sec} onMinChange={v=>setStdForm({...stdForm,min:v})} onSecChange={v=>setStdForm({...stdForm,sec:v})} label="Time" /> : <FieldMeasure ft={stdForm.ft} inch={stdForm.inch} qtr={stdForm.qtr} onFtChange={v=>setStdForm({...stdForm,ft:v})} onInchChange={v=>setStdForm({...stdForm,inch:v})} onQtrChange={v=>setStdForm({...stdForm,qtr:v})} />;
           })()}
-          <div>
-            <label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Show as met only after this many qualify</label>
-            <input style={{...S.input,width:80}} type="text" inputMode="numeric" value={stdForm.minQual+''} onChange={e=>setStdForm({...stdForm,minQual:e.target.value})} />
-            <span style={{fontSize:11,color:C.textMuted,marginLeft:8}}>Use e.g. 3 for "3rd entry" standards. Default 1.</span>
-          </div>
+          <span style={{fontSize:11,color:C.textMuted}}>Tip: how many athletes must hit a standard before it counts (e.g. 3 for "3rd entry" rules) is set per standard type under Settings → Qualifying.</span>
           <button style={{...S.btn,...S.btnPrimary}} onClick={()=>addStandard(showAddStandard)}>Add Standard</button>
         </div>
       </Modal>
@@ -6533,7 +6543,7 @@ function SeasonResultsPage({ data, save, nav, events, getAthletePR, season }) {
                 });
                 Object.entries(bestByAthlete).forEach(([aid,r])=>qualified.push({isRelay:false,athleteId:aid,result:r}));
               }
-              qualifiedByEvent[evt.id] = {evt,std:matchStd,stdVal,qualified,minQual:Math.max(1,matchStd.minQualifiers||1)};
+              qualifiedByEvent[evt.id] = {evt,std:matchStd,stdVal,qualified,minQual:(matchStd.minQualifiers||getStdMinQualifiers(data,matchStd.name))};
             });
             const evtIds = Object.keys(qualifiedByEvent);
             const totalQualified = evtIds.reduce((s,id)=>s+qualifiedByEvent[id].qualified.length,0);
@@ -6712,16 +6722,18 @@ function BulkStandardEntry({ data, save, events, stdTypes, combos }) {
     if(!bulkLabel) return;
     const updatedEvents = (data.events||[]).map(evt=>{
       const val = bulkEntries[evt.id];
+      const prev = (evt.qualifyingStandards||[]).find(s=>s.name===bulkLabel);
+      const carry = (prev&&prev.minQualifiers&&prev.minQualifiers>1) ? {minQualifiers:prev.minQualifiers} : {};
       const existing = (evt.qualifyingStandards||[]).filter(s=>s.name!==bulkLabel);
       if(!val) return {...evt, qualifyingStandards:existing};
       if(evt.measurableType==='Time') {
         const ms = parseTimeToMs(val.min||0, val.sec||0);
         if(!ms) return {...evt, qualifyingStandards:existing};
-        return {...evt, qualifyingStandards:[...existing, {id:uid(), name:bulkLabel, timeMs:ms}]};
+        return {...evt, qualifyingStandards:[...existing, {id:uid(), name:bulkLabel, timeMs:ms, ...carry}]};
       } else {
         const ft=parseInt(val.ft)||0; const inch=parseInt(val.inch)||0; const qtr=parseFloat(val.qtr)||0;
         if(!ft&&!inch&&!qtr) return {...evt, qualifyingStandards:existing};
-        return {...evt, qualifyingStandards:[...existing, {id:uid(), name:bulkLabel, ft, inch, qtr}]};
+        return {...evt, qualifyingStandards:[...existing, {id:uid(), name:bulkLabel, ft, inch, qtr, ...carry}]};
       }
     });
     save({...data, events:updatedEvents, qualifyingStandardTypes:(data.qualifyingStandardTypes||[]).map(t=>{
@@ -7021,9 +7033,16 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
                     <button key={clr} style={{width:22,height:22,borderRadius:6,border:(t.color||'#2b6cb0')===clr?'3px solid #1a1e26':`2px solid ${clr}40`,background:clr,cursor:'pointer',padding:0}} onClick={()=>save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,color:clr}:x)})} />
                   ))}
                 </div>
-                {!(t.subtypes||[]).length&&<div style={{marginTop:6}}><select style={{...S.select,fontSize:11,padding:'4px 8px',width:110}} value={t.timingType||'Both'} onChange={e=>save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,timingType:e.target.value}:x)})}>
-                  <option value="Both">All Timing</option><option value="FAT">FAT Only</option><option value="Hand">Hand Only</option>
-                </select></div>}
+                <div style={{marginTop:6,display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
+                  {!(t.subtypes||[]).length&&<select style={{...S.select,fontSize:11,padding:'4px 8px',width:110}} value={t.timingType||'Both'} onChange={e=>save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,timingType:e.target.value}:x)})}>
+                    <option value="Both">All Timing</option><option value="FAT">FAT Only</option><option value="Hand">Hand Only</option>
+                  </select>}
+                  {!(t.subtypes||[]).length&&<span style={{display:'flex',alignItems:'center',gap:4}} title="Standards of this type only count as met once this many athletes/relays hit the mark">
+                    <span style={{fontSize:10,color:C.textMuted,textTransform:'uppercase',fontWeight:600}}>Show when</span>
+                    <input style={{...S.input,width:38,fontSize:11,padding:'3px 4px',textAlign:'center'}} type="text" inputMode="numeric" value={(t.minQualifiers||1)+''} onChange={e=>save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,minQualifiers:Math.max(1,parseInt(e.target.value)||1)}:x)})} />
+                    <span style={{fontSize:10,color:C.textMuted}}>qualify</span>
+                  </span>}
+                </div>
                 {t.lastUpdated&&<div style={{fontSize:9,color:C.textMuted,marginTop:4}}>Last updated: {new Date(t.lastUpdated).toLocaleDateString()} {new Date(t.lastUpdated).toLocaleTimeString()}</div>}
                 {(t.subtypes||[]).length>0&&<div style={{marginTop:8}}>
                   <div style={{fontSize:10,fontWeight:600,color:C.textMuted,textTransform:'uppercase',marginBottom:4}}>Sub-types</div>
@@ -7034,6 +7053,8 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
                         <select style={{border:'none',background:'transparent',fontSize:10,color:C.textMuted,padding:0,cursor:'pointer'}} value={(t.subtypeTimingTypes||{})[s]||'Both'} onChange={e=>{const st={...(t.subtypeTimingTypes||{})};st[s]=e.target.value;save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,subtypeTimingTypes:st}:x)});}}>
                           <option value="Both">All</option><option value="FAT">FAT</option><option value="Hand">Hand</option>
                         </select>
+                        <span style={{fontSize:9,color:C.textMuted}} title="Show as met only after this many qualify">≥</span>
+                        <input style={{border:`1px solid ${C.border}`,borderRadius:3,background:C.surface,fontSize:10,color:C.text,width:24,padding:'1px 2px',textAlign:'center'}} type="text" inputMode="numeric" value={(((t.subtypeMinQualifiers||{})[s])||1)+''} onChange={e=>{const sm={...(t.subtypeMinQualifiers||{})};sm[s]=Math.max(1,parseInt(e.target.value)||1);save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,subtypeMinQualifiers:sm}:x)});}} title="Show as met only after this many qualify" />
                         <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12,padding:0,fontWeight:700}} onClick={()=>save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,subtypes:(x.subtypes||[]).filter((_,j)=>j!==si)}:x)})}>✕</button>
                       </div>
                     ))}

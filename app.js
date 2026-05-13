@@ -2524,9 +2524,19 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                         <span style={{fontSize:12,color:C.textMuted,marginLeft:8}}>Place:</span>
                         <input style={{...S.input,width:45,fontSize:13,padding:'6px',textAlign:'center'}} type="text" inputMode="numeric" placeholder="#" value={v.place||''} onChange={e=>{const n={...resultsEntryData};n[relayKey]={...v,place:e.target.value};setResultsEntryData(n);}} />
                         {hasExisting&&<span style={{fontSize:10,fontWeight:700,color:C.success,marginLeft:4}}>✓ Saved</span>}
-                        {hasExisting&&<button style={{...S.btn,...S.btnDanger,fontSize:10,padding:'4px 10px',marginLeft:4}} title="Delete the saved result so you can re-enter it" onClick={()=>{
-                          if(!window.confirm('Delete the saved time for this relay? You can then re-enter it.')) return;
-                          const newResults = (data.results||[]).filter(r=>r.id!==v.resultId);
+                        {hasExisting&&<button style={{...S.btn,...S.btnDanger,fontSize:10,padding:'4px 10px',marginLeft:4}} title="Delete the saved result (and its leg splits) so you can re-enter it" onClick={()=>{
+                          if(!window.confirm('Delete the saved time for this relay AND its leg splits? You can then re-enter it.')) return;
+                          const composite = (data.results||[]).find(r=>r.id===v.resultId);
+                          const compDate = composite ? composite.date : null;
+                          const compId = v.resultId;
+                          const aidSet = new Set(v.athleteIds||[]);
+                          const newResults = (data.results||[]).filter(r=>{
+                            if(r.id===compId) return false;
+                            if(!r.isRelaySplit) return true;
+                            if(r.relayCompositeId && r.relayCompositeId===compId) return false;
+                            if(r.eventId===me.eventId && r.meetId===meetId && r.date===compDate && aidSet.has(r.athleteId)) return false;
+                            return true;
+                          });
                           save({...data, results:newResults});
                           const cleared = {...resultsEntryData};
                           cleared[relayKey] = {min:'',sec:'',place:'',athleteIds:v.athleteIds||[]};
@@ -6267,7 +6277,9 @@ function RelayTimer({ data, save, nav, events, addResult, addResults, getAthlete
         allSplits.push({lap:i+1,split:lg.splitMs,cumulative:lg.cumMs,athleteId:lg.athleteId});
       });
       const totalTime = validLegs[validLegs.length-1].cumMs;
-      newResults.push({id:uid(),eventId,meetId,date:raceDate,timeMs:totalTime,isRelay:true,relayAthletes:relayAthleteIds,splits:allSplits});
+      const compositeId = uid();
+      newResults.slice(-validLegs.length).forEach(r=>{ r.relayCompositeId = compositeId; });
+      newResults.push({id:compositeId,eventId,meetId,date:raceDate,timeMs:totalTime,isRelay:true,relayAthletes:relayAthleteIds,splits:allSplits});
     });
     if(newResults.length) addResults(newResults);
     setSaved2(true);

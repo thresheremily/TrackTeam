@@ -6688,26 +6688,6 @@ function ReportBuilderModal({ open, onClose, data, save, events, season, team, p
     dirtyRef.current = false;
   // eslint-disable-next-line
   }, [open]);
-  if(!open) return null;
-  const toggle = (k) => { dirtyRef.current=true; setSaveStatus('dirty'); setOpts(o=>({...o, [k]:!o[k]})); };
-  const toggleHl = (k) => { dirtyRef.current=true; setSaveStatus('dirty'); setOpts(o=>({...o, highlights:{...o.highlights, [k]:!o.highlights[k]}})); };
-  const toggleAth = (id) => setSelectedIds(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev, id]);
-  const selectAll = () => setSelectedIds(allAthletes.map(a=>a.id));
-  const selectNone = () => setSelectedIds([]);
-  const markDirty = () => { dirtyRef.current = true; setSaveStatus('dirty'); };
-  const updateSection = (aid, idx, field, val) => { markDirty(); setFeedbackDraft(prev=>{
-    const sections = [...((prev[aid]||{}).sections||[])];
-    sections[idx] = {...sections[idx], [field]:val};
-    return {...prev, [aid]:{...(prev[aid]||{}), sections}};
-  }); };
-  const addSection = (aid) => { markDirty(); setFeedbackDraft(prev=>{
-    const sections = [...((prev[aid]||{}).sections||[]), {title:'New section', body:''}];
-    return {...prev, [aid]:{...(prev[aid]||{}), sections}};
-  }); };
-  const removeSection = (aid, idx) => { markDirty(); setFeedbackDraft(prev=>{
-    const sections = ((prev[aid]||{}).sections||[]).filter((_,i)=>i!==idx);
-    return {...prev, [aid]:{...(prev[aid]||{}), sections}};
-  }); };
   const saveDraft = () => {
     save({...data, reportFeedback: feedbackDraft, reportConfig: { opts, startDate, endDate }});
     dirtyRef.current = false;
@@ -6728,6 +6708,26 @@ function ReportBuilderModal({ open, onClose, data, save, events, season, team, p
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [open]);
+  if(!open) return null;
+  const toggle = (k) => { dirtyRef.current=true; setSaveStatus('dirty'); setOpts(o=>({...o, [k]:!o[k]})); };
+  const toggleHl = (k) => { dirtyRef.current=true; setSaveStatus('dirty'); setOpts(o=>({...o, highlights:{...o.highlights, [k]:!o.highlights[k]}})); };
+  const toggleAth = (id) => setSelectedIds(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev, id]);
+  const selectAll = () => setSelectedIds(allAthletes.map(a=>a.id));
+  const selectNone = () => setSelectedIds([]);
+  const markDirty = () => { dirtyRef.current = true; setSaveStatus('dirty'); };
+  const updateSection = (aid, idx, field, val) => { markDirty(); setFeedbackDraft(prev=>{
+    const sections = [...((prev[aid]||{}).sections||[])];
+    sections[idx] = {...sections[idx], [field]:val};
+    return {...prev, [aid]:{...(prev[aid]||{}), sections}};
+  }); };
+  const addSection = (aid) => { markDirty(); setFeedbackDraft(prev=>{
+    const sections = [...((prev[aid]||{}).sections||[]), {title:'New section', body:''}];
+    return {...prev, [aid]:{...(prev[aid]||{}), sections}};
+  }); };
+  const removeSection = (aid, idx) => { markDirty(); setFeedbackDraft(prev=>{
+    const sections = ((prev[aid]||{}).sections||[]).filter((_,i)=>i!==idx);
+    return {...prev, [aid]:{...(prev[aid]||{}), sections}};
+  }); };
   const closeWithFlush = () => {
     if(dirtyRef.current) saveDraft();
     onClose();

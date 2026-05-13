@@ -2203,7 +2203,8 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
       entries.forEach((en,ei)=>{
         const relayKey = '_relay_'+ei;
         const athleteIds = (en.athletes||[]).map(a=>a.athleteId).filter(Boolean);
-        const existingComposite = (data.results||[]).find(r=>r.eventId===evt.id&&r.meetId===meetId&&r.isRelay&&(r.relayAthletes||[]).join(',')==athleteIds.join(','));
+        const sortedKey = [...athleteIds].sort().join(',');
+        const existingComposite = (data.results||[]).find(r=>r.eventId===evt.id&&r.meetId===meetId&&r.isRelay&&[...(r.relayAthletes||[])].sort().join(',')===sortedKey);
         if(existingComposite) {
           const ms = existingComposite.timeMs||0;
           pre[relayKey] = {min:Math.floor(ms/60000)+'',sec:((ms%60000)/1000).toFixed(2),place:(existingComposite.place||'')+'',resultId:existingComposite.id,verified:!!existingComposite.verified,athleteIds};
@@ -2523,6 +2524,14 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                         <span style={{fontSize:12,color:C.textMuted,marginLeft:8}}>Place:</span>
                         <input style={{...S.input,width:45,fontSize:13,padding:'6px',textAlign:'center'}} type="text" inputMode="numeric" placeholder="#" value={v.place||''} onChange={e=>{const n={...resultsEntryData};n[relayKey]={...v,place:e.target.value};setResultsEntryData(n);}} />
                         {hasExisting&&<span style={{fontSize:10,fontWeight:700,color:C.success,marginLeft:4}}>✓ Saved</span>}
+                        {hasExisting&&<button style={{...S.btn,...S.btnDanger,fontSize:10,padding:'4px 10px',marginLeft:4}} title="Delete the saved result so you can re-enter it" onClick={()=>{
+                          if(!window.confirm('Delete the saved time for this relay? You can then re-enter it.')) return;
+                          const newResults = (data.results||[]).filter(r=>r.id!==v.resultId);
+                          save({...data, results:newResults});
+                          const cleared = {...resultsEntryData};
+                          cleared[relayKey] = {min:'',sec:'',place:'',athleteIds:v.athleteIds||[]};
+                          setResultsEntryData(cleared);
+                        }}>Delete</button>}
                       </div>
                     </div>);
                   })}

@@ -297,6 +297,92 @@ const parseCSV = (text) => {
   });
   return { headers, rows };
 };
+const linearRegression = (xs, ys) => {
+  const n = xs.length;
+  if(n < 2) return null;
+  let sx=0, sy=0, sxy=0, sxx=0;
+  for(let i=0;i<n;i++){sx+=xs[i];sy+=ys[i];sxy+=xs[i]*ys[i];sxx+=xs[i]*xs[i];}
+  const denom = n*sxx - sx*sx;
+  if(!denom) return null;
+  const slope = (n*sxy - sx*sy) / denom;
+  const intercept = (sy - slope*sx) / n;
+  return { slope, intercept };
+};
+const dateToDay = (d) => {
+  const t = new Date((d||'')+'T12:00:00').getTime();
+  return isNaN(t) ? 0 : Math.round(t/86400000);
+};
+const makeProgressionSVG = (points, opts) => {
+  const W = (opts||{}).width || 540;
+  const H = (opts||{}).height || 150;
+  const ML=58, MR=14, MT=14, MB=30;
+  const PW = W-ML-MR, PH = H-MT-MB;
+  if(!points.length) return `<svg width="${W}" height="${H}"></svg>`;
+  const xs = points.map(p=>p.day);
+  const ys = points.map(p=>p.value);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const padY = Math.max(0.0001, (maxY-minY)*0.1);
+  const lo = minY - padY, hi = maxY + padY;
+  const rangeY = (hi-lo) || 1;
+  const rangeX = (maxX-minX) || 1;
+  const sx = (x) => ML + ((x-minX)/rangeX)*PW;
+  const sy = (y) => MT + (1-(y-lo)/rangeY)*PH;
+  const fmt = (opts||{}).formatY || ((v)=>v.toFixed(2));
+  const fmtDate = (d) => {const dt=new Date(d+'T12:00:00');return (dt.getMonth()+1)+'/'+dt.getDate();};
+  const reg = linearRegression(xs, ys);
+  let trendLine = '';
+  if(reg) {
+    const x1 = minX, x2 = maxX;
+    const y1 = reg.intercept + reg.slope*x1;
+    const y2 = reg.intercept + reg.slope*x2;
+    trendLine = `<line x1="${sx(x1)}" y1="${sy(y1)}" x2="${sx(x2)}" y2="${sy(y2)}" stroke="#c53030" stroke-width="2" stroke-dasharray="5,3" />`;
+  }
+  const ticks = 4;
+  let yTicks = '';
+  for(let i=0;i<=ticks;i++){
+    const v = lo + (rangeY*i/ticks);
+    const yp = sy(v);
+    yTicks += `<line x1="${ML-3}" y1="${yp}" x2="${ML}" y2="${yp}" stroke="#888" />`;
+    yTicks += `<text x="${ML-5}" y="${yp+3}" text-anchor="end" font-size="8" fill="#666">${fmt(v)}</text>`;
+  }
+  const xTicks = points.length<=8 ? points : [points[0], points[Math.floor(points.length/2)], points[points.length-1]];
+  let xTickStr = '';
+  xTicks.forEach(p=>{
+    const xp = sx(p.day);
+    xTickStr += `<line x1="${xp}" y1="${MT+PH}" x2="${xp}" y2="${MT+PH+3}" stroke="#888" />`;
+    xTickStr += `<text x="${xp}" y="${MT+PH+12}" text-anchor="middle" font-size="8" fill="#666">${fmtDate(p.date)}</text>`;
+  });
+  const connect = points.map((p,i)=>(i===0?'M':'L')+sx(p.day)+','+sy(p.value)).join(' ');
+  const pts = points.map(p=>`<circle cx="${sx(p.day)}" cy="${sy(p.value)}" r="2.5" fill="#2b6cb0" stroke="#fff" stroke-width="0.5" />`).join('');
+  return `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg" style="font-family:Helvetica,Arial,sans-serif">
+    <rect x="${ML}" y="${MT}" width="${PW}" height="${PH}" fill="#fafafa" stroke="#ddd" />
+    ${yTicks}${xTickStr}
+    <path d="${connect}" fill="none" stroke="#2b6cb0" stroke-width="1" opacity="0.5" />
+    ${trendLine}
+    ${pts}
+  </svg>`;
+};
+const makeBarChartSVG = (rows, opts) => {
+  const W = (opts||{}).width || 560;
+  const rowH = 18;
+  const ML = (opts||{}).labelWidth || 140, MR = 50, MT = 8, MB = 8;
+  const H = MT + MB + rows.length*rowH;
+  if(!rows.length) return `<svg width="${W}" height="${MT+MB+rowH}"><text x="10" y="${MT+12}" font-size="10" fill="#888">No data</text></svg>`;
+  const maxV = Math.max(...rows.map(r=>r.value), 1);
+  const PW = W-ML-MR;
+  let bars = '';
+  rows.forEach((r,i)=>{
+    const y = MT + i*rowH;
+    const bw = (r.value/maxV)*PW;
+    bars += `<text x="${ML-6}" y="${y+rowH/2+3}" text-anchor="end" font-size="9" fill="#222">${r.label}</text>`;
+    bars += `<rect x="${ML}" y="${y+3}" width="${bw}" height="${rowH-6}" fill="${r.color||'#2b6cb0'}" rx="2" />`;
+    bars += `<text x="${ML+bw+4}" y="${y+rowH/2+3}" font-size="9" fill="#222" font-weight="600">${r.value}${r.suffix||''}</text>`;
+  });
+  return `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg" style="font-family:Helvetica,Arial,sans-serif">${bars}</svg>`;
+};
+const esc = (s) => (s==null?'':(''+s)).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
 const HAS_FIREBASE = typeof firebase !== 'undefined' && !!firebase.apps;
 let db = null;
 let authService = null;
@@ -1003,10 +1089,10 @@ function App() {
     practicePlans: () => <PracticePlansPage data={data} save={save} nav={nav} season={season} initialWeekId={pageParams.weekId} />,
     dailyPractice: () => <DailyPracticeView data={data} nav={nav} date={pageParams.date} />,
     meets: () => <MeetsPage data={data} save={save} nav={nav} events={events} />,
-    seasonResults: () => <SeasonResultsPage data={data} save={save} nav={nav} events={events} getAthletePR={getAthletePR} season={season} />,
+    seasonResults: () => <SeasonResultsPage data={data} save={save} nav={nav} events={events} getAthletePR={getAthletePR} season={season} team={team} />,
     meetSub: () => <MeetSubPage data={data} save={save} nav={nav} meetId={pageParams.meetId} events={events} getAthletePR={getAthletePR} checkQualifying={checkQualifying} />,
     athletes: () => <AthletesPage data={data} save={save} nav={nav} />,
-    athleteSub: () => <AthleteSubPage data={data} save={save} nav={nav} athleteId={pageParams.athleteId} athFilter={pageParams.athFilter} events={events} getAthletePR={getAthletePR} checkRecord={checkRecord} checkQualifying={checkQualifying} season={season} />,
+    athleteSub: () => <AthleteSubPage data={data} save={save} nav={nav} athleteId={pageParams.athleteId} athFilter={pageParams.athFilter} events={events} getAthletePR={getAthletePR} checkRecord={checkRecord} checkQualifying={checkQualifying} season={season} team={team} />,
     eventsPage: () => <EventsPage data={data} save={save} nav={nav} />,
     tools: () => <ToolsPage data={data} save={save} nav={nav} events={events} addResult={addResult} getAthletePR={getAthletePR} checkRecord={checkRecord} checkQualifying={checkQualifying} preset={pageParams} />,
     raceTimer: () => <RaceTimer data={data} save={save} nav={nav} events={events} addResult={addResult} getAthletePR={getAthletePR} checkRecord={checkRecord} checkQualifying={checkQualifying} preset={pageParams} />,
@@ -3372,9 +3458,10 @@ function AthletesPage({ data, save, nav }) {
     </div>
   );
 }
-function AthleteSubPage({ data, save, nav, athleteId, athFilter, events, getAthletePR, checkRecord, checkQualifying, season }) {
+function AthleteSubPage({ data, save, nav, athleteId, athFilter, events, getAthletePR, checkRecord, checkQualifying, season, team }) {
   const [showQualifying, setShowQualifying] = useState(false);
   const [expandedPerfEvents, setExpandedPerfEvents] = useState({});
+  const [showReport, setShowReport] = useState(false);
   const [showEditInfo, setShowEditInfo] = useState(false);
   const [showAddNote, setShowAddNote] = useState(false);
   const [editNoteId, setEditNoteId] = useState(null);
@@ -3494,9 +3581,11 @@ function AthleteSubPage({ data, save, nav, athleteId, athFilter, events, getAthl
   const filterLabel = [af.search,af.genderFilter==='M'?'Boys':af.genderFilter==='F'?'Girls':'',af.groupFilter?(groups.find(g=>g.id===af.groupFilter)||{}).name||'':''].filter(Boolean).join(', ');
   return (
     <div>
+      <ReportBuilderModal open={showReport} onClose={()=>setShowReport(false)} data={data} save={save} events={events} season={season} team={team} presetAthleteIds={[athleteId]} />
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
         <button style={S.backLink} onClick={()=>nav('athletes')}>{"<- All Athletes"}</button>
         <div style={{display:'flex',gap:8,alignItems:'center'}}>
+          <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'6px 12px'}} onClick={()=>setShowReport(true)} title="Print season report for this athlete">📄 Report</button>
           <button style={{...S.btn,...S.btnSecondary,fontSize:13,padding:'8px 16px',borderRadius:8,opacity:prevAthlete?1:0.3,display:'flex',flexDirection:'column',alignItems:'center',lineHeight:1.2}} disabled={!prevAthlete} onClick={()=>prevAthlete&&nav('athleteSub',{athleteId:prevAthlete.id,athFilter:af})}>
             {"<- Prev"}{prevAthlete&&<span style={{fontSize:10,fontWeight:400,textTransform:'none',letterSpacing:0}}>{athDisplay(prevAthlete)}</span>}
           </button>
@@ -6289,8 +6378,449 @@ function RelayTimer({ data, save, nav, events, addResult, addResults, getAthlete
     </div>
   );
 }
-function SeasonResultsPage({ data, save, nav, events, getAthletePR, season }) {
+const DEFAULT_FEEDBACK_SECTIONS = [
+  { title:'Strengths', body:'' },
+  { title:'Areas for Growth', body:'' },
+  { title:'Goals for Next Season', body:'' },
+];
+const DEFAULT_REPORT_OPTIONS = {
+  includeTeamSummary: true,
+  includeTeamPRChart: true,
+  includeTeamQualifiersChart: true,
+  includeAthletePages: true,
+  includeAthleteSummary: true,
+  includeEventTable: true,
+  includeProgression: true,
+  includeHighlights: true,
+  includeFeedback: true,
+  highlights: { mostImproved:true, prCount:true, eventCount:true, qualStds:true, bestPlace:true, meetCount:true },
+};
+const computeAthleteSeasonStats = (data, events, athleteId, startDate, endDate) => {
+  const inRange = (d) => (!startDate || d>=startDate) && (!endDate || d<=endDate);
+  const allRes = (data.results||[]).filter(r=>!r.isPractice&&inRange(r.date));
+  const myIndiv = allRes.filter(r=>r.athleteId===athleteId&&!r.isRelay&&!r.isRelaySplit);
+  const myRelays = allRes.filter(r=>r.isRelay&&(r.relayAthletes||[]).includes(athleteId));
+  const eventIdsSet = new Set([...myIndiv.map(r=>r.eventId), ...myRelays.map(r=>r.eventId)]);
+  const meetIds = new Set([...myIndiv.map(r=>r.meetId), ...myRelays.map(r=>r.meetId)].filter(Boolean));
+  const eventRows = [];
+  let totalPRs = 0;
+  const qualByType = {};
+  let bestPlace = null;
+  [...eventIdsSet].forEach(evtId => {
+    const evt = events.find(e=>e.id===evtId);
+    if(!evt) return;
+    const isField = isFieldEvent(evt);
+    const isRly = evt.entryType==='Relay';
+    const rs = isRly ? myRelays.filter(r=>r.eventId===evtId) : myIndiv.filter(r=>r.eventId===evtId);
+    const sorted = [...rs].sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+    if(!sorted.length) return;
+    const points = sorted.map(r=>{
+      const value = isField ? fieldToInches(r.ft||0,r.inch||0,r.qtr||0) : (r.timeMs||0);
+      return { date:r.date, day:dateToDay(r.date), value, result:r };
+    }).filter(p=>p.value>0);
+    if(!points.length) return;
+    const best = isField
+      ? sorted.reduce((b,r)=>(!b||fieldToInches(r.ft||0,r.inch||0,r.qtr||0)>fieldToInches(b.ft||0,b.inch||0,b.qtr||0))?r:b, null)
+      : sorted.reduce((b,r)=>(!b||(r.timeMs||0)<(b.timeMs||0))?r:b, null);
+    const first = points[0], last = points[points.length-1];
+    let prsForEvent = 0;
+    if(!isRly) {
+      let bestSoFar = isField ? -Infinity : Infinity;
+      sorted.forEach(r=>{
+        if(isField) {
+          const v = fieldToInches(r.ft||0,r.inch||0,r.qtr||0);
+          if(v>bestSoFar){bestSoFar=v;prsForEvent++;}
+        } else {
+          const v = r.timeMs||0;
+          if(v>0 && v<bestSoFar){bestSoFar=v;prsForEvent++;}
+        }
+      });
+      prsForEvent = Math.max(0, prsForEvent-1);
+    }
+    totalPRs += prsForEvent;
+    sorted.forEach(r=>{
+      if(r.place) { const p=parseInt(r.place); if(p>0 && (bestPlace===null||p<bestPlace)) bestPlace=p; }
+    });
+    const qualBest = getAllQualifyingForResult(data, events, {...best});
+    qualBest.forEach(q=>{ const key=q.name||'Q'; qualByType[key]=(qualByType[key]||0)+1; });
+    const fmt = (v)=> isField ? `${Math.floor(v/12)}'${(v%12).toFixed(1)}"` : formatTime(v);
+    const improvement = isField ? (last.value-first.value) : (first.value-last.value);
+    eventRows.push({ evt, isField, isRelay:isRly, points, best, first, last, prsForEvent, qualBest, fmt, improvement });
+  });
+  eventRows.sort((a,b)=>getDefaultOrder(a.evt)-getDefaultOrder(b.evt));
+  let mostImproved = null;
+  eventRows.forEach(row=>{
+    if(row.points.length<2) return;
+    const denom = row.isField ? row.first.value : row.first.value;
+    if(!denom) return;
+    const pct = (row.improvement/denom)*100;
+    if(!mostImproved || pct > mostImproved.pct) mostImproved = { row, pct };
+  });
+  return { eventRows, totalPRs, totalEvents:eventRows.length, totalMeets:meetIds.size, qualByType, bestPlace, mostImproved };
+};
+const computeTeamSeasonStats = (data, events, athleteIds, startDate, endDate) => {
+  const inRange = (d) => (!startDate || d>=startDate) && (!endDate || d<=endDate);
+  const idSet = new Set(athleteIds);
+  const allRes = (data.results||[]).filter(r=>!r.isPractice&&inRange(r.date));
+  const indiv = allRes.filter(r=>!r.isRelay&&!r.isRelaySplit&&idSet.has(r.athleteId));
+  const relays = allRes.filter(r=>r.isRelay&&(r.relayAthletes||[]).some(a=>idSet.has(a)));
+  const meetIds = new Set([...indiv.map(r=>r.meetId), ...relays.map(r=>r.meetId)].filter(Boolean));
+  const prsByAthlete = {};
+  athleteIds.forEach(aid=>{prsByAthlete[aid]=0;});
+  const eventIdsForAthlete = {};
+  indiv.forEach(r=>{
+    if(!eventIdsForAthlete[r.athleteId]) eventIdsForAthlete[r.athleteId]={};
+    if(!eventIdsForAthlete[r.athleteId][r.eventId]) eventIdsForAthlete[r.athleteId][r.eventId]=[];
+    eventIdsForAthlete[r.athleteId][r.eventId].push(r);
+  });
+  Object.entries(eventIdsForAthlete).forEach(([aid,byEvt])=>{
+    Object.entries(byEvt).forEach(([eid,rs])=>{
+      const evt = events.find(e=>e.id===eid);
+      if(!evt) return;
+      const isField = isFieldEvent(evt);
+      const sorted = [...rs].sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+      let bestSoFar = isField ? -Infinity : Infinity;
+      let prs=0;
+      sorted.forEach(r=>{
+        if(isField) {const v=fieldToInches(r.ft||0,r.inch||0,r.qtr||0); if(v>bestSoFar){bestSoFar=v;prs++;}}
+        else {const v=r.timeMs||0; if(v>0&&v<bestSoFar){bestSoFar=v;prs++;}}
+      });
+      prsByAthlete[aid] = (prsByAthlete[aid]||0) + Math.max(0,prs-1);
+    });
+  });
+  const qualifiersByStd = {};
+  indiv.forEach(r=>{
+    const qs = getAllQualifyingForResult(data, events, r);
+    qs.forEach(q=>{
+      const k = q.name||'Q';
+      qualifiersByStd[k] = qualifiersByStd[k] || new Set();
+      qualifiersByStd[k].add(r.athleteId);
+    });
+  });
+  relays.forEach(r=>{
+    const qs = getAllQualifyingForResult(data, events, {...r,timeMs:r.timeMs});
+    qs.forEach(q=>{
+      const k = q.name||'Q';
+      qualifiersByStd[k] = qualifiersByStd[k] || new Set();
+      qualifiersByStd[k].add('relay:'+r.id);
+    });
+  });
+  const qualifiersCount = {};
+  Object.entries(qualifiersByStd).forEach(([k,s])=>{qualifiersCount[k]=s.size;});
+  return { totalMeets:meetIds.size, totalResults: indiv.length+relays.length, totalPRs:Object.values(prsByAthlete).reduce((a,b)=>a+b,0), qualifiersCount, prsByAthlete };
+};
+const buildSeasonReportHTML = (data, events, season, team, athletes, options, feedbackByAth) => {
+  const start = options.startDate || (season||{}).startDate || '';
+  const end = options.endDate || (season||{}).endDate || '';
+  const titleLine = `${(team||{}).name||'Team'} — ${(season||{}).name||'Season Report'}`;
+  const subLine = `${start||'(beginning)'} → ${end||'(today)'}  ·  ${athletes.length} athlete${athletes.length!==1?'s':''}`;
+  const css = `<style>
+    @page{size:portrait;margin:0.5in}
+    body{font-family:-apple-system,Helvetica,Arial,sans-serif;color:#111;margin:0;font-size:11px;line-height:1.4}
+    h1{font-size:20px;margin:0 0 4px}
+    h2{font-size:15px;margin:14px 0 6px;border-bottom:1px solid #333;padding-bottom:3px}
+    h3{font-size:12px;margin:8px 0 4px;color:#444}
+    .sub{color:#666;font-size:11px;margin-bottom:10px}
+    .tiles{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+    .tile{flex:1;min-width:110px;border:1px solid #ccc;border-radius:6px;padding:8px 10px;text-align:center}
+    .tile .v{font-size:22px;font-weight:700;color:#2b6cb0}
+    .tile .l{font-size:9px;color:#666;text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-top:2px}
+    table{width:100%;border-collapse:collapse;margin-bottom:6px}
+    th{text-align:left;font-size:9px;color:#555;text-transform:uppercase;letter-spacing:0.05em;border-bottom:2px solid #333;padding:3px 5px}
+    td{padding:3px 5px;border-bottom:1px solid #ddd;font-size:11px;vertical-align:top}
+    .athlete-page{page-break-before:always}
+    .team-page{page-break-after:always}
+    .ath-header{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #333;padding-bottom:4px;margin-bottom:8px}
+    .ath-header .name{font-size:18px;font-weight:700}
+    .ath-header .meta{font-size:10px;color:#666}
+    .badges{display:flex;gap:4px;flex-wrap:wrap;margin-top:3px}
+    .badge{font-size:9px;font-weight:700;padding:2px 7px;border-radius:8px;background:#e6efff;color:#2b6cb0;border:1px solid #2b6cb0}
+    .highlight{background:#fef3c7;border-left:3px solid #d97706;padding:5px 9px;margin:4px 0;font-size:11px;border-radius:3px}
+    .feedback-section{margin-top:8px;page-break-inside:avoid}
+    .feedback-section .ft{font-weight:700;font-size:12px;color:#2b6cb0;border-bottom:1px solid #2b6cb0;padding-bottom:2px;margin-bottom:4px}
+    .feedback-section .fb{font-size:11px;white-space:pre-wrap;line-height:1.5;min-height:30px}
+    .chart-row{display:flex;justify-content:space-between;align-items:center;gap:8px;page-break-inside:avoid;margin:4px 0}
+    .chart-label{font-size:10px;font-weight:600;width:120px}
+    @media print{body{margin:0}}
+  </style>`;
+
+  const teamStats = computeTeamSeasonStats(data, events, athletes.map(a=>a.id), start, end);
+  let body = `<h1>${esc(titleLine)}</h1><div class="sub">${esc(subLine)}</div>`;
+
+  if(options.includeTeamSummary||options.includeTeamPRChart||options.includeTeamQualifiersChart) {
+    body += '<div class="team-page">';
+    body += '<h2>Team Summary</h2>';
+    if(options.includeTeamSummary) {
+      body += '<div class="tiles">';
+      body += `<div class="tile"><div class="v">${athletes.length}</div><div class="l">Athletes</div></div>`;
+      body += `<div class="tile"><div class="v">${teamStats.totalMeets}</div><div class="l">Meets</div></div>`;
+      body += `<div class="tile"><div class="v">${teamStats.totalResults}</div><div class="l">Results</div></div>`;
+      body += `<div class="tile"><div class="v">${teamStats.totalPRs}</div><div class="l">PRs Set</div></div>`;
+      body += `<div class="tile"><div class="v">${Object.values(teamStats.qualifiersCount).reduce((a,b)=>a+b,0)}</div><div class="l">Qualifiers</div></div>`;
+      body += '</div>';
+    }
+    if(options.includeTeamPRChart) {
+      const rows = athletes.map(a=>({label:athDisplay(a), value:teamStats.prsByAthlete[a.id]||0, color:a.gender==='M'?'#2b6cb0':'#d53f8c'}))
+        .filter(r=>r.value>0).sort((a,b)=>b.value-a.value).slice(0,20);
+      body += '<h3>PRs per athlete (top 20)</h3>';
+      body += makeBarChartSVG(rows, {width:580});
+    }
+    if(options.includeTeamQualifiersChart) {
+      const rows = Object.entries(teamStats.qualifiersCount).map(([k,v])=>({label:k, value:v, color:'#25763b'})).sort((a,b)=>b.value-a.value);
+      if(rows.length) {
+        body += '<h3>Qualifiers by standard</h3>';
+        body += makeBarChartSVG(rows, {width:580});
+      }
+    }
+    body += '</div>';
+  }
+
+  if(options.includeAthletePages) {
+    athletes.forEach(a=>{
+      const stats = computeAthleteSeasonStats(data, events, a.id, start, end);
+      const fb = (feedbackByAth||{})[a.id] || { sections: DEFAULT_FEEDBACK_SECTIONS };
+      body += '<div class="athlete-page">';
+      body += '<div class="ath-header"><div>';
+      body += `<div class="name">${esc(athDisplay(a))}</div>`;
+      body += `<div class="meta">${a.gradYear?`Class of ${a.gradYear}`:''}${a.gender?(a.gradYear?' · ':'')+(a.gender==='M'?'Boys':'Girls'):''}</div>`;
+      body += '</div></div>';
+
+      if(options.includeAthleteSummary) {
+        body += '<div class="tiles">';
+        body += `<div class="tile"><div class="v">${stats.totalEvents}</div><div class="l">Events</div></div>`;
+        body += `<div class="tile"><div class="v">${stats.totalMeets}</div><div class="l">Meets</div></div>`;
+        body += `<div class="tile"><div class="v">${stats.totalPRs}</div><div class="l">PRs</div></div>`;
+        body += `<div class="tile"><div class="v">${Object.values(stats.qualByType).reduce((s,n)=>s+n,0)}</div><div class="l">Qual. Marks</div></div>`;
+        body += `<div class="tile"><div class="v">${stats.bestPlace||'—'}</div><div class="l">Best Place</div></div>`;
+        body += '</div>';
+      }
+
+      if(options.includeHighlights) {
+        const h = options.highlights||{};
+        const lines = [];
+        if(h.mostImproved && stats.mostImproved && stats.mostImproved.pct>0) {
+          const r = stats.mostImproved.row;
+          lines.push(`<strong>Most improved:</strong> ${esc(getEventLabel(r.evt))} — from ${esc(r.fmt(r.first.value))} to ${esc(r.fmt(r.last.value))} (${stats.mostImproved.pct.toFixed(1)}%)`);
+        }
+        if(h.prCount && stats.totalPRs>0) lines.push(`<strong>Personal records:</strong> ${stats.totalPRs} set this season`);
+        if(h.eventCount && stats.totalEvents>0) lines.push(`<strong>Events contested:</strong> ${stats.totalEvents}`);
+        if(h.meetCount && stats.totalMeets>0) lines.push(`<strong>Meets competed:</strong> ${stats.totalMeets}`);
+        if(h.qualStds && Object.keys(stats.qualByType).length) {
+          const parts = Object.entries(stats.qualByType).map(([k,v])=>`${esc(k)} ×${v}`);
+          lines.push(`<strong>Qualifying marks:</strong> ${parts.join(', ')}`);
+        }
+        if(h.bestPlace && stats.bestPlace) lines.push(`<strong>Best finish:</strong> ${stats.bestPlace}${stats.bestPlace===1?'st':stats.bestPlace===2?'nd':stats.bestPlace===3?'rd':'th'}`);
+        if(lines.length) {
+          body += '<h3>Season Highlights</h3>';
+          lines.forEach(l=>{body += `<div class="highlight">${l}</div>`;});
+        }
+      }
+
+      if(options.includeEventTable && stats.eventRows.length) {
+        body += '<h3>By Event</h3>';
+        body += '<table><thead><tr><th>Event</th><th># Results</th><th>Season Best</th><th>First</th><th>Latest</th><th>Change</th><th>Qualifying</th></tr></thead><tbody>';
+        stats.eventRows.forEach(r=>{
+          const change = r.points.length>=2 ? (r.isField ? `+${esc(r.fmt(Math.max(0,r.last.value-r.first.value)))}` : (r.last.value<=r.first.value ? `-${esc(formatTime(r.first.value-r.last.value))}` : `+${esc(formatTime(r.last.value-r.first.value))}`)) : '—';
+          const bestStr = r.isField ? fieldToStr(r.best.ft||0,r.best.inch||0,r.best.qtr||0) : formatTime(r.best.timeMs||0);
+          const quals = r.qualBest.map(q=>`<span class="badge">${esc(q.name||'Q')}</span>`).join(' ');
+          body += `<tr><td><strong>${esc(getEventLabel(r.evt))}</strong>${r.isRelay?' <em style="font-size:9px;color:#888">(relay)</em>':''}</td><td>${r.points.length}</td><td><strong>${esc(bestStr)}</strong></td><td>${esc(r.fmt(r.first.value))}</td><td>${esc(r.fmt(r.last.value))}</td><td>${change}</td><td>${quals||'—'}</td></tr>`;
+        });
+        body += '</tbody></table>';
+      }
+
+      if(options.includeProgression) {
+        const eligible = stats.eventRows.filter(r=>r.points.length>=2);
+        if(eligible.length) {
+          body += '<h3>Progression</h3>';
+          eligible.forEach(r=>{
+            const fmt = r.isField ? (v)=>`${Math.floor(v/12)}'${(v%12).toFixed(1)}"` : (v)=>formatTime(v);
+            const svg = makeProgressionSVG(r.points, { width:540, height:140, formatY:fmt });
+            body += `<div class="chart-row"><div class="chart-label">${esc(getEventLabel(r.evt))}</div>${svg}</div>`;
+          });
+        }
+      }
+
+      if(options.includeFeedback) {
+        (fb.sections||[]).forEach(sec=>{
+          if(!sec.title && !sec.body) return;
+          body += `<div class="feedback-section"><div class="ft">${esc(sec.title||'')}</div><div class="fb">${esc(sec.body||'')}</div></div>`;
+        });
+      }
+      body += '</div>';
+    });
+  }
+  return `<!DOCTYPE html><html><head><title>${esc(titleLine)}</title>${css}</head><body>${body}</body></html>`;
+};
+const openSeasonReport = (data, events, season, team, athletes, options, feedbackByAth) => {
+  const w = window.open('','_blank','width=1000,height=800');
+  if(!w) return;
+  const html = buildSeasonReportHTML(data, events, season, team, athletes, options, feedbackByAth);
+  w.document.write(html);
+  w.document.close();
+  setTimeout(()=>w.print(), 500);
+};
+function ReportBuilderModal({ open, onClose, data, save, events, season, team, presetAthleteIds }) {
+  const allAthletes = (data.athletes||[]).filter(a=>a.active!==false);
+  const [opts, setOpts] = useState(DEFAULT_REPORT_OPTIONS);
+  const [startDate, setStartDate] = useState((season||{}).startDate||'');
+  const [endDate, setEndDate] = useState((season||{}).endDate||'');
+  const [selectedIds, setSelectedIds] = useState(presetAthleteIds && presetAthleteIds.length ? presetAthleteIds : allAthletes.map(a=>a.id));
+  const [feedbackDraft, setFeedbackDraft] = useState({});
+  const [expandedAth, setExpandedAth] = useState(null);
+  useEffect(()=>{
+    if(!open) return;
+    setOpts(DEFAULT_REPORT_OPTIONS);
+    setStartDate((season||{}).startDate||'');
+    setEndDate((season||{}).endDate||'');
+    setSelectedIds(presetAthleteIds && presetAthleteIds.length ? presetAthleteIds : allAthletes.map(a=>a.id));
+    const saved = data.reportFeedback || {};
+    const draft = {};
+    allAthletes.forEach(a=>{
+      draft[a.id] = saved[a.id] && saved[a.id].sections ? { sections: saved[a.id].sections.map(s=>({...s})) } : { sections: DEFAULT_FEEDBACK_SECTIONS.map(s=>({...s})) };
+    });
+    setFeedbackDraft(draft);
+    setExpandedAth(null);
+  // eslint-disable-next-line
+  }, [open]);
+  if(!open) return null;
+  const toggle = (k) => setOpts(o=>({...o, [k]:!o[k]}));
+  const toggleHl = (k) => setOpts(o=>({...o, highlights:{...o.highlights, [k]:!o.highlights[k]}}));
+  const toggleAth = (id) => setSelectedIds(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev, id]);
+  const selectAll = () => setSelectedIds(allAthletes.map(a=>a.id));
+  const selectNone = () => setSelectedIds([]);
+  const updateSection = (aid, idx, field, val) => setFeedbackDraft(prev=>{
+    const sections = [...((prev[aid]||{}).sections||[])];
+    sections[idx] = {...sections[idx], [field]:val};
+    return {...prev, [aid]:{...(prev[aid]||{}), sections}};
+  });
+  const addSection = (aid) => setFeedbackDraft(prev=>{
+    const sections = [...((prev[aid]||{}).sections||[]), {title:'New section', body:''}];
+    return {...prev, [aid]:{...(prev[aid]||{}), sections}};
+  });
+  const removeSection = (aid, idx) => setFeedbackDraft(prev=>{
+    const sections = ((prev[aid]||{}).sections||[]).filter((_,i)=>i!==idx);
+    return {...prev, [aid]:{...(prev[aid]||{}), sections}};
+  });
+  const persistAndGenerate = () => {
+    save({...data, reportFeedback: feedbackDraft});
+    const selected = allAthletes.filter(a=>selectedIds.includes(a.id));
+    openSeasonReport({...data, reportFeedback:feedbackDraft}, events, season, team, selected, {...opts, startDate, endDate}, feedbackDraft);
+    onClose();
+  };
+  const sectionToggle = (k, label) => (
+    <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,padding:'3px 0',cursor:'pointer'}}>
+      <input type="checkbox" checked={!!opts[k]} onChange={()=>toggle(k)} />
+      <span>{label}</span>
+    </label>
+  );
+  const hlToggle = (k, label) => (
+    <label style={{display:'flex',alignItems:'center',gap:6,fontSize:11,padding:'2px 0',cursor:'pointer'}}>
+      <input type="checkbox" checked={!!opts.highlights[k]} onChange={()=>toggleHl(k)} />
+      <span>{label}</span>
+    </label>
+  );
+  return (
+    <Modal open={open} onClose={onClose} width={760}>
+      <h2 style={S.h2}>End-of-Season Report</h2>
+      <p style={{fontSize:12,color:C.textMuted,marginTop:4,marginBottom:12}}>Generates a printable team + per-athlete report for the active season. Feedback you enter here is saved and used the next time you generate.</p>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
+        <div style={{...S.card,padding:'10px 12px'}}>
+          <div style={{fontSize:12,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',marginBottom:6}}>Date Range</div>
+          <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            <input style={{...S.input,fontSize:12}} type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} />
+            <span style={{color:C.textMuted}}>→</span>
+            <input style={{...S.input,fontSize:12}} type="date" value={endDate} onChange={e=>setEndDate(e.target.value)} />
+          </div>
+          <div style={{fontSize:10,color:C.textMuted,marginTop:4}}>Default: active season. Adjust to print part of a season.</div>
+        </div>
+        <div style={{...S.card,padding:'10px 12px'}}>
+          <div style={{fontSize:12,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',marginBottom:6}}>Sections to include</div>
+          {sectionToggle('includeTeamSummary','Team summary tiles')}
+          {sectionToggle('includeTeamPRChart','Team PR chart')}
+          {sectionToggle('includeTeamQualifiersChart','Team qualifiers chart')}
+          {sectionToggle('includeAthletePages','Per-athlete pages')}
+          {sectionToggle('includeAthleteSummary','Athlete summary tiles')}
+          {sectionToggle('includeEventTable','By-event table')}
+          {sectionToggle('includeProgression','Progression charts w/ trendline')}
+          {sectionToggle('includeHighlights','Season highlights')}
+          {sectionToggle('includeFeedback','Coach feedback sections')}
+        </div>
+      </div>
+      <div style={{...S.card,padding:'10px 12px',marginBottom:14}}>
+        <div style={{fontSize:12,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',marginBottom:6}}>Highlight items</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:4}}>
+          {hlToggle('mostImproved','Most improved event')}
+          {hlToggle('prCount','# of PRs')}
+          {hlToggle('eventCount','# of events')}
+          {hlToggle('meetCount','# of meets')}
+          {hlToggle('qualStds','Qualifying marks')}
+          {hlToggle('bestPlace','Best placing')}
+        </div>
+      </div>
+      <div style={{...S.card,padding:'10px 12px',marginBottom:14}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+          <div style={{fontSize:12,fontWeight:700,color:C.textSecondary,textTransform:'uppercase'}}>Athletes ({selectedIds.length} of {allAthletes.length})</div>
+          <div style={{display:'flex',gap:6}}>
+            <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'3px 8px'}} onClick={selectAll}>All</button>
+            <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'3px 8px'}} onClick={selectNone}>None</button>
+          </div>
+        </div>
+        <div style={{maxHeight:160,overflowY:'auto',border:`1px solid ${C.borderLight}`,borderRadius:4,padding:6}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:2}}>
+            {allAthletes.map(a=>(
+              <label key={a.id} style={{display:'flex',alignItems:'center',gap:6,fontSize:11,cursor:'pointer',padding:'2px 4px'}}>
+                <input type="checkbox" checked={selectedIds.includes(a.id)} onChange={()=>toggleAth(a.id)} />
+                <span>{athDisplay(a)}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      </div>
+      {opts.includeFeedback && selectedIds.length>0 && (
+        <div style={{...S.card,padding:'10px 12px',marginBottom:14}}>
+          <div style={{fontSize:12,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',marginBottom:6}}>Feedback</div>
+          <div style={{fontSize:10,color:C.textMuted,marginBottom:8}}>Click an athlete to add/edit Strengths, Growth, Goals, etc. Sections are saved with the team data.</div>
+          <div style={{maxHeight:280,overflowY:'auto',border:`1px solid ${C.borderLight}`,borderRadius:4}}>
+            {allAthletes.filter(a=>selectedIds.includes(a.id)).map(a=>{
+              const isExp = expandedAth===a.id;
+              const sections = ((feedbackDraft[a.id]||{}).sections)||[];
+              const filled = sections.filter(s=>s.body&&s.body.trim()).length;
+              return (
+                <div key={a.id} style={{borderBottom:`1px solid ${C.borderLight}`}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 10px',cursor:'pointer',background:isExp?C.surface2:'transparent'}} onClick={()=>setExpandedAth(isExp?null:a.id)}>
+                    <span style={{fontSize:12,fontWeight:600}}>{athDisplay(a)}</span>
+                    <span style={{fontSize:10,color:filled>0?C.success:C.textMuted}}>{filled}/{sections.length} filled {isExp?'▾':'▸'}</span>
+                  </div>
+                  {isExp && (
+                    <div style={{padding:'6px 10px',background:C.bg}}>
+                      {sections.map((sec,si)=>(
+                        <div key={si} style={{marginBottom:8}}>
+                          <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:3}}>
+                            <input style={{...S.input,fontSize:12,fontWeight:600,flex:1}} value={sec.title||''} onChange={e=>updateSection(a.id,si,'title',e.target.value)} placeholder="Section title" />
+                            <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12}} onClick={()=>removeSection(a.id,si)} title="Remove section">✕</button>
+                          </div>
+                          <textarea style={{...S.input,fontSize:12,width:'100%',minHeight:48,resize:'vertical',fontFamily:'inherit',lineHeight:1.4}} value={sec.body||''} onChange={e=>updateSection(a.id,si,'body',e.target.value)} placeholder="Notes for this section..." />
+                        </div>
+                      ))}
+                      <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'3px 10px'}} onClick={()=>addSection(a.id)}>+ Add section</button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      <div style={{display:'flex',justifyContent:'flex-end',gap:8}}>
+        <button style={{...S.btn,...S.btnSecondary}} onClick={onClose}>Cancel</button>
+        <button style={{...S.btn,...S.btnPrimary}} onClick={persistAndGenerate} disabled={selectedIds.length===0}>Generate Print Preview</button>
+      </div>
+    </Modal>
+  );
+}
+function SeasonResultsPage({ data, save, nav, events, getAthletePR, season, team }) {
   const [tab, setTab] = useState('events');
+  const [showReport, setShowReport] = useState(false);
   const [search, setSearch] = useState('');
   const [genderFilter, setGenderFilter] = useState('');
   const [gradYearFilter, setGradYearFilter] = useState('');
@@ -6327,7 +6857,11 @@ function SeasonResultsPage({ data, save, nav, events, getAthletePR, season }) {
   );
   return (
     <div>
-      <h1 style={S.h1}>Season Results{season&&<span style={{fontSize:14,color:C.textMuted,fontWeight:400,marginLeft:8}}>{season.name}</span>}</h1>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+        <h1 style={{...S.h1,margin:0}}>Season Results{season&&<span style={{fontSize:14,color:C.textMuted,fontWeight:400,marginLeft:8}}>{season.name}</span>}</h1>
+        <button style={{...S.btn,...S.btnPrimary,fontSize:12,padding:'8px 14px'}} onClick={()=>setShowReport(true)}>📄 End-of-Season Report</button>
+      </div>
+      <ReportBuilderModal open={showReport} onClose={()=>setShowReport(false)} data={data} save={save} events={events} season={season} team={team} presetAthleteIds={null} />
       <div style={{display:'flex',gap:0,marginBottom:12,borderBottom:`2px solid ${C.border}`}}>
         {['events','athletes','standards'].map(t=>(
           <button key={t} style={{padding:'10px 20px',fontSize:13,fontWeight:600,border:'none',borderBottom:tab===t?`3px solid ${C.accent}`:'3px solid transparent',background:'none',color:tab===t?C.accent:C.textMuted,cursor:'pointer',textTransform:'uppercase',letterSpacing:'0.04em'}} onClick={()=>setTab(t)}>{t==='events'?'By Event':t==='athletes'?'By Athlete':'By Standard'}</button>

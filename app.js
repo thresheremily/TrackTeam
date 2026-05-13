@@ -2524,9 +2524,19 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                         <span style={{fontSize:12,color:C.textMuted,marginLeft:8}}>Place:</span>
                         <input style={{...S.input,width:45,fontSize:13,padding:'6px',textAlign:'center'}} type="text" inputMode="numeric" placeholder="#" value={v.place||''} onChange={e=>{const n={...resultsEntryData};n[relayKey]={...v,place:e.target.value};setResultsEntryData(n);}} />
                         {hasExisting&&<span style={{fontSize:10,fontWeight:700,color:C.success,marginLeft:4}}>✓ Saved</span>}
-                        {hasExisting&&<button style={{...S.btn,...S.btnDanger,fontSize:10,padding:'4px 10px',marginLeft:4}} title="Delete the saved result so you can re-enter it" onClick={()=>{
-                          if(!window.confirm('Delete the saved time for this relay? You can then re-enter it.')) return;
-                          const newResults = (data.results||[]).filter(r=>r.id!==v.resultId);
+                        {hasExisting&&<button style={{...S.btn,...S.btnDanger,fontSize:10,padding:'4px 10px',marginLeft:4}} title="Delete the saved result (and its leg splits) so you can re-enter it" onClick={()=>{
+                          if(!window.confirm('Delete the saved time for this relay AND its leg splits? You can then re-enter it.')) return;
+                          const composite = (data.results||[]).find(r=>r.id===v.resultId);
+                          const compDate = composite ? composite.date : null;
+                          const compId = v.resultId;
+                          const aidSet = new Set(v.athleteIds||[]);
+                          const newResults = (data.results||[]).filter(r=>{
+                            if(r.id===compId) return false;
+                            if(!r.isRelaySplit) return true;
+                            if(r.relayCompositeId && r.relayCompositeId===compId) return false;
+                            if(r.eventId===me.eventId && r.meetId===meetId && r.date===compDate && aidSet.has(r.athleteId)) return false;
+                            return true;
+                          });
                           save({...data, results:newResults});
                           const cleared = {...resultsEntryData};
                           cleared[relayKey] = {min:'',sec:'',place:'',athleteIds:v.athleteIds||[]};
@@ -6267,7 +6277,9 @@ function RelayTimer({ data, save, nav, events, addResult, addResults, getAthlete
         allSplits.push({lap:i+1,split:lg.splitMs,cumulative:lg.cumMs,athleteId:lg.athleteId});
       });
       const totalTime = validLegs[validLegs.length-1].cumMs;
-      newResults.push({id:uid(),eventId,meetId,date:raceDate,timeMs:totalTime,isRelay:true,relayAthletes:relayAthleteIds,splits:allSplits});
+      const compositeId = uid();
+      newResults.slice(-validLegs.length).forEach(r=>{ r.relayCompositeId = compositeId; });
+      newResults.push({id:compositeId,eventId,meetId,date:raceDate,timeMs:totalTime,isRelay:true,relayAthletes:relayAthleteIds,splits:allSplits});
     });
     if(newResults.length) addResults(newResults);
     setSaved2(true);
@@ -6399,12 +6411,33 @@ const DEFAULT_REPORT_OPTIONS = {
   includeAthletePages: true,
   includeAthleteSummary: true,
   includeEventTable: true,
+  includePerMeetResults: true,
   includeProgression: true,
   includeHighlights: true,
   includeFeedback: true,
   highlights: { mostImproved:true, prCount:true, eventCount:true, qualStds:true, bestPlace:true, meetCount:true },
+  enabledStandards: null,
 };
-const computeAthleteSeasonStats = (data, events, athleteId, startDate, endDate) => {
+const getReportStdLabels = (data) => {
+  const labels = [];
+  (data.qualifyingStandardTypes||[]).forEach(t=>{
+    const subs = t.subtypes||[];
+    if(subs.length===0) labels.push(t.name);
+    else subs.forEach(s=>labels.push(`${t.name} - ${s}`));
+  });
+  return labels;
+};
+const stdEnabled = (stdName, enabledMap) => {
+  if(!enabledMap) return true;
+  const sn = (stdName||'').trim().toLowerCase();
+  if(!sn) return true;
+  for(const [label,on] of Object.entries(enabledMap)) {
+    if((label||'').trim().toLowerCase()===sn) return !!on;
+  }
+  return true;
+};
+const filterEnabledQuals = (quals, enabledMap) => (quals||[]).filter(q=>stdEnabled(q.name, enabledMap));
+const computeAthleteSeasonStats = (data, events, athleteId, startDate, endDate, enabledStdMap) => {
   const inRange = (d) => (!startDate || d>=startDate) && (!endDate || d<=endDate);
   const allRes = (data.results||[]).filter(r=>!r.isPractice&&inRange(r.date));
   const myIndiv = allRes.filter(r=>r.athleteId===athleteId&&!r.isRelay&&!r.isRelaySplit);
@@ -6450,7 +6483,7 @@ const computeAthleteSeasonStats = (data, events, athleteId, startDate, endDate) 
     sorted.forEach(r=>{
       if(r.place) { const p=parseInt(r.place); if(p>0 && (bestPlace===null||p<bestPlace)) bestPlace=p; }
     });
-    const qualBest = getAllQualifyingForResult(data, events, {...best});
+    const qualBest = filterEnabledQuals(getAllQualifyingForResult(data, events, {...best}), enabledStdMap);
     qualBest.forEach(q=>{ const key=q.name||'Q'; qualByType[key]=(qualByType[key]||0)+1; });
     const fmt = (v)=> isField ? `${Math.floor(v/12)}'${(v%12).toFixed(1)}"` : formatTime(v);
     const improvement = isField ? (last.value-first.value) : (first.value-last.value);
@@ -6465,9 +6498,29 @@ const computeAthleteSeasonStats = (data, events, athleteId, startDate, endDate) 
     const pct = (row.improvement/denom)*100;
     if(!mostImproved || pct > mostImproved.pct) mostImproved = { row, pct };
   });
-  return { eventRows, totalPRs, totalEvents:eventRows.length, totalMeets:meetIds.size, qualByType, bestPlace, mostImproved };
+  const meetMap = {};
+  [...myIndiv, ...myRelays].forEach(r=>{
+    if(!r.meetId) return;
+    if(!meetMap[r.meetId]) meetMap[r.meetId] = [];
+    meetMap[r.meetId].push(r);
+  });
+  const perMeetResults = Object.entries(meetMap).map(([mid, rs])=>{
+    const meet = (data.meets||[]).find(m=>m.id===mid);
+    const meetDate = (meet||{}).startDate || (meet||{}).date || (rs[0]||{}).date || '';
+    const rows = rs.map(r=>{
+      const evt = events.find(e=>e.id===r.eventId);
+      if(!evt) return null;
+      const isField = isFieldEvent(evt);
+      const isRly = !!r.isRelay;
+      const mark = isField ? fieldToStr(r.ft||0,r.inch||0,r.qtr||0) : formatTime(r.timeMs||0);
+      const quals = filterEnabledQuals(getAllQualifyingForResult(data, events, r), enabledStdMap);
+      return { evt, isRelay:isRly, mark, place:r.place||'', quals, date:r.date };
+    }).filter(Boolean).sort((a,b)=>getDefaultOrder(a.evt)-getDefaultOrder(b.evt));
+    return { meet, meetId:mid, date:meetDate, rows };
+  }).filter(g=>g.rows.length).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  return { eventRows, totalPRs, totalEvents:eventRows.length, totalMeets:meetIds.size, qualByType, bestPlace, mostImproved, perMeetResults };
 };
-const computeTeamSeasonStats = (data, events, athleteIds, startDate, endDate) => {
+const computeTeamSeasonStats = (data, events, athleteIds, startDate, endDate, enabledStdMap) => {
   const inRange = (d) => (!startDate || d>=startDate) && (!endDate || d<=endDate);
   const idSet = new Set(athleteIds);
   const allRes = (data.results||[]).filter(r=>!r.isPractice&&inRange(r.date));
@@ -6499,7 +6552,7 @@ const computeTeamSeasonStats = (data, events, athleteIds, startDate, endDate) =>
   });
   const qualifiersByStd = {};
   indiv.forEach(r=>{
-    const qs = getAllQualifyingForResult(data, events, r);
+    const qs = filterEnabledQuals(getAllQualifyingForResult(data, events, r), enabledStdMap);
     qs.forEach(q=>{
       const k = q.name||'Q';
       qualifiersByStd[k] = qualifiersByStd[k] || new Set();
@@ -6507,7 +6560,7 @@ const computeTeamSeasonStats = (data, events, athleteIds, startDate, endDate) =>
     });
   });
   relays.forEach(r=>{
-    const qs = getAllQualifyingForResult(data, events, {...r,timeMs:r.timeMs});
+    const qs = filterEnabledQuals(getAllQualifyingForResult(data, events, {...r,timeMs:r.timeMs}), enabledStdMap);
     qs.forEach(q=>{
       const k = q.name||'Q';
       qualifiersByStd[k] = qualifiersByStd[k] || new Set();
@@ -6553,7 +6606,8 @@ const buildSeasonReportHTML = (data, events, season, team, athletes, options, fe
     @media print{body{margin:0}}
   </style>`;
 
-  const teamStats = computeTeamSeasonStats(data, events, athletes.map(a=>a.id), start, end);
+  const enabledStdMap = options.enabledStandards || null;
+  const teamStats = computeTeamSeasonStats(data, events, athletes.map(a=>a.id), start, end, enabledStdMap);
   let body = `<h1>${esc(titleLine)}</h1><div class="sub">${esc(subLine)}</div>`;
 
   if(options.includeTeamSummary||options.includeTeamPRChart||options.includeTeamQualifiersChart) {
@@ -6586,7 +6640,7 @@ const buildSeasonReportHTML = (data, events, season, team, athletes, options, fe
 
   if(options.includeAthletePages) {
     athletes.forEach(a=>{
-      const stats = computeAthleteSeasonStats(data, events, a.id, start, end);
+      const stats = computeAthleteSeasonStats(data, events, a.id, start, end, enabledStdMap);
       const fb = (feedbackByAth||{})[a.id] || { sections: DEFAULT_FEEDBACK_SECTIONS };
       body += '<div class="athlete-page">';
       body += '<div class="ath-header"><div>';
@@ -6635,6 +6689,23 @@ const buildSeasonReportHTML = (data, events, season, team, athletes, options, fe
           body += `<tr><td><strong>${esc(getEventLabel(r.evt))}</strong>${r.isRelay?' <em style="font-size:9px;color:#888">(relay)</em>':''}</td><td>${r.points.length}</td><td><strong>${esc(bestStr)}</strong></td><td>${esc(r.fmt(r.first.value))}</td><td>${esc(r.fmt(r.last.value))}</td><td>${change}</td><td>${quals||'—'}</td></tr>`;
         });
         body += '</tbody></table>';
+      }
+
+      if(options.includePerMeetResults && (stats.perMeetResults||[]).length) {
+        body += '<h3>Meet-by-Meet Results</h3>';
+        stats.perMeetResults.forEach(g=>{
+          const meetName = g.meet ? g.meet.name : 'Meet';
+          const meetSub = [g.meet && g.meet.venue, g.meet && (g.meet.city||g.meet.state)].filter(Boolean).join(' · ');
+          body += `<div style="page-break-inside:avoid;margin-bottom:6px">`;
+          body += `<div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid #999;padding-bottom:1px;margin-bottom:3px"><span style="font-weight:700;font-size:11px">${esc(meetName)}</span><span style="font-size:9px;color:#666">${esc(g.date||'')}${meetSub?' · '+esc(meetSub):''}</span></div>`;
+          body += '<table><thead><tr><th>Event</th><th>Mark</th><th style="width:50px">Place</th><th>Notes</th></tr></thead><tbody>';
+          g.rows.forEach(r=>{
+            const badges = (r.quals||[]).map(q=>`<span class="badge">${esc(q.name||'Q')}</span>`).join(' ');
+            const lbl = `${esc(getEventLabel(r.evt))}${r.isRelay?' <em style="font-size:9px;color:#888">(relay)</em>':''}`;
+            body += `<tr><td>${lbl}</td><td><strong>${esc(r.mark)}</strong></td><td>${esc(r.place)}</td><td>${badges}</td></tr>`;
+          });
+          body += '</tbody></table></div>';
+        });
       }
 
       if(options.includeProgression) {
@@ -6781,6 +6852,7 @@ function ReportBuilderModal({ open, onClose, data, save, events, season, team, p
           {sectionToggle('includeAthletePages','Per-athlete pages')}
           {sectionToggle('includeAthleteSummary','Athlete summary tiles')}
           {sectionToggle('includeEventTable','By-event table')}
+          {sectionToggle('includePerMeetResults','Meet-by-meet results')}
           {sectionToggle('includeProgression','Progression charts w/ trendline')}
           {sectionToggle('includeHighlights','Season highlights')}
           {sectionToggle('includeFeedback','Coach feedback sections')}
@@ -6797,6 +6869,44 @@ function ReportBuilderModal({ open, onClose, data, save, events, season, team, p
           {hlToggle('bestPlace','Best placing')}
         </div>
       </div>
+      {(()=>{
+        const labels = getReportStdLabels(data);
+        if(!labels.length) return null;
+        const stdMap = opts.enabledStandards || {};
+        const isOn = (lbl) => stdMap[lbl] === undefined ? true : !!stdMap[lbl];
+        const toggleStd = (lbl) => { dirtyRef.current=true; setSaveStatus('dirty'); setOpts(o=>{
+          const cur = o.enabledStandards || {};
+          const next = {...cur};
+          const willBe = !(cur[lbl] === undefined ? true : cur[lbl]);
+          next[lbl] = willBe;
+          return {...o, enabledStandards: next};
+        }); };
+        const setAllStds = (val) => { dirtyRef.current=true; setSaveStatus('dirty'); setOpts(o=>{
+          const next = {};
+          labels.forEach(l=>{next[l]=val;});
+          return {...o, enabledStandards: next};
+        }); };
+        return (
+          <div style={{...S.card,padding:'10px 12px',marginBottom:14}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+              <div style={{fontSize:12,fontWeight:700,color:C.textSecondary,textTransform:'uppercase'}}>Standards to include</div>
+              <div style={{display:'flex',gap:6}}>
+                <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'3px 8px'}} onClick={()=>setAllStds(true)}>All</button>
+                <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'3px 8px'}} onClick={()=>setAllStds(false)}>None</button>
+              </div>
+            </div>
+            <div style={{fontSize:10,color:C.textMuted,marginBottom:6}}>Hide bookkeeping-only standards from the report. Standards not in this list (custom names) always show.</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:2}}>
+              {labels.map(lbl=>(
+                <label key={lbl} style={{display:'flex',alignItems:'center',gap:6,fontSize:11,cursor:'pointer',padding:'2px 4px'}}>
+                  <input type="checkbox" checked={isOn(lbl)} onChange={()=>toggleStd(lbl)} />
+                  <span>{lbl}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
       <div style={{...S.card,padding:'10px 12px',marginBottom:14}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
           <div style={{fontSize:12,fontWeight:700,color:C.textSecondary,textTransform:'uppercase'}}>Athletes ({selectedIds.length} of {allAthletes.length})</div>

@@ -2203,7 +2203,8 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
       entries.forEach((en,ei)=>{
         const relayKey = '_relay_'+ei;
         const athleteIds = (en.athletes||[]).map(a=>a.athleteId).filter(Boolean);
-        const existingComposite = (data.results||[]).find(r=>r.eventId===evt.id&&r.meetId===meetId&&r.isRelay&&(r.relayAthletes||[]).join(',')==athleteIds.join(','));
+        const sortedKey = [...athleteIds].sort().join(',');
+        const existingComposite = (data.results||[]).find(r=>r.eventId===evt.id&&r.meetId===meetId&&r.isRelay&&[...(r.relayAthletes||[])].sort().join(',')===sortedKey);
         if(existingComposite) {
           const ms = existingComposite.timeMs||0;
           pre[relayKey] = {min:Math.floor(ms/60000)+'',sec:((ms%60000)/1000).toFixed(2),place:(existingComposite.place||'')+'',resultId:existingComposite.id,verified:!!existingComposite.verified,athleteIds};
@@ -2523,6 +2524,14 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                         <span style={{fontSize:12,color:C.textMuted,marginLeft:8}}>Place:</span>
                         <input style={{...S.input,width:45,fontSize:13,padding:'6px',textAlign:'center'}} type="text" inputMode="numeric" placeholder="#" value={v.place||''} onChange={e=>{const n={...resultsEntryData};n[relayKey]={...v,place:e.target.value};setResultsEntryData(n);}} />
                         {hasExisting&&<span style={{fontSize:10,fontWeight:700,color:C.success,marginLeft:4}}>✓ Saved</span>}
+                        {hasExisting&&<button style={{...S.btn,...S.btnDanger,fontSize:10,padding:'4px 10px',marginLeft:4}} title="Delete the saved result so you can re-enter it" onClick={()=>{
+                          if(!window.confirm('Delete the saved time for this relay? You can then re-enter it.')) return;
+                          const newResults = (data.results||[]).filter(r=>r.id!==v.resultId);
+                          save({...data, results:newResults});
+                          const cleared = {...resultsEntryData};
+                          cleared[relayKey] = {min:'',sec:'',place:'',athleteIds:v.athleteIds||[]};
+                          setResultsEntryData(cleared);
+                        }}>Delete</button>}
                       </div>
                     </div>);
                   })}
@@ -6688,26 +6697,6 @@ function ReportBuilderModal({ open, onClose, data, save, events, season, team, p
     dirtyRef.current = false;
   // eslint-disable-next-line
   }, [open]);
-  if(!open) return null;
-  const toggle = (k) => { dirtyRef.current=true; setSaveStatus('dirty'); setOpts(o=>({...o, [k]:!o[k]})); };
-  const toggleHl = (k) => { dirtyRef.current=true; setSaveStatus('dirty'); setOpts(o=>({...o, highlights:{...o.highlights, [k]:!o.highlights[k]}})); };
-  const toggleAth = (id) => setSelectedIds(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev, id]);
-  const selectAll = () => setSelectedIds(allAthletes.map(a=>a.id));
-  const selectNone = () => setSelectedIds([]);
-  const markDirty = () => { dirtyRef.current = true; setSaveStatus('dirty'); };
-  const updateSection = (aid, idx, field, val) => { markDirty(); setFeedbackDraft(prev=>{
-    const sections = [...((prev[aid]||{}).sections||[])];
-    sections[idx] = {...sections[idx], [field]:val};
-    return {...prev, [aid]:{...(prev[aid]||{}), sections}};
-  }); };
-  const addSection = (aid) => { markDirty(); setFeedbackDraft(prev=>{
-    const sections = [...((prev[aid]||{}).sections||[]), {title:'New section', body:''}];
-    return {...prev, [aid]:{...(prev[aid]||{}), sections}};
-  }); };
-  const removeSection = (aid, idx) => { markDirty(); setFeedbackDraft(prev=>{
-    const sections = ((prev[aid]||{}).sections||[]).filter((_,i)=>i!==idx);
-    return {...prev, [aid]:{...(prev[aid]||{}), sections}};
-  }); };
   const saveDraft = () => {
     save({...data, reportFeedback: feedbackDraft, reportConfig: { opts, startDate, endDate }});
     dirtyRef.current = false;
@@ -6728,6 +6717,26 @@ function ReportBuilderModal({ open, onClose, data, save, events, season, team, p
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [open]);
+  if(!open) return null;
+  const toggle = (k) => { dirtyRef.current=true; setSaveStatus('dirty'); setOpts(o=>({...o, [k]:!o[k]})); };
+  const toggleHl = (k) => { dirtyRef.current=true; setSaveStatus('dirty'); setOpts(o=>({...o, highlights:{...o.highlights, [k]:!o.highlights[k]}})); };
+  const toggleAth = (id) => setSelectedIds(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev, id]);
+  const selectAll = () => setSelectedIds(allAthletes.map(a=>a.id));
+  const selectNone = () => setSelectedIds([]);
+  const markDirty = () => { dirtyRef.current = true; setSaveStatus('dirty'); };
+  const updateSection = (aid, idx, field, val) => { markDirty(); setFeedbackDraft(prev=>{
+    const sections = [...((prev[aid]||{}).sections||[])];
+    sections[idx] = {...sections[idx], [field]:val};
+    return {...prev, [aid]:{...(prev[aid]||{}), sections}};
+  }); };
+  const addSection = (aid) => { markDirty(); setFeedbackDraft(prev=>{
+    const sections = [...((prev[aid]||{}).sections||[]), {title:'New section', body:''}];
+    return {...prev, [aid]:{...(prev[aid]||{}), sections}};
+  }); };
+  const removeSection = (aid, idx) => { markDirty(); setFeedbackDraft(prev=>{
+    const sections = ((prev[aid]||{}).sections||[]).filter((_,i)=>i!==idx);
+    return {...prev, [aid]:{...(prev[aid]||{}), sections}};
+  }); };
   const closeWithFlush = () => {
     if(dirtyRef.current) saveDraft();
     onClose();

@@ -6667,42 +6667,73 @@ function ReportBuilderModal({ open, onClose, data, save, events, season, team, p
   const [selectedIds, setSelectedIds] = useState(presetAthleteIds && presetAthleteIds.length ? presetAthleteIds : allAthletes.map(a=>a.id));
   const [feedbackDraft, setFeedbackDraft] = useState({});
   const [expandedAth, setExpandedAth] = useState(null);
+  const [saveStatus, setSaveStatus] = useState('idle');
+  const dirtyRef = useRef(false);
+  const saveTimerRef = useRef(null);
   useEffect(()=>{
     if(!open) return;
-    setOpts(DEFAULT_REPORT_OPTIONS);
     setStartDate((season||{}).startDate||'');
     setEndDate((season||{}).endDate||'');
     setSelectedIds(presetAthleteIds && presetAthleteIds.length ? presetAthleteIds : allAthletes.map(a=>a.id));
     const saved = data.reportFeedback || {};
+    const savedOpts = data.reportConfig || null;
+    setOpts(savedOpts && savedOpts.opts ? {...DEFAULT_REPORT_OPTIONS, ...savedOpts.opts, highlights:{...DEFAULT_REPORT_OPTIONS.highlights, ...((savedOpts.opts||{}).highlights||{})}} : DEFAULT_REPORT_OPTIONS);
     const draft = {};
     allAthletes.forEach(a=>{
       draft[a.id] = saved[a.id] && saved[a.id].sections ? { sections: saved[a.id].sections.map(s=>({...s})) } : { sections: DEFAULT_FEEDBACK_SECTIONS.map(s=>({...s})) };
     });
     setFeedbackDraft(draft);
     setExpandedAth(null);
+    setSaveStatus('idle');
+    dirtyRef.current = false;
   // eslint-disable-next-line
   }, [open]);
   if(!open) return null;
-  const toggle = (k) => setOpts(o=>({...o, [k]:!o[k]}));
-  const toggleHl = (k) => setOpts(o=>({...o, highlights:{...o.highlights, [k]:!o.highlights[k]}}));
+  const toggle = (k) => { dirtyRef.current=true; setSaveStatus('dirty'); setOpts(o=>({...o, [k]:!o[k]})); };
+  const toggleHl = (k) => { dirtyRef.current=true; setSaveStatus('dirty'); setOpts(o=>({...o, highlights:{...o.highlights, [k]:!o.highlights[k]}})); };
   const toggleAth = (id) => setSelectedIds(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev, id]);
   const selectAll = () => setSelectedIds(allAthletes.map(a=>a.id));
   const selectNone = () => setSelectedIds([]);
-  const updateSection = (aid, idx, field, val) => setFeedbackDraft(prev=>{
+  const markDirty = () => { dirtyRef.current = true; setSaveStatus('dirty'); };
+  const updateSection = (aid, idx, field, val) => { markDirty(); setFeedbackDraft(prev=>{
     const sections = [...((prev[aid]||{}).sections||[])];
     sections[idx] = {...sections[idx], [field]:val};
     return {...prev, [aid]:{...(prev[aid]||{}), sections}};
-  });
-  const addSection = (aid) => setFeedbackDraft(prev=>{
+  }); };
+  const addSection = (aid) => { markDirty(); setFeedbackDraft(prev=>{
     const sections = [...((prev[aid]||{}).sections||[]), {title:'New section', body:''}];
     return {...prev, [aid]:{...(prev[aid]||{}), sections}};
-  });
-  const removeSection = (aid, idx) => setFeedbackDraft(prev=>{
+  }); };
+  const removeSection = (aid, idx) => { markDirty(); setFeedbackDraft(prev=>{
     const sections = ((prev[aid]||{}).sections||[]).filter((_,i)=>i!==idx);
     return {...prev, [aid]:{...(prev[aid]||{}), sections}};
-  });
+  }); };
+  const saveDraft = () => {
+    save({...data, reportFeedback: feedbackDraft, reportConfig: { opts, startDate, endDate }});
+    dirtyRef.current = false;
+    setSaveStatus('saved');
+  };
+  useEffect(()=>{
+    if(!open || !dirtyRef.current) return;
+    if(saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(()=>{
+      if(dirtyRef.current) saveDraft();
+    }, 1200);
+    return () => { if(saveTimerRef.current) clearTimeout(saveTimerRef.current); };
+  // eslint-disable-next-line
+  }, [feedbackDraft, opts, startDate, endDate, open]);
+  useEffect(()=>{
+    if(!open) return;
+    const onBeforeUnload = (e) => { if(dirtyRef.current) { e.preventDefault(); e.returnValue=''; } };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [open]);
+  const closeWithFlush = () => {
+    if(dirtyRef.current) saveDraft();
+    onClose();
+  };
   const persistAndGenerate = () => {
-    save({...data, reportFeedback: feedbackDraft});
+    saveDraft();
     const selected = allAthletes.filter(a=>selectedIds.includes(a.id));
     openSeasonReport({...data, reportFeedback:feedbackDraft}, events, season, team, selected, {...opts, startDate, endDate}, feedbackDraft);
     onClose();
@@ -6720,16 +6751,16 @@ function ReportBuilderModal({ open, onClose, data, save, events, season, team, p
     </label>
   );
   return (
-    <Modal open={open} onClose={onClose} width={760}>
+    <Modal open={open} onClose={closeWithFlush} width={760}>
       <h2 style={S.h2}>End-of-Season Report</h2>
       <p style={{fontSize:12,color:C.textMuted,marginTop:4,marginBottom:12}}>Generates a printable team + per-athlete report for the active season. Feedback you enter here is saved and used the next time you generate.</p>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
         <div style={{...S.card,padding:'10px 12px'}}>
           <div style={{fontSize:12,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',marginBottom:6}}>Date Range</div>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
-            <input style={{...S.input,fontSize:12}} type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} />
+            <input style={{...S.input,fontSize:12}} type="date" value={startDate} onChange={e=>{markDirty();setStartDate(e.target.value);}} />
             <span style={{color:C.textMuted}}>→</span>
-            <input style={{...S.input,fontSize:12}} type="date" value={endDate} onChange={e=>setEndDate(e.target.value)} />
+            <input style={{...S.input,fontSize:12}} type="date" value={endDate} onChange={e=>{markDirty();setEndDate(e.target.value);}} />
           </div>
           <div style={{fontSize:10,color:C.textMuted,marginTop:4}}>Default: active season. Adjust to print part of a season.</div>
         </div>
@@ -6811,9 +6842,15 @@ function ReportBuilderModal({ open, onClose, data, save, events, season, team, p
           </div>
         </div>
       )}
-      <div style={{display:'flex',justifyContent:'flex-end',gap:8}}>
-        <button style={{...S.btn,...S.btnSecondary}} onClick={onClose}>Cancel</button>
-        <button style={{...S.btn,...S.btnPrimary}} onClick={persistAndGenerate} disabled={selectedIds.length===0}>Generate Print Preview</button>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
+        <span style={{fontSize:11,color:saveStatus==='saved'?C.success:saveStatus==='dirty'?'#b8860b':C.textMuted,fontWeight:600}}>
+          {saveStatus==='saved'?'✓ Draft saved':saveStatus==='dirty'?'● Unsaved changes (auto-saving…)':'Draft autosaves as you type'}
+        </span>
+        <div style={{display:'flex',gap:8}}>
+          <button style={{...S.btn,...S.btnSecondary}} onClick={closeWithFlush}>Close</button>
+          <button style={{...S.btn,...S.btnSecondary}} onClick={saveDraft}>Save Draft</button>
+          <button style={{...S.btn,...S.btnPrimary}} onClick={persistAndGenerate} disabled={selectedIds.length===0}>Generate Print Preview</button>
+        </div>
       </div>
     </Modal>
   );

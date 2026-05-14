@@ -3249,9 +3249,9 @@ function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, ge
     const opts = filteredAthletes(row.search, excludeIds);
     const pr = row.athleteId ? getAthletePR(row.athleteId, eventId) : null;
     return (
-      <div key={index} style={{display:'flex',gap:6,alignItems:'flex-start',marginBottom:8}}>
+      <div key={index} style={{display:'flex',gap:6,alignItems:'flex-start',marginBottom:8,flexWrap:'wrap'}}>
         <span style={{fontSize:12,fontWeight:700,color:C.accent,width:24,paddingTop:10,textAlign:'center'}}>{index+1}</span>
-        <div style={{flex:1,position:'relative'}}>
+        <div style={{flex:'1 1 200px',minWidth:180,position:'relative'}}>
           <input style={{...S.input,padding:'10px 12px',fontSize:14}} placeholder="Type athlete name..." value={row.search} onChange={e=>{const c=[...rows];c[index]={...c[index],search:e.target.value,athleteId:''};setRows(c);}} onFocus={()=>handleFocus(fieldName)} onBlur={handleBlur} />
           {focusField===fieldName && opts.length>0 && (
             <div style={{position:'absolute',top:'100%',left:0,right:0,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,0.1)',zIndex:20,maxHeight:200,overflowY:'auto'}}>

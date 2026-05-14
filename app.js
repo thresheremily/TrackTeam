@@ -3049,8 +3049,8 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
   );
 }
 function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, getAthletePR, saveEntries, editEntryIdx }) {
-  const [entries, setEntries] = useState([{ athleteId:'', search:'', goalMin:0, goalSec:0 }]);
-  const [relayAthletes, setRelayAthletes] = useState([{ athleteId:'', search:'', goalMin:0, goalSec:0 },{ athleteId:'', search:'', goalMin:0, goalSec:0 },{ athleteId:'', search:'', goalMin:0, goalSec:0 },{ athleteId:'', search:'', goalMin:0, goalSec:0 }]);
+  const [entries, setEntries] = useState([{ athleteId:'', search:'', goalMin:0, goalSec:0, goalSource:'custom' }]);
+  const [relayAthletes, setRelayAthletes] = useState([{ athleteId:'', search:'', goalMin:0, goalSec:0, goalSource:'custom' },{ athleteId:'', search:'', goalMin:0, goalSec:0, goalSource:'custom' },{ athleteId:'', search:'', goalMin:0, goalSec:0, goalSource:'custom' },{ athleteId:'', search:'', goalMin:0, goalSec:0, goalSource:'custom' }]);
   const [relayAlternates, setRelayAlternates] = useState([]);
   const [restrictionError, setRestrictionError] = useState('');
   const [focusField, setFocusField] = useState('');
@@ -3108,7 +3108,7 @@ function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, ge
         setRelayAthletes(en.athletes.map(a=>{
           const ath=data.athletes.find(at=>at.id===a.athleteId);
           const ms=a.goalMs||0;
-          return {athleteId:a.athleteId,search:ath?athDisplay(ath):'',goalMin:Math.floor(ms/60000)+'',goalSec:((ms%60000)/1000).toFixed(2)};
+          return {athleteId:a.athleteId,search:ath?athDisplay(ath):'',goalMin:Math.floor(ms/60000)+'',goalSec:((ms%60000)/1000).toFixed(2),goalSource:a.goalSource||'custom'};
         }));
         setRelayAlternates((en.alternates||[]).map(a=>{
           const ath=data.athletes.find(at=>at.id===a.athleteId);
@@ -3117,17 +3117,30 @@ function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, ge
       } else if(en && en.athleteId) {
         const ath=data.athletes.find(a=>a.id===en.athleteId);
         const ms=en.goalMs||0;
-        setEntries([{athleteId:en.athleteId,search:ath?athDisplay(ath):'',goalMin:Math.floor(ms/60000)+'',goalSec:((ms%60000)/1000).toFixed(2)}]);
+        setEntries([{athleteId:en.athleteId,search:ath?athDisplay(ath):'',goalMin:Math.floor(ms/60000)+'',goalSec:((ms%60000)/1000).toFixed(2),goalSource:en.goalSource||'custom'}]);
       }
     } else {
-      setEntries([{ athleteId:'', search:'', goalMin:0, goalSec:0 }]);
-      setRelayAthletes([{ athleteId:'', search:'', goalMin:0, goalSec:0 },{ athleteId:'', search:'', goalMin:0, goalSec:0 },{ athleteId:'', search:'', goalMin:0, goalSec:0 },{ athleteId:'', search:'', goalMin:0, goalSec:0 }]);
+      setEntries([{ athleteId:'', search:'', goalMin:0, goalSec:0, goalSource:'custom' }]);
+      setRelayAthletes([{ athleteId:'', search:'', goalMin:0, goalSec:0, goalSource:'custom' },{ athleteId:'', search:'', goalMin:0, goalSec:0, goalSource:'custom' },{ athleteId:'', search:'', goalMin:0, goalSec:0, goalSource:'custom' },{ athleteId:'', search:'', goalMin:0, goalSec:0, goalSource:'custom' }]);
       setRelayAlternates([]);
     }
   }
   const activeAthletes = data.athletes.filter(a=>a.active!==false);
   const genderMatch = activeAthletes.filter(a=>!evt.gender || evt.gender==='Mixed' || a.gender===(evt.gender==='Boy'?'M':'F'));
   const athName = (a) => athDisplay(a);
+  const resolveGoalMs = (en) => {
+    const src = en.goalSource || 'custom';
+    if(src.startsWith('std:')) {
+      const sid = src.slice(4);
+      const s = (evt.qualifyingStandards||[]).find(st=>st.id===sid);
+      return s ? (s.timeMs||0) : 0;
+    }
+    if(src === 'pr' && en.athleteId) {
+      const pr = getAthletePR(en.athleteId, eventId);
+      return pr ? (pr.timeMs||0) : 0;
+    }
+    return parseTimeToMs(en.goalMin, en.goalSec);
+  };
   const saveIndividuals = () => {
     const valid = entries.filter(en=>en.athleteId);
     if(!valid.length) return;
@@ -3148,7 +3161,7 @@ function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, ge
       if(errors.length) { setRestrictionError(errors.join('. ')); return; }
     }
     setRestrictionError('');
-    const newEntries = valid.map(en=>({ athleteId:en.athleteId, goalMs:parseTimeToMs(en.goalMin, en.goalSec) }));
+    const newEntries = valid.map(en=>({ athleteId:en.athleteId, goalMs:resolveGoalMs(en), goalSource:en.goalSource||'custom' }));
     if(isEditing) {
       const updated = [...existingEntries]; updated[editEntryIdx] = newEntries[0];
       saveEntries(eventId, updated);
@@ -3156,11 +3169,11 @@ function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, ge
       saveEntries(eventId, [...existingEntries, ...newEntries]);
     }
     initRef.current = null;
-    setEntries([{ athleteId:'', search:'', goalMin:0, goalSec:0 }]);
+    setEntries([{ athleteId:'', search:'', goalMin:0, goalSec:0, goalSource:'custom' }]);
     onClose();
   };
   const saveRelay = () => {
-    const athletes = relayAthletes.filter(a=>a.athleteId).map(a=>({ athleteId:a.athleteId, goalMs:parseTimeToMs(a.goalMin,a.goalSec) }));
+    const athletes = relayAthletes.filter(a=>a.athleteId).map(a=>({ athleteId:a.athleteId, goalMs:resolveGoalMs(a), goalSource:a.goalSource||'custom' }));
     const alternates = relayAlternates.filter(a=>a.athleteId).map(a=>({ athleteId:a.athleteId }));
     if(!athletes.length) return;
     if(maxEntries) {
@@ -3186,7 +3199,7 @@ function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, ge
       saveEntries(eventId, [...existingEntries, { athletes, alternates }]);
     }
     initRef.current = null;
-    setRelayAthletes([{ athleteId:'', search:'', goalMin:0, goalSec:0 },{ athleteId:'', search:'', goalMin:0, goalSec:0 },{ athleteId:'', search:'', goalMin:0, goalSec:0 },{ athleteId:'', search:'', goalMin:0, goalSec:0 }]);
+    setRelayAthletes([{ athleteId:'', search:'', goalMin:0, goalSec:0, goalSource:'custom' },{ athleteId:'', search:'', goalMin:0, goalSec:0, goalSource:'custom' },{ athleteId:'', search:'', goalMin:0, goalSec:0, goalSource:'custom' },{ athleteId:'', search:'', goalMin:0, goalSec:0, goalSource:'custom' }]);
     setRelayAlternates([]);
     onClose();
   };
@@ -3268,7 +3281,44 @@ function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, ge
           )}
           {row.athleteId && pr && <div style={{fontSize:11,color:C.textMuted,marginTop:2}}>PR: {isFieldEvent(evt)?fieldToStr(pr.ft,pr.inch,pr.qtr):formatTime(pr.timeMs)}</div>}
         </div>
-        {isTrackEvent(evt) && <TimeDropdown min={row.goalMin} sec={row.goalSec} onMinChange={v=>{const c=[...rows];c[index]={...c[index],goalMin:v};setRows(c);}} onSecChange={v=>{const c=[...rows];c[index]={...c[index],goalSec:v};setRows(c);}} compact />}
+        {isTrackEvent(evt) && (()=>{
+          const stds = (evt.qualifyingStandards||[]).filter(s=>(s.timeMs||0)>0);
+          const source = row.goalSource || 'custom';
+          let derivedMs = null;
+          if(source === 'pr' && row.athleteId) {
+            const prX = getAthletePR(row.athleteId, eventId);
+            derivedMs = prX ? (prX.timeMs||null) : null;
+          } else if(source.startsWith('std:')) {
+            const sid = source.slice(4);
+            const s = stds.find(st=>st.id===sid);
+            derivedMs = s ? (s.timeMs||null) : null;
+          }
+          const setSource = (v) => {
+            const c=[...rows];
+            let nm = c[index].goalMin, ns = c[index].goalSec;
+            if(v==='pr' && c[index].athleteId) {
+              const prY = getAthletePR(c[index].athleteId, eventId);
+              if(prY) { nm = Math.floor((prY.timeMs||0)/60000)+''; ns = (((prY.timeMs||0)%60000)/1000).toFixed(2); }
+            } else if(v.startsWith('std:')) {
+              const s = stds.find(st=>st.id===v.slice(4));
+              if(s) { nm = Math.floor((s.timeMs||0)/60000)+''; ns = (((s.timeMs||0)%60000)/1000).toFixed(2); }
+            }
+            c[index] = {...c[index], goalSource:v, goalMin:nm, goalSec:ns};
+            setRows(c);
+          };
+          return (
+            <div style={{display:'flex',flexDirection:'column',gap:3}}>
+              <select style={{...S.select,fontSize:11,padding:'3px 6px',minWidth:120}} value={source} onChange={e=>setSource(e.target.value)} title="Goal source">
+                <option value="custom">Custom goal</option>
+                {row.athleteId && <option value="pr">Match PR</option>}
+                {stds.map(s=><option key={s.id} value={'std:'+s.id}>{s.name||'Standard'}</option>)}
+              </select>
+              {source==='custom'
+                ? <TimeDropdown min={row.goalMin} sec={row.goalSec} onMinChange={v=>{const c=[...rows];c[index]={...c[index],goalMin:v};setRows(c);}} onSecChange={v=>{const c=[...rows];c[index]={...c[index],goalSec:v};setRows(c);}} compact />
+                : <span style={{fontSize:13,fontWeight:700,color:derivedMs?C.accent:C.textMuted,padding:'6px 8px',background:C.surface2,borderRadius:4,minWidth:88,textAlign:'center',border:`1px solid ${C.border}`}} title={derivedMs?'Auto from '+(source==='pr'?'PR':'standard'):'No value yet — pick an athlete'}>{derivedMs?formatTime(derivedMs):'—'}</span>}
+            </div>
+          );
+        })()}
         {rows.length>1 && <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:16,padding:'8px 4px'}} onClick={()=>{const c=[...rows];c.splice(index,1);setRows(c);}}>✕</button>}
       </div>
     );
@@ -3304,7 +3354,7 @@ function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, ge
             );
           })}
           <div style={{display:'flex',gap:8,marginTop:10}}>
-            <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'8px 16px'}} onClick={()=>setRelayAthletes([...relayAthletes,{athleteId:'',search:'',goalMin:0,goalSec:0}])}>+ Leg</button>
+            <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'8px 16px'}} onClick={()=>setRelayAthletes([...relayAthletes,{athleteId:'',search:'',goalMin:0,goalSec:0,goalSource:'custom'}])}>+ Leg</button>
           </div>
           <div style={{marginTop:12,paddingTop:10,borderTop:`1px solid ${C.borderLight}`}}>
             <div style={{fontSize:13,fontWeight:600,color:C.textMuted,marginBottom:8}}>Alternates</div>
@@ -3312,7 +3362,7 @@ function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, ge
               const allUsed = [...relayAthletes.map(r=>r.athleteId),...relayAlternates.filter((_,j)=>j!==i).map(r=>r.athleteId)].filter(Boolean);
               return renderRow(alt, i, 'alt', relayAlternates, setRelayAlternates, allUsed);
             })}
-            <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'6px 14px'}} onClick={()=>setRelayAlternates([...relayAlternates,{athleteId:'',search:'',goalMin:0,goalSec:0}])}>+ Alternate</button>
+            <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'6px 14px'}} onClick={()=>setRelayAlternates([...relayAlternates,{athleteId:'',search:'',goalMin:0,goalSec:0,goalSource:'custom'}])}>+ Alternate</button>
           </div>
           <div style={{display:'flex',gap:8,marginTop:12}}>
             <button style={{...S.btn,...S.btnPrimary,fontSize:13,padding:'10px 20px'}} onClick={saveRelay}>{isEditing?'Save Changes':'Add Relay'}</button>
@@ -3326,7 +3376,7 @@ function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, ge
             return renderRow(en, i, 'indiv', entries, setEntries, usedIds);
           })}
           <div style={{display:'flex',gap:8,marginTop:10}}>
-            {!isEditing&&<button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'8px 16px'}} onClick={()=>setEntries([...entries,{athleteId:'',search:'',goalMin:0,goalSec:0}])}>+ Athlete</button>}
+            {!isEditing&&<button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'8px 16px'}} onClick={()=>setEntries([...entries,{athleteId:'',search:'',goalMin:0,goalSec:0,goalSource:'custom'}])}>+ Athlete</button>}
             <button style={{...S.btn,...S.btnPrimary,fontSize:13,padding:'10px 20px'}} onClick={saveIndividuals}>{isEditing?'Save Changes':'Add Entries'}</button>
           </div>
         </div>

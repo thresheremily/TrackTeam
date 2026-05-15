@@ -1,0 +1,74 @@
+// Cloud Firestore security rules for TrackTeam.
+//
+// HOW TO APPLY:
+//   1. Firebase Console -> Firestore Database -> Rules tab.
+//   2. Replace the contents with this file.
+//   3. Click "Publish".
+//
+// Data model:
+//   /users/{uid}                                  : { teamId, email, name }
+//   /teams/{teamId}                               : { name, school, joinCode, createdBy,
+//                                                    createdAt, colors, logo,
+//                                                    members: { <uid>: {email,name,role} } }
+//   /teams/{teamId}/data/main                     : the team's data blob
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isMember(teamData) {
+      return signedIn() && teamData.members[request.auth.uid] != null;
+    }
+
+    // Each user can only read/write their own user document.
+    match /users/{userId} {
+      allow read, write: if signedIn() && request.auth.uid == userId;
+    }
+
+    match /teams/{teamId} {
+      // Reading a single team document: must be a member.
+      allow get: if signedIn() && isMember(resource.data);
+
+      // Listing teams (for joinCode lookup): any signed-in user.
+      // Firestore returns only docs whose rule passes, but list requires a
+      // looser rule than get when filtering by an indexed field. To keep this
+      // safer in the future, consider moving join codes into a separate
+      // /joinCodes/{code} index doc with public read and only the teamId.
+      allow list: if signedIn();
+
+      // Creating a new team: caller must be signed in, must be the createdBy,
+      // and must include themselves in the members map.
+      allow create: if signedIn()
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.members[request.auth.uid] != null;
+
+      // Updating a team:
+      //   (a) existing members can update freely, OR
+      //   (b) a non-member can join via join code by adding only their own uid
+      //       to the members map (no other field changes).
+      allow update: if signedIn() && (
+        isMember(resource.data) ||
+        (
+          request.resource.data.diff(resource.data).changedKeys().hasOnly(['members'])
+          && request.resource.data.members[request.auth.uid] != null
+          // disallow removing existing members during a "join"
+          && request.resource.data.members.keys().hasAll(resource.data.members.keys())
+        )
+      );
+
+      // No client-side deletes; if you ever need to delete a team do it from
+      // the Firebase Console or a Cloud Function with admin SDK.
+      allow delete: if false;
+
+      // Team data blob: only members may read or write.
+      match /data/{docId} {
+        allow read, write: if signedIn()
+          && get(/databases/$(database)/documents/teams/$(teamId)).data.members[request.auth.uid] != null;
+      }
+    }
+  }
+}

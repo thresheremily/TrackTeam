@@ -638,9 +638,23 @@ const makeColors = (primary='#c96a1f', secondary='#2b6cb0') => {
   };
 };
 const HEADING_FONT = "'Montserrat','Rubik',sans-serif";
+const itemMult = (e) => Math.max(1, parseInt((e||{}).sets)||1) * Math.max(1, parseInt((e||{}).reps)||1);
+const itemMiles = (e) => {
+  if(!e) return 0;
+  const mult = itemMult(e);
+  const mi = (parseFloat(e.mileage)||0) * mult;
+  const m = (parseFloat(e.distance)||0) * mult;
+  return mi + m/1609.34;
+};
+const entryTotalMiles = (e) => {
+  if(!e) return 0;
+  let t = itemMiles(e);
+  (e.exercises||[]).forEach(ex => { t += itemMiles(ex); });
+  return t;
+};
 const exTotals = (exercises) => {
   let mi=0, m=0;
-  (exercises||[]).forEach(ex=>{ mi+=parseFloat(ex.mileage)||0; m+=parseFloat(ex.distance)||0; });
+  (exercises||[]).forEach(ex=>{ const mult = itemMult(ex); mi+=(parseFloat(ex.mileage)||0)*mult; m+=(parseFloat(ex.distance)||0)*mult; });
   const parts=[];
   if(mi>0) parts.push(`${mi.toFixed(1)} mi`);
   if(m>0) parts.push(`${Math.round(m)}m`);
@@ -4065,14 +4079,7 @@ function AthleteSubPage({ data, save, nav, athleteId, athFilter, events, getAthl
               });
             }
             items.forEach(e=>{
-              total += parseFloat(e.mileage)||0;
-              const m = parseFloat(e.distance)||0;
-              if(m>0) total += m/1609.34;
-              (e.exercises||[]).forEach(ex=>{
-                total += parseFloat(ex.mileage)||0;
-                const em = parseFloat(ex.distance)||0;
-                if(em>0) total += em/1609.34;
-              });
+              total += entryTotalMiles(e);
             });
           });
           return total;
@@ -4108,7 +4115,7 @@ function AthleteSubPage({ data, save, nav, athleteId, athFilter, events, getAthl
                       const rest = hasOverride ? ov.isRest : (week.restDays||[]).some(rd=>rd.groupId===ag.groupId&&rd.level===level&&rd.day===day);
                       const isToday = day===todayDay;
                       const isEditing = editPracticeDay===day;
-                      const dayMi = rest?0:items.reduce((t,e)=>{let s=parseFloat(e.mileage)||0;(e.exercises||[]).forEach(ex=>{s+=parseFloat(ex.mileage)||0;});return t+s;},0);
+                      const dayMi = rest?0:items.reduce((t,e)=>t+entryTotalMiles(e),0);
                       return (
                         <div key={day} style={{padding:'5px 4px',borderRadius:4,background:isToday?C.accentMuted:hasOverride?'rgba(201,106,31,0.06)':C.bg,border:isEditing?`2px solid ${C.accent}`:isToday?`2px solid ${C.accent}`:hasOverride?`1px dashed ${C.accent}`:`1px solid ${C.borderLight}`,minHeight:48,fontSize:10,cursor:'pointer',position:'relative'}} onClick={()=>openDayEditor(day,ag.groupId,level)}>
                           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:2}}>
@@ -4783,16 +4790,7 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
     let total = 0;
     DAYS.forEach(day => {
       const items = getDayItems(wid,gid,lv,day);
-      items.forEach(e => {
-        total += parseFloat(e.mileage) || 0;
-        const topMeters = parseFloat(e.distance) || 0;
-        if(topMeters > 0) total += topMeters / METERS_PER_MILE;
-        (e.exercises||[]).forEach(ex => {
-          total += parseFloat(ex.mileage) || 0;
-          const exMeters = parseFloat(ex.distance) || 0;
-          if(exMeters > 0) total += exMeters / METERS_PER_MILE;
-        });
-      });
+      items.forEach(e => { total += entryTotalMiles(e); });
     });
     return total;
   };

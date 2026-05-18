@@ -3621,9 +3621,17 @@ function AthleteSubPage({ data, save, nav, athleteId, athFilter, events, getAthl
     setShowEditInfo(true);
   };
   const saveEdit = () => {
+    const cur = data.athletes.find(a=>a.id===athleteId);
+    const wasActive = (cur||{}).active !== false;
+    const willBeActive = !!editForm.active;
+    const goingInactive = wasActive && !willBeActive;
+    const fallbackId = (goingInactive && !af.showInactive)
+      ? ((nextAthlete && nextAthlete.id) || (prevAthlete && prevAthlete.id) || null)
+      : null;
     const name = editForm.name || `${editForm.firstName} ${editForm.lastName}`.trim();
-    save({ ...data, athletes:data.athletes.map(a=>a.id===athleteId?{...a,...editForm,name,active:editForm.active}:a) });
+    save({ ...data, athletes:data.athletes.map(a=>a.id===athleteId?{...a,...editForm,name,active:willBeActive}:a) });
     setShowEditInfo(false);
+    if(fallbackId) nav('athleteSub', { athleteId: fallbackId, athFilter: af });
   };
   const af = athFilter||{};
   const sortedAthletes = data.athletes.filter(a=>{

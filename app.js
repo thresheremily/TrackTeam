@@ -1469,9 +1469,16 @@ function DailyAttendancePage({ data, save, nav, activeAthletes }) {
     save({...data, attendance:existing});
   };
   const markAll = (status) => {
-    const existing = (data.attendance||[]).filter(r=>r.date!==today);
-    activeAthletes.forEach(a=>existing.push({id:uid(), athleteId:a.id, date:today, status}));
+    const existing = [...(data.attendance||[])];
+    activeAthletes.forEach(a => {
+      const already = existing.find(r => r.athleteId===a.id && r.date===today);
+      if(already) return;
+      existing.push({id:uid(), athleteId:a.id, date:today, status});
+    });
     save({...data, attendance:existing});
+  };
+  const clearAll = () => {
+    save({...data, attendance:(data.attendance||[]).filter(r=>r.date!==today)});
   };
   const filtered = activeAthletes.filter(a => {
     if(search && !athSearch(a, search)) return false;
@@ -1548,9 +1555,10 @@ function DailyAttendancePage({ data, save, nav, activeAthletes }) {
         {(search||genderFilter||groupFilter||statusFilter)&&<button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'4px 10px'}} onClick={()=>{setSearch('');setGenderFilter('');setGroupFilter('');setStatusFilter('');}}>Clear</button>}
       </div>
       
-      <div style={{display:'flex',gap:6,marginBottom:16}}>
-        <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'8px 14px'}} onClick={()=>markAll('present')}>All Present</button>
-        <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'8px 14px'}} onClick={()=>markAll('absent')}>All Absent</button>
+      <div style={{display:'flex',gap:6,marginBottom:16,flexWrap:'wrap',alignItems:'center'}}>
+        <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'8px 14px'}} onClick={()=>markAll('present')} title="Mark only the unmarked athletes as present (preserves existing statuses)">Rest as Present</button>
+        <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'8px 14px'}} onClick={()=>markAll('absent')} title="Mark only the unmarked athletes as absent (preserves existing statuses)">Rest as Absent</button>
+        <button style={{...S.btn,fontSize:11,padding:'6px 12px',background:'transparent',color:C.textMuted,border:`1px solid ${C.border}`}} onClick={()=>{if(window.confirm('Clear all attendance statuses for today? This cannot be undone.')) clearAll();}}>Clear All</button>
       </div>
       
       <div style={{fontSize:12,color:C.textMuted,marginBottom:8}}>{filtered.length} athlete{filtered.length!==1?'s':''}</div>
@@ -4913,7 +4921,7 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
                     const ws = padDate(curWeek.startDate);
                     const cellDate = (()=>{ const d=new Date(ws+'T12:00:00'); d.setDate(d.getDate()+dayIdx); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })();
                     const meet = data.meets.find(m=>{ const sd=padDate(m.startDate||m.date||''); const ed=padDate(m.endDate||m.startDate||m.date||''); return sd&&cellDate>=sd&&cellDate<=ed; });
-                    const dayMi = items.reduce((t,e)=>{let s=parseFloat(e.mileage)||0;const tm=parseFloat(e.distance)||0;if(tm>0)s+=tm/METERS_PER_MILE;(e.exercises||[]).forEach(ex=>{s+=parseFloat(ex.mileage)||0;const em=parseFloat(ex.distance)||0;if(em>0)s+=em/METERS_PER_MILE;});return t+s;},0);
+                    const dayMi = items.reduce((t,e)=>t+entryTotalMiles(e),0);
                     const dayDragKey = `${group.id}|${level}|${day}`;
                     const isDayDragOver = dragOverDay===dayDragKey && dragDay!==dayDragKey;
                     const isSwapSelected = swapSelect===dayDragKey;

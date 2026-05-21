@@ -2887,7 +2887,25 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
         });
         const allEventIds = [...new Set([...meetResults,...relaySplits,...relayResults].map(r=>r.eventId))];
         const eventsForFilter = allEventIds.map(id=>events.find(e=>e.id===id)).filter(Boolean);
+        const orphanSplits = relaySplits.filter(rs => {
+          if(rs.relayCompositeId) {
+            return !relayResults.some(rr => rr.id === rs.relayCompositeId);
+          }
+          return !relayResults.some(rr => rr.eventId===rs.eventId && rr.date===rs.date && (rr.relayAthletes||[]).includes(rs.athleteId));
+        });
         return (<div>
+          {orphanSplits.length>0 && (
+            <div style={{padding:'10px 14px',marginBottom:12,borderRadius:8,background:C.dangerMuted,border:`1px solid ${C.danger}`,display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+              <div style={{fontSize:12,color:C.danger}}>
+                <strong>{orphanSplits.length} orphan relay split{orphanSplits.length!==1?'s':''}</strong> for this meet (leg times whose relay composite has been deleted).
+              </div>
+              <button style={{...S.btn,...S.btnDanger,fontSize:12,padding:'6px 14px'}} onClick={()=>{
+                if(!window.confirm(`Permanently delete ${orphanSplits.length} orphan relay split row${orphanSplits.length!==1?'s':''}?`)) return;
+                const ids = new Set(orphanSplits.map(r=>r.id));
+                save({...data, results:(data.results||[]).filter(r=>!ids.has(r.id))});
+              }}>Clear them</button>
+            </div>
+          )}
           <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
             <input style={{...S.input,maxWidth:180}} placeholder="Search athletes..." value={resSearch} onChange={e=>setResSearch(e.target.value)} />
             <select style={S.select} value={resGender} onChange={e=>setResGender(e.target.value)}>

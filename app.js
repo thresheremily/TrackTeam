@@ -1947,6 +1947,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
   const [resSortDir, setResSortDir] = useState('asc');
   const [editResultId, setEditResultId] = useState(null);
   const [editResultForm, setEditResultForm] = useState({min:'',sec:'',ft:'',inch:'',qtr:''});
+  const [splitsOpen, setSplitsOpen] = useState({});
   const saveEditResult = () => {
     if(!editResultId) return;
     const r = (data.results||[]).find(x=>x.id===editResultId);
@@ -1963,7 +1964,26 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
   };
   const verifyResult = (id) => save({...data, results:(data.results||[]).map(x=>x.id===id?{...x,verified:true}:x)});
   const unverifyResult = (id) => save({...data, results:(data.results||[]).map(x=>x.id===id?{...x,verified:false}:x)});
-  const deleteResult = (id) => save({...data, results:(data.results||[]).filter(x=>x.id!==id)});
+  const deleteResult = (id) => {
+    const all = data.results || [];
+    const target = all.find(r => r.id === id);
+    if(!target) return;
+    save({...data, results: all.filter(r => {
+      if(r.id === id) return false;
+      // Cascade: if deleting a relay composite, also drop its split rows
+      if(target.isRelay) {
+        if(r.relayCompositeId && r.relayCompositeId === id) return false;
+        if(r.isRelaySplit && r.eventId===target.eventId && r.meetId===target.meetId && r.date===target.date && (target.relayAthletes||[]).includes(r.athleteId)) return false;
+      }
+      // Cascade the other way too: deleting a split row drops sibling splits and the composite
+      if(target.isRelaySplit) {
+        if(target.relayCompositeId && (r.id===target.relayCompositeId || r.relayCompositeId===target.relayCompositeId)) return false;
+        if(!target.relayCompositeId && r.isRelay && r.eventId===target.eventId && r.meetId===target.meetId && r.date===target.date && (r.relayAthletes||[]).includes(target.athleteId)) return false;
+        if(!target.relayCompositeId && r.isRelaySplit && r.eventId===target.eventId && r.meetId===target.meetId && r.date===target.date) return false;
+      }
+      return true;
+    })});
+  };
   const meet = data.meets.find(m=>m.id===meetId);
   if(!meet) return <div style={S.card}><p>Meet not found</p><button style={S.backLink} onClick={()=>nav('meets')}>{"<- "}Back to Meets</button></div>;
   const maxEventsPerAthlete = meet.maxEventsPerAthlete || 0;
@@ -2933,6 +2953,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                           <td style={{...S.td,padding:'4px 6px',fontSize:12}}>
                             {getEventLabel(evt)}
                             {r.isRelaySplit&&<span style={{fontSize:9,color:'#6b46c1',fontWeight:600,marginLeft:4}}>{r.relayLeg?`Leg ${r.relayLeg} split`:'Relay'}</span>}
+                            {Array.isArray(r.splits)&&r.splits.length>=2&&<button style={{marginLeft:6,background:'none',border:'none',color:C.accent,cursor:'pointer',fontSize:10,fontWeight:600,padding:0}} onClick={()=>setSplitsOpen(p=>({...p,[r.id]:!p[r.id]}))} title="Show lap splits">{splitsOpen[r.id]?'▾':'▸'} splits</button>}
                           </td>
                           <td style={{...S.td,padding:'4px 6px',fontWeight:600,fontSize:13}}>
                             {valStr}
@@ -2972,6 +2993,19 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                                 <input style={{...S.input,width:70,fontSize:12,padding:'4px 6px',textAlign:'center'}} type="text" inputMode="decimal" placeholder="00.00" value={editResultForm.sec} onChange={e=>setEditResultForm(f=>({...f,sec:e.target.value}))} />
                               </>)}
                               <button style={{...S.btn,...S.btnPrimary,fontSize:11,padding:'4px 12px'}} onClick={saveEditResult}>Save & Verify</button>
+                            </div>
+                          </td>
+                        </tr>,
+                        Array.isArray(r.splits)&&r.splits.length>=2&&splitsOpen[r.id]&&<tr key={r.id+'-splits'}>
+                          <td colSpan={4} style={{padding:'4px 12px 8px',background:C.bg}}>
+                            <div style={{display:'flex',gap:8,flexWrap:'wrap',fontSize:11}}>
+                              {r.splits.map((sp,si)=>(
+                                <div key={si} style={{padding:'3px 8px',background:C.surface2,border:`1px solid ${C.borderLight}`,borderRadius:4}}>
+                                  <span style={{color:C.textMuted,marginRight:4}}>Lap {sp.lap||(si+1)}:</span>
+                                  <span style={{fontWeight:600}}>{formatTime(sp.split||0)}</span>
+                                  {sp.cumulative!=null&&<span style={{color:C.textMuted,marginLeft:4,fontSize:10}}>({formatTime(sp.cumulative)})</span>}
+                                </div>
+                              ))}
                             </div>
                           </td>
                         </tr>
@@ -3552,6 +3586,7 @@ function AthletesPage({ data, save, nav }) {
 function AthleteSubPage({ data, save, nav, athleteId, athFilter, events, getAthletePR, checkRecord, checkQualifying, season, team }) {
   const [showQualifying, setShowQualifying] = useState(false);
   const [expandedPerfEvents, setExpandedPerfEvents] = useState({});
+  const [expandedSplits, setExpandedSplits] = useState({});
   const [showReport, setShowReport] = useState(false);
   const [showEditInfo, setShowEditInfo] = useState(false);
   const [showAddNote, setShowAddNote] = useState(false);
@@ -3884,24 +3919,46 @@ function AthleteSubPage({ data, save, nav, athleteId, athFilter, events, getAthl
                   {(evtResults.length===1||expandedPerfEvents[evt.id])&&(
                     <table style={{width:'100%',borderCollapse:'collapse',marginTop:4}}>
                       <thead><tr><th style={{...S.th,fontSize:10,padding:'3px 6px'}}>Date</th><th style={{...S.th,fontSize:10,padding:'3px 6px'}}>Meet</th><th style={{...S.th,fontSize:10,padding:'3px 6px',textAlign:'right'}}>Mark</th><th style={{...S.th,fontSize:10,padding:'3px 6px',width:50}}></th></tr></thead>
-                      <tbody>{evtResults.map(r=>{
+                      <tbody>{evtResults.flatMap(r=>{
                         const meetObj = r.meetId?data.meets.find(m=>m.id===r.meetId):null;
                         const valStr = isFieldEvent(evt)?fieldToStr(r.ft,r.inch,r.qtr):formatTime(r.timeMs);
                         const isPRResult = pr&&r.id===pr.id;
                         const qualStds = (evt.qualifyingStandards||[]);
                         const allQualStds = getAllQualifyingForResult(data,events,r);
-                        return (<tr key={r.id} style={{background:isPRResult?C.successMuted:'transparent'}}>
-                          <td style={{...S.td,fontSize:11,padding:'3px 6px'}}>{r.date}</td>
-                          <td style={{...S.td,fontSize:11,padding:'3px 6px',color:C.textSecondary}}>{meetObj?meetObj.name:r.isPractice?'Practice':'-'}</td>
-                          <td style={{...S.td,fontSize:12,padding:'3px 6px',textAlign:'right',fontWeight:600}}>{valStr}</td>
-                          <td style={{...S.td,padding:'3px 6px'}}>
-                            <div style={{display:'flex',gap:2}}>
-                              {isPRResult&&<span style={{fontSize:8,fontWeight:700,padding:'1px 4px',borderRadius:4,background:C.successMuted,color:C.success}}>PR</span>}
-                              {allQualStds.map(q=><QStdBadge key={q.id} data={data} std={q} />)}
-                              {r.verified&&<span style={{fontSize:8,fontWeight:700,padding:'1px 4px',borderRadius:4,background:'rgba(43,108,176,0.08)',color:'#2b6cb0'}}>V</span>}
-                            </div>
-                          </td>
-                        </tr>);
+                        const hasSplits = Array.isArray(r.splits) && r.splits.length>=2;
+                        const splitsOpen = !!expandedSplits[r.id];
+                        const rows = [
+                          <tr key={r.id} style={{background:isPRResult?C.successMuted:'transparent'}}>
+                            <td style={{...S.td,fontSize:11,padding:'3px 6px'}}>{r.date}{hasSplits&&<button style={{marginLeft:6,background:'none',border:'none',color:C.accent,cursor:'pointer',fontSize:10,fontWeight:600,padding:0}} onClick={()=>setExpandedSplits(p=>({...p,[r.id]:!p[r.id]}))} title="Show lap splits">{splitsOpen?'▾':'▸'} splits</button>}</td>
+                            <td style={{...S.td,fontSize:11,padding:'3px 6px',color:C.textSecondary}}>{meetObj?meetObj.name:r.isPractice?'Practice':'-'}</td>
+                            <td style={{...S.td,fontSize:12,padding:'3px 6px',textAlign:'right',fontWeight:600}}>{valStr}</td>
+                            <td style={{...S.td,padding:'3px 6px'}}>
+                              <div style={{display:'flex',gap:2}}>
+                                {isPRResult&&<span style={{fontSize:8,fontWeight:700,padding:'1px 4px',borderRadius:4,background:C.successMuted,color:C.success}}>PR</span>}
+                                {allQualStds.map(q=><QStdBadge key={q.id} data={data} std={q} />)}
+                                {r.verified&&<span style={{fontSize:8,fontWeight:700,padding:'1px 4px',borderRadius:4,background:'rgba(43,108,176,0.08)',color:'#2b6cb0'}}>V</span>}
+                              </div>
+                            </td>
+                          </tr>
+                        ];
+                        if(hasSplits && splitsOpen) {
+                          rows.push(
+                            <tr key={r.id+'-splits'}>
+                              <td colSpan={4} style={{padding:'4px 16px 8px',background:C.bg}}>
+                                <div style={{display:'flex',gap:10,flexWrap:'wrap',fontSize:11}}>
+                                  {r.splits.map((sp,si)=>(
+                                    <div key={si} style={{padding:'3px 8px',background:C.surface2,border:`1px solid ${C.borderLight}`,borderRadius:4}}>
+                                      <span style={{color:C.textMuted,marginRight:4}}>Lap {sp.lap||(si+1)}:</span>
+                                      <span style={{fontWeight:600}}>{formatTime(sp.split||0)}</span>
+                                      {sp.cumulative!=null&&<span style={{color:C.textMuted,marginLeft:4,fontSize:10}}>({formatTime(sp.cumulative)})</span>}
+                                    </div>
+                                  ))}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        }
+                        return rows;
                       })}</tbody>
                     </table>
                   )}
@@ -3972,6 +4029,7 @@ function AthleteSubPage({ data, save, nav, athleteId, athFilter, events, getAthl
                           {composite&&<span style={{color:C.textMuted,fontSize:11}}>({formatTime(composite.timeMs)} total)</span>}
                           {composite&&(()=>{const stds=(evt.qualifyingStandards||[]);return getAllQualifyingForResult(data,events,{eventId:evtId,timeMs:composite.timeMs,meetId:composite.meetId}).map(q=><QStdBadge key={q.id} data={data} std={q} />);})()}
                           {bestSplit&&r.id===bestSplit.id&&<span style={{fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:6,background:'#6b46c120',color:'#6b46c1'}}>Best</span>}
+                          <button style={{...S.btn,...S.btnDanger,fontSize:9,padding:'2px 6px'}} title="Delete this split (and its relay composite + siblings)" onClick={()=>{if(window.confirm('Delete this leg split? Other legs and the relay composite for the same race will be removed too.')) save({...data, results:(data.results||[]).filter(x=>{if(x.id===r.id) return false; if(x.isRelaySplit && x.eventId===r.eventId && x.meetId===r.meetId && x.date===r.date) return false; if(x.isRelay && x.eventId===r.eventId && x.meetId===r.meetId && x.date===r.date) return false; return true;})});}}>✕</button>
                         </div>
                       </div>
                     );

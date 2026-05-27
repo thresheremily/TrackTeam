@@ -1948,6 +1948,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
   const [editResultId, setEditResultId] = useState(null);
   const [editResultForm, setEditResultForm] = useState({min:'',sec:'',ft:'',inch:'',qtr:''});
   const [splitsOpen, setSplitsOpen] = useState({});
+  const [showRawMeetRows, setShowRawMeetRows] = useState(false);
   const saveEditResult = () => {
     if(!editResultId) return;
     const r = (data.results||[]).find(x=>x.id===editResultId);
@@ -2901,6 +2902,55 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
           return allMeetResults.filter(isOrphan);
         })();
         return (<div>
+          <div style={{display:'flex',justifyContent:'flex-end',marginBottom:8}}>
+            <button style={{...S.btn,fontSize:10,padding:'4px 10px',background:showRawMeetRows?C.danger:C.surface2,color:showRawMeetRows?'#fff':C.textMuted,border:`1px solid ${showRawMeetRows?C.danger:C.border}`,borderRadius:6}} onClick={()=>setShowRawMeetRows(v=>!v)} title="Show every stored result row for this meet, including odd or hidden ones, with delete buttons">
+              {showRawMeetRows?'Hide':'Show'} all stored rows
+            </button>
+          </div>
+          {showRawMeetRows && (
+            <div style={{...S.card,padding:'10px 12px',marginBottom:12,border:`1px solid ${C.danger}`}}>
+              <div style={{fontSize:11,color:C.textMuted,marginBottom:6}}>Every result row stored for this meet ({allMeetResults.length} total). Use this if a normal row delete isn't clearing something — the "raw delete" here only removes the single row you click (no cascade), so use it surgically.</div>
+              <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+                <thead><tr>
+                  <th style={{...S.th,padding:'3px 4px',fontSize:9}}>Type</th>
+                  <th style={{...S.th,padding:'3px 4px',fontSize:9}}>Event</th>
+                  <th style={{...S.th,padding:'3px 4px',fontSize:9}}>Athlete</th>
+                  <th style={{...S.th,padding:'3px 4px',fontSize:9}}>Date</th>
+                  <th style={{...S.th,padding:'3px 4px',fontSize:9}}>Mark</th>
+                  <th style={{...S.th,padding:'3px 4px',fontSize:9}}>Splits</th>
+                  <th style={{...S.th,padding:'3px 4px',fontSize:9}}>ID</th>
+                  <th style={{...S.th,padding:'3px 4px',width:28}}></th>
+                </tr></thead>
+                <tbody>
+                  {allMeetResults.map(r=>{
+                    const evt = events.find(e=>e.id===r.eventId);
+                    const ath = r.athleteId ? data.athletes.find(a=>a.id===r.athleteId) : null;
+                    const isField = evt && isFieldEvent(evt);
+                    const mark = r.isRelay ? formatTime(r.timeMs||0) : (isField ? fieldToStr(r.ft||0,r.inch||0,r.qtr||0) : formatTime(r.timeMs||0));
+                    const type = r.isRelay ? 'Relay composite' : r.isRelaySplit ? `Relay split (leg ${r.relayLeg||'?'})` : 'Individual';
+                    return (
+                      <tr key={r.id}>
+                        <td style={{...S.td,padding:'3px 4px',fontSize:11,color:r.isRelay?'#6b46c1':r.isRelaySplit?'#8b5cf6':C.text,fontWeight:600}}>{type}</td>
+                        <td style={{...S.td,padding:'3px 4px',fontSize:11}}>{evt?getEventLabel(evt):'(unknown event)'}{evt&&evt.entryType==='Relay'?<span style={{fontSize:9,color:C.textMuted}}> [relay event]</span>:null}</td>
+                        <td style={{...S.td,padding:'3px 4px',fontSize:11}}>{ath?athDisplay(ath):r.relayAthletes?`Relay (${(r.relayAthletes||[]).length} athletes)`:'(no athlete)'}</td>
+                        <td style={{...S.td,padding:'3px 4px',fontSize:11,color:C.textMuted}}>{r.date}</td>
+                        <td style={{...S.td,padding:'3px 4px',fontSize:11,fontWeight:600}}>{mark}</td>
+                        <td style={{...S.td,padding:'3px 4px',fontSize:11,color:C.textMuted}}>{Array.isArray(r.splits)?r.splits.length:0}</td>
+                        <td style={{...S.td,padding:'3px 4px',fontSize:9,fontFamily:'monospace',color:C.textMuted}}>{(r.id||'').slice(-6)}</td>
+                        <td style={{...S.td,padding:'3px 4px'}}>
+                          <button style={{...S.btn,...S.btnDanger,fontSize:9,padding:'2px 6px'}} title="Raw delete this single row (no cascade)" onClick={()=>{
+                            if(!window.confirm(`Delete this ${type.toLowerCase()} row?`)) return;
+                            save({...data, results:(data.results||[]).filter(x=>x.id!==r.id)});
+                          }}>✕</button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {allMeetResults.length===0&&<tr><td colSpan={8} style={{...S.td,textAlign:'center',color:C.textMuted,padding:8}}>No stored result rows for this meet.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          )}
           {orphanSplits.length>0 && (
             <div style={{padding:'10px 14px',marginBottom:12,borderRadius:8,background:C.dangerMuted,border:`1px solid ${C.danger}`,display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,flexWrap:'wrap'}}>
               <div style={{fontSize:12,color:C.danger}}>

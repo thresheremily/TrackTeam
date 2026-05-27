@@ -2078,6 +2078,20 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
     ids.splice(toIdx, 0, moved);
     saveEventOrder(ids);
   };
+  const moveEvent = (eventId, direction) => {
+    const ids = filtered.map(me=>me.eventId);
+    const idx = ids.indexOf(eventId);
+    if(idx < 0) return;
+    let newIdx;
+    if(direction === 'top') newIdx = 0;
+    else if(direction === 'bottom') newIdx = ids.length - 1;
+    else newIdx = idx + direction;
+    if(newIdx < 0 || newIdx >= ids.length || newIdx === idx) return;
+    const next = [...ids];
+    const [moved] = next.splice(idx, 1);
+    next.splice(newIdx, 0, moved);
+    saveEventOrder(next);
+  };
   const saveEntries = (eventId, newEntries) => {
     const updatedMeetEvents = [...(meet.events||[])];
     const idx = updatedMeetEvents.findIndex(me=>me.eventId===eventId);
@@ -2483,10 +2497,17 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
         return (
           <React.Fragment key={me.eventId}>
           {showHeader && <div style={{fontSize:11,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',letterSpacing:'0.05em',padding:'10px 4px 4px',borderBottom:`2px solid ${C.border}`,marginTop:meIdx===0?0:12,marginBottom:6}}>Day {me.day}</div>}
-          <div draggable style={{...S.card,padding:'14px 16px',borderLeft:`3px solid ${me.evt.gender==='Boy'?C.blue:me.evt.gender==='Girl'?'#d53f8c':C.accent}`, opacity:dragIdx===meIdx?0.5:1, border:dragOverIdx===meIdx?`2px dashed ${C.accent}`:`1px solid ${C.border}`}} onDragStart={()=>setDragIdx(meIdx)} onDragOver={e=>{e.preventDefault();setDragOverIdx(meIdx);}} onDragLeave={()=>setDragOverIdx(null)} onDrop={e=>{e.preventDefault();handleDrop(dragIdx,meIdx);setDragIdx(null);setDragOverIdx(null);}} onDragEnd={()=>{setDragIdx(null);setDragOverIdx(null);}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:hasEntries?8:0}}>
-              <div style={{display:'flex',alignItems:'center',gap:8}}>
-                <span style={{cursor:'grab',fontSize:16,color:C.textMuted,userSelect:'none',marginRight:4}}>:::</span>
+          <div style={{...S.card,padding:'14px 16px',borderLeft:`3px solid ${me.evt.gender==='Boy'?C.blue:me.evt.gender==='Girl'?'#d53f8c':C.accent}`,border:`1px solid ${C.border}`}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:hasEntries?8:0,flexWrap:'wrap',gap:6}}>
+              <div style={{display:'flex',alignItems:'center',gap:6}}>
+                {(()=>{const isFirst=meIdx===0,isLast=meIdx>=filtered.length-1;const btn={background:'none',border:`1px solid ${C.borderLight}`,borderRadius:4,cursor:'pointer',padding:'2px 5px',fontSize:11,color:C.textSecondary,lineHeight:1,minWidth:22,textAlign:'center'};return (
+                  <span style={{display:'inline-flex',gap:2,marginRight:4}}>
+                    <button style={{...btn,opacity:isFirst?0.3:1,cursor:isFirst?'default':'pointer'}} disabled={isFirst} title="Move to top" onClick={()=>moveEvent(me.eventId,'top')}>⤒</button>
+                    <button style={{...btn,opacity:isFirst?0.3:1,cursor:isFirst?'default':'pointer'}} disabled={isFirst} title="Move up" onClick={()=>moveEvent(me.eventId,-1)}>↑</button>
+                    <button style={{...btn,opacity:isLast?0.3:1,cursor:isLast?'default':'pointer'}} disabled={isLast} title="Move down" onClick={()=>moveEvent(me.eventId,+1)}>↓</button>
+                    <button style={{...btn,opacity:isLast?0.3:1,cursor:isLast?'default':'pointer'}} disabled={isLast} title="Move to bottom" onClick={()=>moveEvent(me.eventId,'bottom')}>⤓</button>
+                  </span>
+                );})()}
                 <span style={{fontWeight:700,fontSize:15}}>{getEventLabel(me.evt)}</span>
                 <span style={{fontSize:10,color:C.textMuted}}>{me.evt.eventType} - {me.evt.entryType}</span>
                 {meetDayCount > 1 && (

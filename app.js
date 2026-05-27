@@ -2247,7 +2247,20 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
         const relayKey = '_relay_'+ei;
         const athleteIds = (en.athletes||[]).map(a=>a.athleteId).filter(Boolean);
         const sortedKey = [...athleteIds].sort().join(',');
-        const existingComposite = (data.results||[]).find(r=>r.eventId===evt.id&&r.meetId===meetId&&r.isRelay&&[...(r.relayAthletes||[])].sort().join(',')===sortedKey);
+        const aidSet = new Set(athleteIds);
+        const allRelayComposites = (data.results||[]).filter(r=>r.eventId===evt.id&&r.meetId===meetId&&r.isRelay);
+        let existingComposite = allRelayComposites.find(r=>[...(r.relayAthletes||[])].sort().join(',')===sortedKey);
+        if(!existingComposite && aidSet.size > 0) {
+          existingComposite = allRelayComposites.find(r=>{
+            const ra = r.relayAthletes||[];
+            if(!ra.length) return false;
+            const overlap = ra.filter(a=>aidSet.has(a)).length;
+            return overlap >= Math.ceil(Math.min(ra.length, aidSet.size) / 2);
+          });
+        }
+        if(!existingComposite && allRelayComposites.length === 1 && entries.length === 1) {
+          existingComposite = allRelayComposites[0];
+        }
         if(existingComposite) {
           const ms = existingComposite.timeMs||0;
           pre[relayKey] = {min:Math.floor(ms/60000)+'',sec:((ms%60000)/1000).toFixed(2),place:(existingComposite.place||'')+'',resultId:existingComposite.id,verified:!!existingComposite.verified,athleteIds};

@@ -2263,9 +2263,17 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
         }
         if(existingComposite) {
           const ms = existingComposite.timeMs||0;
-          pre[relayKey] = {min:Math.floor(ms/60000)+'',sec:((ms%60000)/1000).toFixed(2),place:(existingComposite.place||'')+'',resultId:existingComposite.id,verified:!!existingComposite.verified,athleteIds};
+          const splitRows = (data.results||[]).filter(r => r.isRelaySplit && r.eventId===evt.id && r.meetId===meetId && (
+            (existingComposite.id && r.relayCompositeId === existingComposite.id)
+            || (!r.relayCompositeId && r.date === existingComposite.date && aidSet.has(r.athleteId))
+          ));
+          const legs = splitRows.map(sr => {
+            const sm = sr.timeMs||0;
+            return { id:sr.id, athleteId:sr.athleteId, relayLeg:sr.relayLeg, min:Math.floor(sm/60000)+'', sec:((sm%60000)/1000).toFixed(2) };
+          }).sort((a,b)=>(a.relayLeg||99)-(b.relayLeg||99));
+          pre[relayKey] = {min:Math.floor(ms/60000)+'',sec:((ms%60000)/1000).toFixed(2),place:(existingComposite.place||'')+'',resultId:existingComposite.id,verified:!!existingComposite.verified,athleteIds,legs};
         } else {
-          pre[relayKey] = {min:'',sec:'',place:'',athleteIds};
+          pre[relayKey] = {min:'',sec:'',place:'',athleteIds,legs:[]};
         }
       });
     } else {
@@ -2294,13 +2302,18 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
     Object.entries(resultsEntryData).forEach(([key,v])=>{
       if(isRelay && key.startsWith('_relay_')) {
         const hasValue = v.min||v.sec;
-        if(!hasValue) return;
+        if(!hasValue && !(v.legs||[]).length) return;
         const timeMs = parseTimeToMs(v.min, v.sec);
         if(v.resultId) {
-          updatedResults = updatedResults.map(r=>r.id===v.resultId?{...r,timeMs,place:v.place||'',verified:true}:r);
-        } else {
+          if(hasValue) updatedResults = updatedResults.map(r=>r.id===v.resultId?{...r,timeMs,place:v.place||'',verified:true}:r);
+        } else if(hasValue) {
           updatedResults.push({id:uid(),eventId,meetId,date:raceDate,timeMs,isRelay:true,relayAthletes:v.athleteIds||[],place:v.place||'',verified:true,splits:[]});
         }
+        (v.legs||[]).forEach(leg => {
+          if(!leg.id) return;
+          const legMs = parseTimeToMs(leg.min, leg.sec);
+          updatedResults = updatedResults.map(r => r.id===leg.id ? {...r, timeMs:legMs} : r);
+        });
       } else {
         const aid = key;
         const hasValue = isField?(v.ft||v.inch||v.qtr):(v.min||v.sec);
@@ -2599,6 +2612,28 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                           setResultsEntryData(cleared);
                         }}>Delete</button>}
                       </div>
+                      {(v.legs||[]).length>0 && (
+                        <div style={{marginTop:6}}>
+                          <button style={{background:'none',border:'none',color:C.accent,cursor:'pointer',fontSize:11,fontWeight:600,padding:'2px 0'}} onClick={()=>{const n={...resultsEntryData};n[relayKey]={...v,legsOpen:!v.legsOpen};setResultsEntryData(n);}}>{v.legsOpen?'▾':'▸'} Edit legs ({(v.legs||[]).length})</button>
+                          {v.legsOpen && (
+                            <div style={{marginTop:4,padding:'8px 10px',background:C.surface2,borderRadius:6,border:`1px solid ${C.borderLight}`}}>
+                              <div style={{fontSize:10,color:C.textMuted,marginBottom:6,fontStyle:'italic'}}>Edit any split times that were off. These don't have to add up to the total above.</div>
+                              {(v.legs||[]).map((leg,li)=>{
+                                const ath = data.athletes.find(a=>a.id===leg.athleteId);
+                                return (
+                                  <div key={leg.id||li} style={{display:'flex',gap:6,alignItems:'center',marginBottom:4,flexWrap:'wrap'}}>
+                                    <span style={{fontSize:11,fontWeight:700,color:'#6b46c1',minWidth:48}}>Leg {leg.relayLeg||(li+1)}</span>
+                                    <span style={{fontSize:11,color:C.textSecondary,minWidth:120,flex:'0 1 auto'}}>{ath?athDisplay(ath):'(unknown)'}</span>
+                                    <input style={{...S.input,width:50,fontSize:12,padding:'4px 6px',textAlign:'center'}} type="text" inputMode="numeric" value={leg.min||''} onChange={e=>{const n={...resultsEntryData};const legs=[...(v.legs||[])];legs[li]={...legs[li],min:e.target.value};n[relayKey]={...v,legs};setResultsEntryData(n);}} />
+                                    <span style={{fontSize:13,color:C.textMuted}}>:</span>
+                                    <input style={{...S.input,width:70,fontSize:12,padding:'4px 6px',textAlign:'center'}} type="text" inputMode="decimal" placeholder="00.00" value={leg.sec||''} onChange={e=>{const n={...resultsEntryData};const legs=[...(v.legs||[])];legs[li]={...legs[li],sec:e.target.value};n[relayKey]={...v,legs};setResultsEntryData(n);}} />
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>);
                   })}
                   <div style={{display:'flex',justifyContent:'flex-end',marginTop:4}}>

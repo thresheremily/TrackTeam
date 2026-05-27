@@ -1928,6 +1928,10 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
   const [dragIdx, setDragIdx] = useState(null);
   const [dragOverIdx, setDragOverIdx] = useState(null);
   const [showRoster, setShowRoster] = useState(false);
+  const [showReorderModal, setShowReorderModal] = useState(false);
+  const [reorderList, setReorderList] = useState([]);
+  const [reorderDragIdx, setReorderDragIdx] = useState(null);
+  const [reorderDragOver, setReorderDragOver] = useState(null);
   const [selectedForTimer, setSelectedForTimer] = useState({});
   const [meetTab, setMeetTab] = useState('events');
   const [showManageEvents, setShowManageEvents] = useState(false);
@@ -2420,6 +2424,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
         <select style={S.select} value={entryTypeFilter} onChange={e=>setEntryTypeFilter(e.target.value)}>
           <option value="">Individual & Relay</option><option value="Individual">Individual</option><option value="Relay">Relay</option>
         </select>
+        <button style={{...S.btn,...S.btnPrimary,fontSize:11,padding:'4px 10px'}} onClick={()=>{setReorderList(filtered.map(me=>me.eventId));setReorderDragIdx(null);setReorderDragOver(null);setShowReorderModal(true);}}>↕ Reorder events</button>
         {eventOrder.length > 0 && <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'4px 10px'}} onClick={()=>saveEventOrder([])}>Reset Order</button>}
       </div>
       {meetDayCount > 1 && (
@@ -2500,14 +2505,6 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
           <div style={{...S.card,padding:'14px 16px',borderLeft:`3px solid ${me.evt.gender==='Boy'?C.blue:me.evt.gender==='Girl'?'#d53f8c':C.accent}`,border:`1px solid ${C.border}`}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:hasEntries?8:0,flexWrap:'wrap',gap:6}}>
               <div style={{display:'flex',alignItems:'center',gap:6}}>
-                {(()=>{const isFirst=meIdx===0,isLast=meIdx>=filtered.length-1;const btn={background:'none',border:`1px solid ${C.borderLight}`,borderRadius:4,cursor:'pointer',padding:'2px 5px',fontSize:11,color:C.textSecondary,lineHeight:1,minWidth:22,textAlign:'center'};return (
-                  <span style={{display:'inline-flex',gap:2,marginRight:4}}>
-                    <button style={{...btn,opacity:isFirst?0.3:1,cursor:isFirst?'default':'pointer'}} disabled={isFirst} title="Move to top" onClick={()=>moveEvent(me.eventId,'top')}>⤒</button>
-                    <button style={{...btn,opacity:isFirst?0.3:1,cursor:isFirst?'default':'pointer'}} disabled={isFirst} title="Move up" onClick={()=>moveEvent(me.eventId,-1)}>↑</button>
-                    <button style={{...btn,opacity:isLast?0.3:1,cursor:isLast?'default':'pointer'}} disabled={isLast} title="Move down" onClick={()=>moveEvent(me.eventId,+1)}>↓</button>
-                    <button style={{...btn,opacity:isLast?0.3:1,cursor:isLast?'default':'pointer'}} disabled={isLast} title="Move to bottom" onClick={()=>moveEvent(me.eventId,'bottom')}>⤓</button>
-                  </span>
-                );})()}
                 <span style={{fontWeight:700,fontSize:15}}>{getEventLabel(me.evt)}</span>
                 <span style={{fontSize:10,color:C.textMuted}}>{me.evt.eventType} - {me.evt.entryType}</span>
                 {meetDayCount > 1 && (
@@ -3250,6 +3247,47 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
         </div>
         <div style={{display:'flex',justifyContent:'flex-end',marginTop:12}}>
           <button style={{...S.btn,...S.btnSecondary}} onClick={()=>setShowManageEvents(false)}>Done</button>
+        </div>
+      </Modal>
+      <Modal open={showReorderModal} onClose={()=>setShowReorderModal(false)} width={520}>
+        <h2 style={S.h2}>Reorder Events</h2>
+        <p style={{fontSize:12,color:C.textMuted,marginTop:4,marginBottom:10}}>Drag a row by its handle, or use the up/down buttons. Save to apply.</p>
+        <div style={{maxHeight:'60vh',overflowY:'auto',border:`1px solid ${C.borderLight}`,borderRadius:6}}>
+          {reorderList.length === 0 && <div style={{padding:20,textAlign:'center',color:C.textMuted,fontSize:12}}>No events to reorder.</div>}
+          {reorderList.map((eid, idx) => {
+            const evt = events.find(e=>e.id===eid);
+            if(!evt) return null;
+            const isOver = reorderDragOver===idx && reorderDragIdx!==idx && reorderDragIdx!==null;
+            const isDragging = reorderDragIdx===idx;
+            return (
+              <div key={eid}
+                draggable
+                onDragStart={e=>{setReorderDragIdx(idx);try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',String(idx));}catch(_){}}}
+                onDragOver={e=>{e.preventDefault();if(reorderDragOver!==idx)setReorderDragOver(idx);}}
+                onDragLeave={()=>{if(reorderDragOver===idx)setReorderDragOver(null);}}
+                onDrop={e=>{e.preventDefault();if(reorderDragIdx===null||reorderDragIdx===idx){setReorderDragIdx(null);setReorderDragOver(null);return;}const next=[...reorderList];const [moved]=next.splice(reorderDragIdx,1);next.splice(idx,0,moved);setReorderList(next);setReorderDragIdx(null);setReorderDragOver(null);}}
+                onDragEnd={()=>{setReorderDragIdx(null);setReorderDragOver(null);}}
+                style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',borderBottom:`1px solid ${C.borderLight}`,background:isDragging?C.surface2:(isOver?C.accentMuted:C.surface),borderTop:isOver?`2px solid ${C.accent}`:'2px solid transparent',cursor:'grab',userSelect:'none'}}>
+                <span style={{fontSize:18,color:C.textMuted,minWidth:18,textAlign:'center',cursor:'grab'}} title="Drag to reorder">⋮⋮</span>
+                <span style={{fontSize:11,color:C.textMuted,minWidth:24,textAlign:'right'}}>{idx+1}.</span>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{getEventLabel(evt)}</div>
+                  <div style={{fontSize:10,color:C.textMuted}}>{evt.eventType} · {evt.entryType}{evt.gender?` · ${evt.gender==='Boy'?'Boys':evt.gender==='Girl'?'Girls':evt.gender}`:''}</div>
+                </div>
+                <div style={{display:'flex',gap:2}}>
+                  <button style={{background:'none',border:`1px solid ${C.borderLight}`,borderRadius:4,padding:'4px 8px',cursor:idx===0?'default':'pointer',opacity:idx===0?0.3:1,fontSize:12}} disabled={idx===0} title="Move up" onClick={()=>{if(idx===0)return;const next=[...reorderList];const [m]=next.splice(idx,1);next.splice(idx-1,0,m);setReorderList(next);}}>↑</button>
+                  <button style={{background:'none',border:`1px solid ${C.borderLight}`,borderRadius:4,padding:'4px 8px',cursor:idx>=reorderList.length-1?'default':'pointer',opacity:idx>=reorderList.length-1?0.3:1,fontSize:12}} disabled={idx>=reorderList.length-1} title="Move down" onClick={()=>{if(idx>=reorderList.length-1)return;const next=[...reorderList];const [m]=next.splice(idx,1);next.splice(idx+1,0,m);setReorderList(next);}}>↓</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginTop:14}}>
+          <button style={{...S.btn,fontSize:11,padding:'6px 10px',background:'transparent',color:C.textMuted,border:`1px solid ${C.border}`}} onClick={()=>setReorderList(filtered.map(me=>me.eventId))}>Reset (filtered order)</button>
+          <div style={{display:'flex',gap:8}}>
+            <button style={{...S.btn,...S.btnSecondary}} onClick={()=>setShowReorderModal(false)}>Cancel</button>
+            <button style={{...S.btn,...S.btnPrimary}} onClick={()=>{saveEventOrder(reorderList);setShowReorderModal(false);}}>Save Order</button>
+          </div>
         </div>
       </Modal>
       <MeetEntryModal data={data} save={save} meetId={meetId} eventId={showEntryModal} events={events} open={!!showEntryModal} onClose={()=>{setShowEntryModal(null);setEditEntryIdx(null);}} getAthletePR={getAthletePR} saveEntries={saveEntries} editEntryIdx={editEntryIdx} />

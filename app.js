@@ -2078,6 +2078,20 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
     ids.splice(toIdx, 0, moved);
     saveEventOrder(ids);
   };
+  const moveEvent = (eventId, direction) => {
+    const ids = filtered.map(me=>me.eventId);
+    const idx = ids.indexOf(eventId);
+    if(idx < 0) return;
+    let newIdx;
+    if(direction === 'top') newIdx = 0;
+    else if(direction === 'bottom') newIdx = ids.length - 1;
+    else newIdx = idx + direction;
+    if(newIdx < 0 || newIdx >= ids.length || newIdx === idx) return;
+    const next = [...ids];
+    const [moved] = next.splice(idx, 1);
+    next.splice(newIdx, 0, moved);
+    saveEventOrder(next);
+  };
   const saveEntries = (eventId, newEntries) => {
     const updatedMeetEvents = [...(meet.events||[])];
     const idx = updatedMeetEvents.findIndex(me=>me.eventId===eventId);
@@ -2247,12 +2261,33 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
         const relayKey = '_relay_'+ei;
         const athleteIds = (en.athletes||[]).map(a=>a.athleteId).filter(Boolean);
         const sortedKey = [...athleteIds].sort().join(',');
-        const existingComposite = (data.results||[]).find(r=>r.eventId===evt.id&&r.meetId===meetId&&r.isRelay&&[...(r.relayAthletes||[])].sort().join(',')===sortedKey);
+        const aidSet = new Set(athleteIds);
+        const allRelayComposites = (data.results||[]).filter(r=>r.eventId===evt.id&&r.meetId===meetId&&r.isRelay);
+        let existingComposite = allRelayComposites.find(r=>[...(r.relayAthletes||[])].sort().join(',')===sortedKey);
+        if(!existingComposite && aidSet.size > 0) {
+          existingComposite = allRelayComposites.find(r=>{
+            const ra = r.relayAthletes||[];
+            if(!ra.length) return false;
+            const overlap = ra.filter(a=>aidSet.has(a)).length;
+            return overlap >= Math.ceil(Math.min(ra.length, aidSet.size) / 2);
+          });
+        }
+        if(!existingComposite && allRelayComposites.length === 1 && entries.length === 1) {
+          existingComposite = allRelayComposites[0];
+        }
         if(existingComposite) {
           const ms = existingComposite.timeMs||0;
-          pre[relayKey] = {min:Math.floor(ms/60000)+'',sec:((ms%60000)/1000).toFixed(2),place:(existingComposite.place||'')+'',resultId:existingComposite.id,verified:!!existingComposite.verified,athleteIds};
+          const splitRows = (data.results||[]).filter(r => r.isRelaySplit && r.eventId===evt.id && r.meetId===meetId && (
+            (existingComposite.id && r.relayCompositeId === existingComposite.id)
+            || (!r.relayCompositeId && r.date === existingComposite.date && aidSet.has(r.athleteId))
+          ));
+          const legs = splitRows.map(sr => {
+            const sm = sr.timeMs||0;
+            return { id:sr.id, athleteId:sr.athleteId, relayLeg:sr.relayLeg, min:Math.floor(sm/60000)+'', sec:((sm%60000)/1000).toFixed(2) };
+          }).sort((a,b)=>(a.relayLeg||99)-(b.relayLeg||99));
+          pre[relayKey] = {min:Math.floor(ms/60000)+'',sec:((ms%60000)/1000).toFixed(2),place:(existingComposite.place||'')+'',resultId:existingComposite.id,verified:!!existingComposite.verified,athleteIds,legs};
         } else {
-          pre[relayKey] = {min:'',sec:'',place:'',athleteIds};
+          pre[relayKey] = {min:'',sec:'',place:'',athleteIds,legs:[]};
         }
       });
     } else {
@@ -2281,13 +2316,18 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
     Object.entries(resultsEntryData).forEach(([key,v])=>{
       if(isRelay && key.startsWith('_relay_')) {
         const hasValue = v.min||v.sec;
-        if(!hasValue) return;
+        if(!hasValue && !(v.legs||[]).length) return;
         const timeMs = parseTimeToMs(v.min, v.sec);
         if(v.resultId) {
-          updatedResults = updatedResults.map(r=>r.id===v.resultId?{...r,timeMs,place:v.place||'',verified:true}:r);
-        } else {
+          if(hasValue) updatedResults = updatedResults.map(r=>r.id===v.resultId?{...r,timeMs,place:v.place||'',verified:true}:r);
+        } else if(hasValue) {
           updatedResults.push({id:uid(),eventId,meetId,date:raceDate,timeMs,isRelay:true,relayAthletes:v.athleteIds||[],place:v.place||'',verified:true,splits:[]});
         }
+        (v.legs||[]).forEach(leg => {
+          if(!leg.id) return;
+          const legMs = parseTimeToMs(leg.min, leg.sec);
+          updatedResults = updatedResults.map(r => r.id===leg.id ? {...r, timeMs:legMs} : r);
+        });
       } else {
         const aid = key;
         const hasValue = isField?(v.ft||v.inch||v.qtr):(v.min||v.sec);
@@ -2457,10 +2497,17 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
         return (
           <React.Fragment key={me.eventId}>
           {showHeader && <div style={{fontSize:11,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',letterSpacing:'0.05em',padding:'10px 4px 4px',borderBottom:`2px solid ${C.border}`,marginTop:meIdx===0?0:12,marginBottom:6}}>Day {me.day}</div>}
-          <div draggable style={{...S.card,padding:'14px 16px',borderLeft:`3px solid ${me.evt.gender==='Boy'?C.blue:me.evt.gender==='Girl'?'#d53f8c':C.accent}`, opacity:dragIdx===meIdx?0.5:1, border:dragOverIdx===meIdx?`2px dashed ${C.accent}`:`1px solid ${C.border}`}} onDragStart={()=>setDragIdx(meIdx)} onDragOver={e=>{e.preventDefault();setDragOverIdx(meIdx);}} onDragLeave={()=>setDragOverIdx(null)} onDrop={e=>{e.preventDefault();handleDrop(dragIdx,meIdx);setDragIdx(null);setDragOverIdx(null);}} onDragEnd={()=>{setDragIdx(null);setDragOverIdx(null);}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:hasEntries?8:0}}>
-              <div style={{display:'flex',alignItems:'center',gap:8}}>
-                <span style={{cursor:'grab',fontSize:16,color:C.textMuted,userSelect:'none',marginRight:4}}>:::</span>
+          <div style={{...S.card,padding:'14px 16px',borderLeft:`3px solid ${me.evt.gender==='Boy'?C.blue:me.evt.gender==='Girl'?'#d53f8c':C.accent}`,border:`1px solid ${C.border}`}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:hasEntries?8:0,flexWrap:'wrap',gap:6}}>
+              <div style={{display:'flex',alignItems:'center',gap:6}}>
+                {(()=>{const isFirst=meIdx===0,isLast=meIdx>=filtered.length-1;const btn={background:'none',border:`1px solid ${C.borderLight}`,borderRadius:4,cursor:'pointer',padding:'2px 5px',fontSize:11,color:C.textSecondary,lineHeight:1,minWidth:22,textAlign:'center'};return (
+                  <span style={{display:'inline-flex',gap:2,marginRight:4}}>
+                    <button style={{...btn,opacity:isFirst?0.3:1,cursor:isFirst?'default':'pointer'}} disabled={isFirst} title="Move to top" onClick={()=>moveEvent(me.eventId,'top')}>⤒</button>
+                    <button style={{...btn,opacity:isFirst?0.3:1,cursor:isFirst?'default':'pointer'}} disabled={isFirst} title="Move up" onClick={()=>moveEvent(me.eventId,-1)}>↑</button>
+                    <button style={{...btn,opacity:isLast?0.3:1,cursor:isLast?'default':'pointer'}} disabled={isLast} title="Move down" onClick={()=>moveEvent(me.eventId,+1)}>↓</button>
+                    <button style={{...btn,opacity:isLast?0.3:1,cursor:isLast?'default':'pointer'}} disabled={isLast} title="Move to bottom" onClick={()=>moveEvent(me.eventId,'bottom')}>⤓</button>
+                  </span>
+                );})()}
                 <span style={{fontWeight:700,fontSize:15}}>{getEventLabel(me.evt)}</span>
                 <span style={{fontSize:10,color:C.textMuted}}>{me.evt.eventType} - {me.evt.entryType}</span>
                 {meetDayCount > 1 && (
@@ -2586,6 +2633,28 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                           setResultsEntryData(cleared);
                         }}>Delete</button>}
                       </div>
+                      {(v.legs||[]).length>0 && (
+                        <div style={{marginTop:6}}>
+                          <button style={{background:'none',border:'none',color:C.accent,cursor:'pointer',fontSize:11,fontWeight:600,padding:'2px 0'}} onClick={()=>{const n={...resultsEntryData};n[relayKey]={...v,legsOpen:!v.legsOpen};setResultsEntryData(n);}}>{v.legsOpen?'▾':'▸'} Edit legs ({(v.legs||[]).length})</button>
+                          {v.legsOpen && (
+                            <div style={{marginTop:4,padding:'8px 10px',background:C.surface2,borderRadius:6,border:`1px solid ${C.borderLight}`}}>
+                              <div style={{fontSize:10,color:C.textMuted,marginBottom:6,fontStyle:'italic'}}>Edit any split times that were off. These don't have to add up to the total above.</div>
+                              {(v.legs||[]).map((leg,li)=>{
+                                const ath = data.athletes.find(a=>a.id===leg.athleteId);
+                                return (
+                                  <div key={leg.id||li} style={{display:'flex',gap:6,alignItems:'center',marginBottom:4,flexWrap:'wrap'}}>
+                                    <span style={{fontSize:11,fontWeight:700,color:'#6b46c1',minWidth:48}}>Leg {leg.relayLeg||(li+1)}</span>
+                                    <span style={{fontSize:11,color:C.textSecondary,minWidth:120,flex:'0 1 auto'}}>{ath?athDisplay(ath):'(unknown)'}</span>
+                                    <input style={{...S.input,width:50,fontSize:12,padding:'4px 6px',textAlign:'center'}} type="text" inputMode="numeric" value={leg.min||''} onChange={e=>{const n={...resultsEntryData};const legs=[...(v.legs||[])];legs[li]={...legs[li],min:e.target.value};n[relayKey]={...v,legs};setResultsEntryData(n);}} />
+                                    <span style={{fontSize:13,color:C.textMuted}}>:</span>
+                                    <input style={{...S.input,width:70,fontSize:12,padding:'4px 6px',textAlign:'center'}} type="text" inputMode="decimal" placeholder="00.00" value={leg.sec||''} onChange={e=>{const n={...resultsEntryData};const legs=[...(v.legs||[])];legs[li]={...legs[li],sec:e.target.value};n[relayKey]={...v,legs};setResultsEntryData(n);}} />
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>);
                   })}
                   <div style={{display:'flex',justifyContent:'flex-end',marginTop:4}}>

@@ -2816,7 +2816,15 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
       {meetTab==='results' && (()=>{
         const allMeetResults = (data.results||[]).filter(r=>r.meetId===meetId);
         const meetResults = allMeetResults.filter(r=>!r.isRelay&&!r.isRelaySplit);
-        const relayResults = allMeetResults.filter(r=>r.isRelay);
+        const _relayRaw = allMeetResults.filter(r=>r.isRelay);
+        const _relayBest = {};
+        _relayRaw.forEach(r => {
+          const k = `${r.eventId}|${r.meetId||''}|${r.date}`;
+          const prev = _relayBest[k];
+          if(!prev) { _relayBest[k] = r; return; }
+          if(r.verified && !prev.verified) _relayBest[k] = r;
+        });
+        const relayResults = Object.values(_relayBest);
         const relaySplits = allMeetResults.filter(r=>r.isRelaySplit);
         const allGroups = data.workoutGroups||[];
         const allGradYears = [...new Set(data.athletes.map(a=>a.gradYear).filter(Boolean))].sort((a,b)=>b-a);
@@ -3760,7 +3768,17 @@ function AthleteSubPage({ data, save, nav, athleteId, athFilter, events, getAthl
   const athleteEvents = events.filter(e => e.gender==='Mixed' || (athlete.gender==='M' && e.gender==='Boy') || (athlete.gender==='F' && e.gender==='Girl'));
   const athleteResults = data.results.filter(r=>r.athleteId===athleteId&&!r.isRelaySplit&&!r.isRelay);
   const athleteRelaySplits = data.results.filter(r=>r.athleteId===athleteId&&r.isRelaySplit);
-  const athleteRelayComposites = data.results.filter(r=>r.isRelay&&(r.relayAthletes||[]).includes(athleteId));
+  const athleteRelayComposites = (()=>{
+    const all = data.results.filter(r=>r.isRelay&&(r.relayAthletes||[]).includes(athleteId));
+    const best = {};
+    all.forEach(r => {
+      const k = `${r.eventId}|${r.meetId||''}|${r.date}`;
+      const prev = best[k];
+      if(!prev) { best[k] = r; return; }
+      if(r.verified && !prev.verified) best[k] = r;
+    });
+    return Object.values(best);
+  })();
   athleteRelayComposites.forEach(rr=>{
     const hasSplit = athleteRelaySplits.some(rs=>rs.eventId===rr.eventId&&rs.date===rr.date);
     if(!hasSplit) {
@@ -6707,7 +6725,17 @@ const computeAthleteSeasonStats = (data, events, athleteId, startDate, endDate, 
   const inRange = (d) => (!startDate || d>=startDate) && (!endDate || d<=endDate);
   const allRes = (data.results||[]).filter(r=>!r.isPractice&&inRange(r.date));
   const myIndiv = allRes.filter(r=>r.athleteId===athleteId&&!r.isRelay&&!r.isRelaySplit);
-  const myRelays = allRes.filter(r=>r.isRelay&&(r.relayAthletes||[]).includes(athleteId));
+  const myRelays = (()=>{
+    const all = allRes.filter(r=>r.isRelay&&(r.relayAthletes||[]).includes(athleteId));
+    const best = {};
+    all.forEach(r => {
+      const k = `${r.eventId}|${r.meetId||''}|${r.date}`;
+      const prev = best[k];
+      if(!prev) { best[k] = r; return; }
+      if(r.verified && !prev.verified) best[k] = r;
+    });
+    return Object.values(best);
+  })();
   const eventIdsSet = new Set([...myIndiv.map(r=>r.eventId), ...myRelays.map(r=>r.eventId)]);
   const meetIds = new Set([...myIndiv.map(r=>r.meetId), ...myRelays.map(r=>r.meetId)].filter(Boolean));
   const eventRows = [];
@@ -6791,7 +6819,17 @@ const computeTeamSeasonStats = (data, events, athleteIds, startDate, endDate, en
   const idSet = new Set(athleteIds);
   const allRes = (data.results||[]).filter(r=>!r.isPractice&&inRange(r.date));
   const indiv = allRes.filter(r=>!r.isRelay&&!r.isRelaySplit&&idSet.has(r.athleteId));
-  const relays = allRes.filter(r=>r.isRelay&&(r.relayAthletes||[]).some(a=>idSet.has(a)));
+  const relays = (()=>{
+    const all = allRes.filter(r=>r.isRelay&&(r.relayAthletes||[]).some(a=>idSet.has(a)));
+    const best = {};
+    all.forEach(r => {
+      const k = `${r.eventId}|${r.meetId||''}|${r.date}`;
+      const prev = best[k];
+      if(!prev) { best[k] = r; return; }
+      if(r.verified && !prev.verified) best[k] = r;
+    });
+    return Object.values(best);
+  })();
   const meetIds = new Set([...indiv.map(r=>r.meetId), ...relays.map(r=>r.meetId)].filter(Boolean));
   const prsByAthlete = {};
   athleteIds.forEach(aid=>{prsByAthlete[aid]=0;});

@@ -6976,7 +6976,7 @@ const buildSeasonReportHTML = (data, events, season, team, athletes, options, fe
     @page{size:portrait;margin:0.45in}
     body{font-family:'Inter','Helvetica Neue',-apple-system,Helvetica,Arial,sans-serif;color:#1a1f2b;margin:0;font-size:11px;line-height:1.45;background:#fff}
     .report-head{position:relative;overflow:hidden;padding:18px 22px;margin:0 0 16px;border-radius:10px;background:${primary};color:#fff;box-shadow:0 2px 6px rgba(0,0,0,0.08)}
-    .report-head .lanes{position:absolute;top:0;right:0;height:100%;width:62%;pointer-events:none}
+    .report-head .lanes{position:absolute;top:0;left:0;right:0;height:100%;width:100%;pointer-events:none}
     .report-head h1{position:relative;font-size:24px;margin:0 0 4px;font-weight:800;letter-spacing:-0.015em;color:#fff;line-height:1.1}
     .report-head .sub{position:relative;font-size:12px;color:rgba(255,255,255,0.92);letter-spacing:0.01em}
     h2{font-size:14px;margin:18px 0 8px;color:${primary};text-transform:uppercase;letter-spacing:0.08em;font-weight:800;display:flex;align-items:center;gap:8px}
@@ -7026,7 +7026,7 @@ const buildSeasonReportHTML = (data, events, season, team, athletes, options, fe
   </style>`;
 
   const enabledStdMap = options.enabledStandards || null;
-  const lanesSVG = `<svg class="lanes" viewBox="0 0 200 100" preserveAspectRatio="xMaxYMid slice" aria-hidden="true"><g fill="none" stroke="${secondary}" stroke-width="4" stroke-linecap="round"><circle cx="240" cy="50" r="75" opacity="0.22"/><circle cx="240" cy="50" r="100" opacity="0.32"/><circle cx="240" cy="50" r="128" opacity="0.42"/><circle cx="240" cy="50" r="158" opacity="0.52"/><circle cx="240" cy="50" r="190" opacity="0.62"/></g></svg>`;
+  const lanesSVG = `<svg class="lanes" viewBox="0 0 300 100" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><g fill="none" stroke="${secondary}" stroke-width="3" stroke-linecap="round"><circle cx="150" cy="195" r="150" opacity="0.20"/><circle cx="150" cy="195" r="158" opacity="0.26"/><circle cx="150" cy="195" r="167" opacity="0.32"/><circle cx="150" cy="195" r="177" opacity="0.40"/><circle cx="150" cy="195" r="188" opacity="0.50"/></g></svg>`;
   let body = `<div class="report-head">${lanesSVG}<h1>${esc(titleLine)}</h1><div class="sub">${esc(subLine)}</div></div>`;
 
   const fmtField = (r) => {

@@ -6970,17 +6970,20 @@ const buildSeasonReportHTML = (data, events, season, team, athletes, options, fe
   const _teamSecondary = (((team||{}).colors||{}).secondary) || '#2b6cb0';
   const primary = _teamSecondary;
   const secondary = _teamPrimary;
-  const titleLine = `${(team||{}).name||'Team'} — ${(season||{}).name||'Season Report'}`;
+  const schoolLine = (team||{}).name || 'Team';
+  const seasonLine = (season||{}).name || 'Season Report';
+  const titleLine = `${schoolLine} — ${seasonLine}`;
   const subLine = `${start||'(beginning)'} → ${end||'(today)'}  ·  ${athletes.length} athlete${athletes.length!==1?'s':''}`;
   const css = `<style>
     @page{size:portrait;margin:0.45in}
     body{font-family:'Inter','Helvetica Neue',-apple-system,Helvetica,Arial,sans-serif;color:#1a1f2b;margin:0;font-size:11px;line-height:1.45;background:#fff}
     .report-head{position:relative;overflow:hidden;padding:18px 22px;margin:0 0 16px;border-radius:10px;background:${primary};color:#fff;box-shadow:0 2px 6px rgba(0,0,0,0.08);display:flex;align-items:center;gap:18px}
     .report-head .head-text{flex:1;min-width:0}
-    .report-head .head-logo{flex:0 0 auto;width:90px;height:90px;display:flex;align-items:center;justify-content:center}
-    .report-head .head-logo img{max-width:100%;max-height:100%;object-fit:contain;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.25))}
-    .report-head h1{position:relative;font-size:24px;margin:0 0 4px;font-weight:800;letter-spacing:-0.015em;color:#fff;line-height:1.1}
-    .report-head .sub{position:relative;font-size:12px;color:rgba(255,255,255,0.92);letter-spacing:0.01em}
+    .report-head .head-logo{flex:0 0 auto;width:96px;height:96px;background:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;padding:9px;box-sizing:border-box;box-shadow:0 2px 6px rgba(0,0,0,0.18)}
+    .report-head .head-logo img{max-width:100%;max-height:100%;object-fit:contain;border-radius:50%}
+    .report-head h1{position:relative;font-size:22px;margin:0;font-weight:800;letter-spacing:-0.015em;color:#fff;line-height:1.1}
+    .report-head .season{position:relative;font-size:14px;font-weight:600;color:rgba(255,255,255,0.95);letter-spacing:0.01em;margin-top:2px}
+    .report-head .sub{position:relative;font-size:12px;color:rgba(255,255,255,0.88);letter-spacing:0.01em;margin-top:6px}
     h2{font-size:14px;margin:18px 0 8px;color:${primary};text-transform:uppercase;letter-spacing:0.08em;font-weight:800;display:flex;align-items:center;gap:8px}
     h2::before{content:'';display:inline-block;width:6px;height:18px;background:${primary};border-radius:2px}
     h3{font-size:11px;margin:10px 0 4px;color:#555;font-weight:700;text-transform:uppercase;letter-spacing:0.04em}
@@ -7030,7 +7033,7 @@ const buildSeasonReportHTML = (data, events, season, team, athletes, options, fe
   const enabledStdMap = options.enabledStandards || null;
   const teamLogo = (team||{}).logo;
   const logoBlock = teamLogo ? `<div class="head-logo"><img src="${esc(teamLogo)}" alt=""></div>` : '';
-  let body = `<div class="report-head"><div class="head-text"><h1>${esc(titleLine)}</h1><div class="sub">${esc(subLine)}</div></div>${logoBlock}</div>`;
+  let body = `<div class="report-head"><div class="head-text"><h1 class="school">${esc(schoolLine)}</h1><div class="season">${esc(seasonLine)}</div><div class="sub">${esc(subLine)}</div></div>${logoBlock}</div>`;
 
   const fmtField = (r) => {
     const totalIn = (r.ft||0)*12 + (r.inch||0) + (r.qtr||0);

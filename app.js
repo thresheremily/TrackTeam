@@ -6966,15 +6966,17 @@ const computeTeamRankings = (data, events, athleteIds, startDate, endDate) => {
 const buildSeasonReportHTML = (data, events, season, team, athletes, options, feedbackByAth) => {
   const start = options.startDate || (season||{}).startDate || '';
   const end = options.endDate || (season||{}).endDate || '';
-  const primary = (((team||{}).colors||{}).primary) || '#2b6cb0';
-  const secondary = (((team||{}).colors||{}).secondary) || '#c96a1f';
+  const _teamPrimary = (((team||{}).colors||{}).primary) || '#c96a1f';
+  const _teamSecondary = (((team||{}).colors||{}).secondary) || '#2b6cb0';
+  const primary = _teamSecondary;
+  const secondary = _teamPrimary;
   const titleLine = `${(team||{}).name||'Team'} — ${(season||{}).name||'Season Report'}`;
   const subLine = `${start||'(beginning)'} → ${end||'(today)'}  ·  ${athletes.length} athlete${athletes.length!==1?'s':''}`;
   const css = `<style>
     @page{size:portrait;margin:0.45in}
     body{font-family:'Inter','Helvetica Neue',-apple-system,Helvetica,Arial,sans-serif;color:#1a1f2b;margin:0;font-size:11px;line-height:1.45;background:#fff}
     .report-head{position:relative;overflow:hidden;padding:18px 22px;margin:0 0 16px;border-radius:10px;background:${primary};color:#fff;box-shadow:0 2px 6px rgba(0,0,0,0.08)}
-    .report-head .lanes{position:absolute;top:0;right:0;bottom:0;width:55%;pointer-events:none;background:repeating-linear-gradient(115deg, transparent 0 22px, ${secondary}55 22px 24px, transparent 24px 46px);mask-image:linear-gradient(90deg, transparent 0%, #000 35%);-webkit-mask-image:linear-gradient(90deg, transparent 0%, #000 35%)}
+    .report-head .lanes{position:absolute;top:0;right:0;height:100%;width:62%;pointer-events:none}
     .report-head h1{position:relative;font-size:24px;margin:0 0 4px;font-weight:800;letter-spacing:-0.015em;color:#fff;line-height:1.1}
     .report-head .sub{position:relative;font-size:12px;color:rgba(255,255,255,0.92);letter-spacing:0.01em}
     h2{font-size:14px;margin:18px 0 8px;color:${primary};text-transform:uppercase;letter-spacing:0.08em;font-weight:800;display:flex;align-items:center;gap:8px}
@@ -7024,7 +7026,8 @@ const buildSeasonReportHTML = (data, events, season, team, athletes, options, fe
   </style>`;
 
   const enabledStdMap = options.enabledStandards || null;
-  let body = `<div class="report-head"><div class="lanes"></div><h1>${esc(titleLine)}</h1><div class="sub">${esc(subLine)}</div></div>`;
+  const lanesSVG = `<svg class="lanes" viewBox="0 0 300 140" preserveAspectRatio="xMaxYMid slice" aria-hidden="true"><g fill="none" stroke="${secondary}" stroke-width="4" stroke-linecap="round"><circle cx="560" cy="68" r="285" opacity="0.18"/><circle cx="560" cy="68" r="320" opacity="0.24"/><circle cx="560" cy="68" r="355" opacity="0.30"/><circle cx="560" cy="68" r="390" opacity="0.38"/><circle cx="560" cy="68" r="425" opacity="0.46"/><circle cx="560" cy="68" r="460" opacity="0.55"/></g></svg>`;
+  let body = `<div class="report-head">${lanesSVG}<h1>${esc(titleLine)}</h1><div class="sub">${esc(subLine)}</div></div>`;
 
   const fmtField = (r) => {
     const totalIn = (r.ft||0)*12 + (r.inch||0) + (r.qtr||0);

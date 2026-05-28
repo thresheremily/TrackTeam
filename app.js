@@ -6968,15 +6968,19 @@ const buildSeasonReportHTML = (data, events, season, team, athletes, options, fe
   const end = options.endDate || (season||{}).endDate || '';
   const _teamPrimary = (((team||{}).colors||{}).primary) || '#c96a1f';
   const _teamSecondary = (((team||{}).colors||{}).secondary) || '#2b6cb0';
-  const primary = _teamSecondary;
-  const secondary = _teamPrimary;
+  const primary = _teamPrimary;
+  const secondary = _teamSecondary;
   const schoolLine = (team||{}).name || 'Team';
   const seasonLine = (season||{}).name || 'Season Report';
   const titleLine = `${schoolLine} — ${seasonLine}`;
   const subLine = `${start||'(beginning)'} → ${end||'(today)'}  ·  ${athletes.length} athlete${athletes.length!==1?'s':''}`;
   const css = `<style>
     @page{size:portrait;margin:0.45in}
-    body{font-family:'Inter','Helvetica Neue',-apple-system,Helvetica,Arial,sans-serif;color:#1a1f2b;margin:0;font-size:11px;line-height:1.45;background:#fff}
+    *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important}
+    html,body{background:#eef0f3}
+    body{font-family:'Inter','Helvetica Neue',-apple-system,Helvetica,Arial,sans-serif;color:#1a1f2b;margin:0;font-size:11px;line-height:1.45}
+    .page-wrap{max-width:7.5in;margin:24px auto;padding:0.45in;background:#fff;box-shadow:0 4px 16px rgba(0,0,0,0.08);box-sizing:border-box}
+    @media print{html,body{background:#fff}.page-wrap{max-width:none;margin:0;padding:0;box-shadow:none;background:transparent}}
     .report-head{position:relative;overflow:hidden;padding:18px 22px;margin:0 0 16px;border-radius:10px;background:${primary};color:#fff;box-shadow:0 2px 6px rgba(0,0,0,0.08);display:flex;align-items:center;gap:18px}
     .report-head .head-text{flex:1;min-width:0}
     .report-head .head-logo{flex:0 0 auto;width:96px;height:96px;background:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;padding:9px;box-sizing:border-box;box-shadow:0 2px 6px rgba(0,0,0,0.18)}
@@ -7291,7 +7295,7 @@ const buildSeasonReportHTML = (data, events, season, team, athletes, options, fe
       body += '</div>';
     });
   }
-  return `<!DOCTYPE html><html><head><title>${esc(titleLine)}</title>${css}</head><body>${body}</body></html>`;
+  return `<!DOCTYPE html><html><head><title>${esc(titleLine)}</title>${css}</head><body><div class="page-wrap">${body}</div></body></html>`;
 };
 const openSeasonReport = (data, events, season, team, athletes, options, feedbackByAth) => {
   const w = window.open('','_blank','width=1000,height=800');

@@ -6973,9 +6973,10 @@ const buildSeasonReportHTML = (data, events, season, team, athletes, options, fe
   const css = `<style>
     @page{size:portrait;margin:0.45in}
     body{font-family:'Inter','Helvetica Neue',-apple-system,Helvetica,Arial,sans-serif;color:#1a1f2b;margin:0;font-size:11px;line-height:1.45;background:#fff}
-    .report-head{padding:18px 22px;margin:0 0 16px;border-radius:10px;background:linear-gradient(120deg,${primary} 0%,${secondary} 100%);color:#fff;box-shadow:0 2px 6px rgba(0,0,0,0.08)}
-    .report-head h1{font-size:24px;margin:0 0 4px;font-weight:800;letter-spacing:-0.015em;color:#fff;line-height:1.1}
-    .report-head .sub{font-size:12px;color:rgba(255,255,255,0.92);letter-spacing:0.01em}
+    .report-head{position:relative;overflow:hidden;padding:18px 22px;margin:0 0 16px;border-radius:10px;background:${primary};color:#fff;box-shadow:0 2px 6px rgba(0,0,0,0.08)}
+    .report-head .lanes{position:absolute;top:0;right:0;bottom:0;width:55%;pointer-events:none;background:repeating-linear-gradient(115deg, transparent 0 22px, ${secondary}55 22px 24px, transparent 24px 46px);mask-image:linear-gradient(90deg, transparent 0%, #000 35%);-webkit-mask-image:linear-gradient(90deg, transparent 0%, #000 35%)}
+    .report-head h1{position:relative;font-size:24px;margin:0 0 4px;font-weight:800;letter-spacing:-0.015em;color:#fff;line-height:1.1}
+    .report-head .sub{position:relative;font-size:12px;color:rgba(255,255,255,0.92);letter-spacing:0.01em}
     h2{font-size:14px;margin:18px 0 8px;color:${primary};text-transform:uppercase;letter-spacing:0.08em;font-weight:800;display:flex;align-items:center;gap:8px}
     h2::before{content:'';display:inline-block;width:6px;height:18px;background:${primary};border-radius:2px}
     h3{font-size:11px;margin:10px 0 4px;color:#555;font-weight:700;text-transform:uppercase;letter-spacing:0.04em}
@@ -7001,13 +7002,13 @@ const buildSeasonReportHTML = (data, events, season, team, athletes, options, fe
     .chart-row{display:flex;justify-content:space-between;align-items:center;gap:8px;page-break-inside:avoid;margin:4px 0}
     .chart-label{font-size:10px;font-weight:700;width:120px;color:#444}
     .rank-evt{margin-bottom:10px;page-break-inside:avoid;border:1px solid #e0e4ea;border-radius:8px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,0.03)}
-    .rank-evt .rh{background:linear-gradient(90deg,${primary} 0%,${primary}dd 100%);color:#fff;padding:6px 12px;font-size:11px;font-weight:700;display:flex;justify-content:space-between;align-items:center}
+    .rank-evt .rh{background:${primary};color:#fff;padding:6px 12px;font-size:11px;font-weight:700;display:flex;justify-content:space-between;align-items:center;border-left:5px solid ${secondary}}
     .rank-evt .rh .sub{font-size:9px;font-weight:500;opacity:0.85;letter-spacing:0.02em}
     .rank-evt table{margin:0}
     .rank-evt .rk{width:24px;text-align:center;color:#788396;font-weight:800;font-size:11px}
     .rank-evt .rk-1{color:#b8860b}
     .qual-card{margin-bottom:10px;page-break-inside:avoid;border:1px solid #e0e4ea;border-radius:8px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,0.03)}
-    .qual-card .qual-h{background:#25763b;color:#fff;padding:6px 12px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;display:flex;justify-content:space-between;align-items:center}
+    .qual-card .qual-h{background:${primary};color:#fff;padding:6px 12px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;display:flex;justify-content:space-between;align-items:center;border-left:5px solid ${secondary}}
     .qual-card .qual-n{background:rgba(255,255,255,0.25);padding:1px 8px;border-radius:10px;font-size:10px}
     .toppr{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
     .toppr-row{display:flex;align-items:center;gap:10px;padding:8px 12px;background:#fff;border:1px solid #e0e4ea;border-left-width:5px;border-radius:8px;page-break-inside:avoid}
@@ -7023,7 +7024,7 @@ const buildSeasonReportHTML = (data, events, season, team, athletes, options, fe
   </style>`;
 
   const enabledStdMap = options.enabledStandards || null;
-  let body = `<div class="report-head"><h1>${esc(titleLine)}</h1><div class="sub">${esc(subLine)}</div></div>`;
+  let body = `<div class="report-head"><div class="lanes"></div><h1>${esc(titleLine)}</h1><div class="sub">${esc(subLine)}</div></div>`;
 
   const fmtField = (r) => {
     const totalIn = (r.ft||0)*12 + (r.inch||0) + (r.qtr||0);

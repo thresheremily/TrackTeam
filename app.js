@@ -7026,7 +7026,7 @@ const buildSeasonReportHTML = (data, events, season, team, athletes, options, fe
   </style>`;
 
   const enabledStdMap = options.enabledStandards || null;
-  const lanesSVG = `<svg class="lanes" viewBox="0 0 300 140" preserveAspectRatio="xMaxYMid slice" aria-hidden="true"><g fill="none" stroke="${secondary}" stroke-width="4" stroke-linecap="round"><circle cx="560" cy="68" r="285" opacity="0.18"/><circle cx="560" cy="68" r="320" opacity="0.24"/><circle cx="560" cy="68" r="355" opacity="0.30"/><circle cx="560" cy="68" r="390" opacity="0.38"/><circle cx="560" cy="68" r="425" opacity="0.46"/><circle cx="560" cy="68" r="460" opacity="0.55"/></g></svg>`;
+  const lanesSVG = `<svg class="lanes" viewBox="0 0 200 100" preserveAspectRatio="xMaxYMid slice" aria-hidden="true"><g fill="none" stroke="${secondary}" stroke-width="4" stroke-linecap="round"><circle cx="240" cy="50" r="75" opacity="0.22"/><circle cx="240" cy="50" r="100" opacity="0.32"/><circle cx="240" cy="50" r="128" opacity="0.42"/><circle cx="240" cy="50" r="158" opacity="0.52"/><circle cx="240" cy="50" r="190" opacity="0.62"/></g></svg>`;
   let body = `<div class="report-head">${lanesSVG}<h1>${esc(titleLine)}</h1><div class="sub">${esc(subLine)}</div></div>`;
 
   const fmtField = (r) => {

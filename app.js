@@ -6975,8 +6975,10 @@ const buildSeasonReportHTML = (data, events, season, team, athletes, options, fe
   const css = `<style>
     @page{size:portrait;margin:0.45in}
     body{font-family:'Inter','Helvetica Neue',-apple-system,Helvetica,Arial,sans-serif;color:#1a1f2b;margin:0;font-size:11px;line-height:1.45;background:#fff}
-    .report-head{position:relative;overflow:hidden;padding:18px 22px;margin:0 0 16px;border-radius:10px;background:${primary};color:#fff;box-shadow:0 2px 6px rgba(0,0,0,0.08)}
-    .report-head .lanes{position:absolute;top:0;right:6px;bottom:0;width:46%;pointer-events:none}
+    .report-head{position:relative;overflow:hidden;padding:18px 22px;margin:0 0 16px;border-radius:10px;background:${primary};color:#fff;box-shadow:0 2px 6px rgba(0,0,0,0.08);display:flex;align-items:center;gap:18px}
+    .report-head .head-text{flex:1;min-width:0}
+    .report-head .head-logo{flex:0 0 auto;width:90px;height:90px;display:flex;align-items:center;justify-content:center}
+    .report-head .head-logo img{max-width:100%;max-height:100%;object-fit:contain;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.25))}
     .report-head h1{position:relative;font-size:24px;margin:0 0 4px;font-weight:800;letter-spacing:-0.015em;color:#fff;line-height:1.1}
     .report-head .sub{position:relative;font-size:12px;color:rgba(255,255,255,0.92);letter-spacing:0.01em}
     h2{font-size:14px;margin:18px 0 8px;color:${primary};text-transform:uppercase;letter-spacing:0.08em;font-weight:800;display:flex;align-items:center;gap:8px}
@@ -7026,8 +7028,9 @@ const buildSeasonReportHTML = (data, events, season, team, athletes, options, fe
   </style>`;
 
   const enabledStdMap = options.enabledStandards || null;
-  const lanesSVG = `<svg class="lanes" viewBox="0 0 300 110" preserveAspectRatio="xMaxYMid meet" aria-hidden="true"><g fill="${secondary}"><path d="M 148,52 C 112,42 70,30 18,14 C 60,40 105,55 146,58 Z" opacity="0.45"/><path d="M 150,60 C 116,55 80,50 38,42 C 80,62 120,65 152,65 Z" opacity="0.6"/><path d="M 152,68 C 125,68 100,68 72,64 C 105,73 130,73 154,72 Z" opacity="0.78"/><path d="M 150,50 C 156,42 172,40 192,40 L 226,40 C 246,42 262,56 276,72 L 276,80 L 148,80 C 140,72 142,58 150,50 Z"/><path d="M 144,80 L 282,80 L 282,86 C 277,90 256,92 200,92 C 168,92 148,90 144,86 Z"/><g fill="#fff" opacity="0.55"><circle cx="196" cy="48" r="1.6"/><circle cx="209" cy="48" r="1.6"/><circle cx="222" cy="50" r="1.6"/><circle cx="235" cy="53" r="1.6"/></g></g></svg>`;
-  let body = `<div class="report-head">${lanesSVG}<h1>${esc(titleLine)}</h1><div class="sub">${esc(subLine)}</div></div>`;
+  const teamLogo = (team||{}).logo;
+  const logoBlock = teamLogo ? `<div class="head-logo"><img src="${esc(teamLogo)}" alt=""></div>` : '';
+  let body = `<div class="report-head"><div class="head-text"><h1>${esc(titleLine)}</h1><div class="sub">${esc(subLine)}</div></div>${logoBlock}</div>`;
 
   const fmtField = (r) => {
     const totalIn = (r.ft||0)*12 + (r.inch||0) + (r.qtr||0);

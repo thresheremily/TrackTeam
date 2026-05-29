@@ -1986,6 +1986,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
   const [genderFilter, setGenderFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [entryTypeFilter, setEntryTypeFilter] = useState('');
+  const [onlyWithResults, setOnlyWithResults] = useState(false);
   const [showEntryModal, setShowEntryModal] = useState(null);
   const [editEntryIdx, setEditEntryIdx] = useState(null);
   const [dragIdx, setDragIdx] = useState(null);
@@ -2135,6 +2136,11 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
     if(entryTypeFilter && me.evt.entryType !== entryTypeFilter) return false;
     if(filter && !me.evt.name.toLowerCase().includes(filter.toLowerCase())) return false;
     if(meetDayCount > 1 && dayFilter && me.day !== dayFilter) return false;
+    if(meetTab==='results' && onlyWithResults) {
+      const r = normalizeRound(me.round);
+      const hasResult = (data.results||[]).some(rs => rs.eventId===me.eventId && rs.meetId===meetId && normalizeRound(rs.round)===r && !rs.isRelaySplit);
+      if(!hasResult) return false;
+    }
     return true;
   }).sort((a,b) => {
     const idxA = eventOrder.indexOf(a.eventId);
@@ -2570,6 +2576,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
         <select style={S.select} value={entryTypeFilter} onChange={e=>setEntryTypeFilter(e.target.value)}>
           <option value="">Individual & Relay</option><option value="Individual">Individual</option><option value="Relay">Relay</option>
         </select>
+        {meetTab==='results' && <button style={{...S.btn,fontSize:11,padding:'4px 10px',background:onlyWithResults?C.accent:C.surface2,color:onlyWithResults?'#fff':C.textSecondary,border:`1px solid ${onlyWithResults?C.accent:C.border}`}} onClick={()=>setOnlyWithResults(v=>!v)} title="Hide event cards that don't have any saved results yet">{onlyWithResults?'✓ Only with results':'Only with results'}</button>}
         <button style={{...S.btn,...S.btnPrimary,fontSize:11,padding:'4px 10px'}} onClick={()=>{setReorderList(filtered.map(me=>me.eventId));setReorderDragIdx(null);setReorderDragOver(null);setShowReorderModal(true);}}>↕ Reorder events</button>
       </div>
       {meetDayCount > 1 && (

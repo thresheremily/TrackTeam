@@ -119,6 +119,35 @@ const TRACK_DISTANCES = {
   '4x100m':400,'4x200m':800,'4x400m':1600,'4x800m':3200,
 };
 const getDistance = (evt) => TRACK_DISTANCES[(evt||{}).name] || 0;
+// Built-in defaults for races whose start line isn't at the lap line. Override on the event itself.
+const LAP_STRUCTURE_DEFAULTS = {
+  outdoor: {
+    '1500m': { firstLap: 300, lapDist: 400 },
+    '3000m': { firstLap: 200, lapDist: 400 },
+    '5000m': { firstLap: 200, lapDist: 400 },
+    '3000m Steeplechase': { firstLap: 270, lapDist: 390 },
+    '2000m Steeplechase': { firstLap: 200, lapDist: 360 },
+  },
+  indoor: {
+    '1500m': { firstLap: 100, lapDist: 200 },
+  },
+};
+const getLapStructure = (evt, trackType) => {
+  if(!evt) return null;
+  const isIndoor = trackType === 'Indoor';
+  const trackDefault = isIndoor ? INDOOR_LAP : OUTDOOR_LAP;
+  const builtin = (LAP_STRUCTURE_DEFAULTS[isIndoor?'indoor':'outdoor']||{})[evt.name];
+  const override = isIndoor
+    ? { firstLap: parseFloat(evt.firstLapIndoor), lapDist: parseFloat(evt.lapDistanceIndoor) }
+    : { firstLap: parseFloat(evt.firstLapOutdoor), lapDist: parseFloat(evt.lapDistanceOutdoor) };
+  const lapDist = override.lapDist > 0 ? override.lapDist : (builtin ? builtin.lapDist : trackDefault);
+  const totalDist = getDistance(evt);
+  let firstLap;
+  if(override.firstLap > 0) firstLap = override.firstLap;
+  else if(builtin && builtin.firstLap > 0) firstLap = builtin.firstLap;
+  else firstLap = totalDist > 0 ? (totalDist % lapDist || lapDist) : lapDist;
+  return { lapDist, firstLap, totalDist };
+};
 const DEFAULT_MEET_ORDER = [
   {name:'4x800m',gender:'Girl'},{name:'4x800m',gender:'Boy'},
   {name:'100m Hurdles',gender:'Girl'},{name:'110m Hurdles',gender:'Boy'},
@@ -138,9 +167,30 @@ const DEFAULT_MEET_ORDER = [
   {name:'2000m Steeplechase',gender:'Girl'},{name:'3000m Steeplechase',gender:'Boy'},
   {name:'4x400m',gender:'Girl'},{name:'4x400m',gender:'Boy'},
 ];
-const getDefaultOrder = (evt) => {
-  const idx = DEFAULT_MEET_ORDER.findIndex(o=>o.name===evt.name&&o.gender===evt.gender);
+const getOrderIndex = (evt, entries) => {
+  const list = entries && entries.length ? entries : DEFAULT_MEET_ORDER;
+  const idx = list.findIndex(o=>o.name===(evt||{}).name&&o.gender===(evt||{}).gender);
   return idx>=0?idx:500;
+};
+const getSystemOrderEntries = (data) => {
+  const templates = (data||{}).eventOrderTemplates || [];
+  const def = templates.find(t=>t.isDefault) || templates[0];
+  return def && Array.isArray(def.entries) && def.entries.length ? def.entries : DEFAULT_MEET_ORDER;
+};
+const getMeetOrderEntries = (data, meet) => {
+  const templates = (data||{}).eventOrderTemplates || [];
+  if(meet && meet.eventOrderTemplateId) {
+    const t = templates.find(t=>t.id===meet.eventOrderTemplateId);
+    if(t && Array.isArray(t.entries) && t.entries.length) return t.entries;
+  }
+  return getSystemOrderEntries(data);
+};
+const getDefaultOrder = (evt, dataOrEntries, meet) => {
+  // back-compat: getDefaultOrder(evt) and getDefaultOrder(evt, entries) both work
+  let entries = null;
+  if(Array.isArray(dataOrEntries)) entries = dataOrEntries;
+  else if(dataOrEntries && typeof dataOrEntries === 'object' && 'eventOrderTemplates' in dataOrEntries) entries = meet ? getMeetOrderEntries(dataOrEntries, meet) : getSystemOrderEntries(dataOrEntries);
+  return getOrderIndex(evt, entries);
 };
 const getSortedMeetEventIds = (data, events, meetId) => {
   const meet = (data.meets||[]).find(m=>m.id===meetId);
@@ -1710,7 +1760,7 @@ function AttendancePage({ data, save, nav, season, activeAthletes }) {
     </div>
   );
 }
-function MeetFormModal({ editId, initial, meetTypes, onSave, onClose }) {
+function MeetFormModal({ editId, initial, meetTypes, eventOrderTemplates, onSave, onClose }) {
   const [f, setF] = useState({...initial});
   return (
     <Modal open={true} onClose={onClose} width={500}>
@@ -1740,6 +1790,15 @@ function MeetFormModal({ editId, initial, meetTypes, onSave, onClose }) {
             </select>
           </div>
         </div>
+        {(eventOrderTemplates||[]).length>0 && (
+          <div><label style={{fontSize:12,color:C.textSecondary}}>Event Order</label>
+            <select style={{...S.select,width:'100%'}} value={f.eventOrderTemplateId||''} onChange={e=>setF({...f,eventOrderTemplateId:e.target.value})}>
+              <option value="">Use default template</option>
+              {eventOrderTemplates.map(t=><option key={t.id} value={t.id}>{t.name}{t.isDefault?' (default)':''}</option>)}
+            </select>
+            <div style={{fontSize:10,color:C.textMuted,marginTop:3}}>Seeds the running order for this meet. You can still tweak per-meet with the Reorder button.</div>
+          </div>
+        )}
         <div style={{padding:'10px 12px',background:C.bg,borderRadius:6,border:`1px solid ${C.borderLight}`}}>
           <div style={{fontSize:12,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',marginBottom:8}}>Entry Restrictions</div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
@@ -1896,8 +1955,9 @@ function MeetsPage({ data, save, nav, events }) {
       {showAdd && <MeetFormModal
         key={openCount}
         editId={(editMeet||{}).id}
-        initial={editMeet ? {name:editMeet.name||'',startDate:(editMeet.startDate||editMeet.date||'').split('T')[0],endDate:(editMeet.endDate||'').split('T')[0],venue:editMeet.venue||'',city:editMeet.city||'',state:editMeet.state||'',trackType:editMeet.trackType||'Outdoor',timingSystem:editMeet.timingSystem||'FAT',meetTypeId:editMeet.meetTypeId||'',maxEntriesPerEvent:editMeet.maxEntriesPerEvent||'',maxEventsPerAthlete:editMeet.maxEventsPerAthlete||'',notes:editMeet.notes||''} : {name:'',startDate:'',endDate:'',venue:'',city:'',state:'',trackType:'Outdoor',timingSystem:'FAT',meetTypeId:'',maxEntriesPerEvent:'',maxEventsPerAthlete:'',notes:''}}
+        initial={editMeet ? {name:editMeet.name||'',startDate:(editMeet.startDate||editMeet.date||'').split('T')[0],endDate:(editMeet.endDate||'').split('T')[0],venue:editMeet.venue||'',city:editMeet.city||'',state:editMeet.state||'',trackType:editMeet.trackType||'Outdoor',timingSystem:editMeet.timingSystem||'FAT',meetTypeId:editMeet.meetTypeId||'',eventOrderTemplateId:editMeet.eventOrderTemplateId||'',maxEntriesPerEvent:editMeet.maxEntriesPerEvent||'',maxEventsPerAthlete:editMeet.maxEventsPerAthlete||'',notes:editMeet.notes||''} : {name:'',startDate:'',endDate:'',venue:'',city:'',state:'',trackType:'Outdoor',timingSystem:'FAT',meetTypeId:'',eventOrderTemplateId:'',maxEntriesPerEvent:'',maxEventsPerAthlete:'',notes:''}}
         meetTypes={meetTypes}
+        eventOrderTemplates={data.eventOrderTemplates||[]}
         onSave={(f)=>{
           if((editMeet||{}).id) { save({...data, meets:data.meets.map(m=>m.id===editMeet.id?{...m,...f}:m)}); }
           else { const meetEvents=events.filter(e=>e.trackType===f.trackType||e.trackType==='Both').map(e=>({eventId:e.id,entries:[]})); save({...data, meets:[...data.meets,{id:uid(),...f,events:meetEvents}]}); }
@@ -2067,8 +2127,8 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
     if(idxA >= 0 && idxB >= 0) return idxA - idxB;
     if(idxA >= 0) return -1;
     if(idxB >= 0) return 1;
-    const dA = getDefaultOrder(a.evt);
-    const dB = getDefaultOrder(b.evt);
+    const dA = getDefaultOrder(a.evt, data, meet);
+    const dB = getDefaultOrder(b.evt, data, meet);
     if(dA !== dB) return dA - dB;
     return a.evt.name.localeCompare(b.evt.name);
   });
@@ -2163,7 +2223,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
     const css = '<style>'+orient+'body{font-family:-apple-system,Helvetica,Arial,sans-serif;font-size:11px;padding:0;color:#111;margin:0}table{width:100%;border-collapse:collapse}th{text-align:left;font-size:9px;color:#555;text-transform:uppercase;letter-spacing:0.05em;border-bottom:2px solid #333;padding:4px 6px;white-space:nowrap}td{padding:3px 6px;border-bottom:1px solid #ddd;font-size:11px;vertical-align:top}.evt-hdr{background:#f0f0f0;font-weight:700;font-size:12px;padding:6px;border-bottom:2px solid #555;border-top:2px solid #555;margin-top:0}.evt-sub{font-weight:400;font-size:10px;color:#666;margin-left:8px}.relay-hdr td{background:#f8f8f8;font-weight:600;font-size:10px;color:#444;border-bottom:1px solid #bbb}.alt td{font-style:italic;color:#888;font-size:10px}.rl{border-bottom:1px solid #888;display:inline-block;min-width:70px} .rl-sm{border-bottom:1px solid #888;display:inline-block;min-width:35px}@media print{body{padding:0}}</style>';
     let body = '';
     if(isEvt) {
-      const sorted = [...meetEvents].sort((a,b)=>{const oa=meet.eventOrder||[];const ia=oa.indexOf(a.eventId);const ib=oa.indexOf(b.eventId);if(ia>=0&&ib>=0)return ia-ib;if(ia>=0)return -1;if(ib>=0)return 1;return getDefaultOrder(a.evt)-getDefaultOrder(b.evt);});
+      const sorted = [...meetEvents].sort((a,b)=>{const oa=meet.eventOrder||[];const ia=oa.indexOf(a.eventId);const ib=oa.indexOf(b.eventId);if(ia>=0&&ib>=0)return ia-ib;if(ia>=0)return -1;if(ib>=0)return 1;return getDefaultOrder(a.evt, data, meet)-getDefaultOrder(b.evt, data, meet);});
       body += '<table>';
       sorted.forEach(me=>{
         if(!me.entries.length) return;
@@ -3282,8 +3342,20 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
             );
           })}
         </div>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginTop:14}}>
-          <button style={{...S.btn,fontSize:11,padding:'6px 10px',background:'transparent',color:C.textMuted,border:`1px solid ${C.border}`}} onClick={()=>setReorderList(filtered.map(me=>me.eventId))}>Reset (filtered order)</button>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginTop:14,flexWrap:'wrap'}}>
+          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+            <button style={{...S.btn,fontSize:11,padding:'6px 10px',background:'transparent',color:C.textMuted,border:`1px solid ${C.border}`}} onClick={()=>setReorderList(filtered.map(me=>me.eventId))}>Reset (filtered order)</button>
+            <button style={{...S.btn,fontSize:11,padding:'6px 10px',background:'transparent',color:C.accent,border:`1px solid ${C.accent}`}} onClick={()=>{
+              const name = window.prompt('Save current order as a new template — name it:', `Order from ${meet.name||'this meet'}`);
+              if(!name) return;
+              const entries = reorderList.map(eid=>{const e=events.find(ev=>ev.id===eid); return e?{name:e.name, gender:e.gender}:null;}).filter(Boolean);
+              if(!entries.length) { alert('No events to save.'); return; }
+              const newTemplate = { id:uid(), name:name.trim(), isDefault:false, entries };
+              const templates = [...(data.eventOrderTemplates||[]), newTemplate];
+              save({...data, eventOrderTemplates:templates, meets:data.meets.map(m=>m.id===meetId?{...m, eventOrderTemplateId:newTemplate.id}:m)});
+              alert(`Saved as "${name.trim()}" and pinned to this meet. You can edit it under Settings → Event Order.`);
+            }}>Save as new template…</button>
+          </div>
           <div style={{display:'flex',gap:8}}>
             <button style={{...S.btn,...S.btnSecondary}} onClick={()=>setShowReorderModal(false)}>Cancel</button>
             <button style={{...S.btn,...S.btnPrimary}} onClick={()=>{saveEventOrder(reorderList);setShowReorderModal(false);}}>Save Order</button>
@@ -5839,7 +5911,7 @@ function EventsPage({ data, save, nav }) {
   const [sortDir, setSortDir] = useState('asc');
   const [showAdd, setShowAdd] = useState(false);
   const [editId, setEditId] = useState(null);
-  const [form, setForm] = useState({ name:'', eventType:'Track', entryType:'Individual', gender:'Boy', trackType:'Both', measurableType:'Time' });
+  const [form, setForm] = useState({ name:'', eventType:'Track', entryType:'Individual', gender:'Boy', trackType:'Both', measurableType:'Time', firstLapOutdoor:'', firstLapIndoor:'', lapDistanceOutdoor:'', lapDistanceIndoor:'' });
   const [delId, setDelId] = useState(null);
   const [expandedEvent, setExpandedEvent] = useState(null);
   const [showAddStandard, setShowAddStandard] = useState(null);
@@ -5879,14 +5951,22 @@ function EventsPage({ data, save, nav }) {
     if(av>bv) return sortDir==='asc'?1:-1;
     return 0;
   });
+  const _toNumStr = (v) => { const n = parseFloat(v); return (isFinite(n) && n>0) ? n+'' : ''; };
   const addEvent = () => {
     if(!form.name) return;
-    if(editId) { save({...data, events:(data.events||[]).map(e=>e.id===editId?{...e,...form}:e)}); setEditId(null); }
-    else { save({...data, events:[...(data.events||[]),{id:uid(),...form,qualifyingStandards:[],schoolRecords:[]}]}); }
-    setShowAdd(false); setForm({ name:'', eventType:'Track', entryType:'Individual', gender:'Boy', trackType:'Both', measurableType:'Time' });
+    const lapFields = {
+      firstLapOutdoor: _toNumStr(form.firstLapOutdoor)?parseFloat(form.firstLapOutdoor):null,
+      firstLapIndoor: _toNumStr(form.firstLapIndoor)?parseFloat(form.firstLapIndoor):null,
+      lapDistanceOutdoor: _toNumStr(form.lapDistanceOutdoor)?parseFloat(form.lapDistanceOutdoor):null,
+      lapDistanceIndoor: _toNumStr(form.lapDistanceIndoor)?parseFloat(form.lapDistanceIndoor):null,
+    };
+    const cleaned = { name:form.name, eventType:form.eventType, entryType:form.entryType, gender:form.gender, trackType:form.trackType, measurableType:form.measurableType, ...lapFields };
+    if(editId) { save({...data, events:(data.events||[]).map(e=>e.id===editId?{...e,...cleaned}:e)}); setEditId(null); }
+    else { save({...data, events:[...(data.events||[]),{id:uid(),...cleaned,qualifyingStandards:[],schoolRecords:[]}]}); }
+    setShowAdd(false); setForm({ name:'', eventType:'Track', entryType:'Individual', gender:'Boy', trackType:'Both', measurableType:'Time', firstLapOutdoor:'', firstLapIndoor:'', lapDistanceOutdoor:'', lapDistanceIndoor:'' });
   };
   const startEdit = (evt) => {
-    setForm({ name:evt.name, eventType:evt.eventType, entryType:evt.entryType, gender:evt.gender, trackType:evt.trackType, measurableType:evt.measurableType });
+    setForm({ name:evt.name, eventType:evt.eventType, entryType:evt.entryType, gender:evt.gender, trackType:evt.trackType, measurableType:evt.measurableType, firstLapOutdoor:(evt.firstLapOutdoor||'')+'', firstLapIndoor:(evt.firstLapIndoor||'')+'', lapDistanceOutdoor:(evt.lapDistanceOutdoor||'')+'', lapDistanceIndoor:(evt.lapDistanceIndoor||'')+'' });
     setEditId(evt.id); setShowAdd(true);
   };
   const deleteEvent = () => { save({...data, events:(data.events||[]).filter(e=>e.id!==delId)}); setDelId(null); };
@@ -5914,7 +5994,7 @@ function EventsPage({ data, save, nav }) {
   return (
     <div>
       <div style={{display:'flex',justifyContent:'flex-end',gap:6,marginBottom:12}}>
-        <button style={{...S.btn,...S.btnPrimary}} onClick={()=>{setForm({name:'',eventType:'Track',entryType:'Individual',gender:'Boy',trackType:'Both',measurableType:'Time'});setEditId(null);setShowAdd(true);}}>+ Add Event</button>
+        <button style={{...S.btn,...S.btnPrimary}} onClick={()=>{setForm({name:'',eventType:'Track',entryType:'Individual',gender:'Boy',trackType:'Both',measurableType:'Time',firstLapOutdoor:'',firstLapIndoor:'',lapDistanceOutdoor:'',lapDistanceIndoor:''});setEditId(null);setShowAdd(true);}}>+ Add Event</button>
       </div>
       <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
         <input style={{...S.input,maxWidth:180}} placeholder="Search..." value={search} onChange={e=>setSearch(e.target.value)} />
@@ -6014,6 +6094,29 @@ function EventsPage({ data, save, nav }) {
             <div><label style={{fontSize:12,color:C.textSecondary}}>Track Type</label><select style={{...S.select,width:'100%'}} value={form.trackType} onChange={e=>setForm({...form,trackType:e.target.value})}><option>Indoor</option><option>Outdoor</option><option>Both</option></select></div>
           </div>
           <div><label style={{fontSize:12,color:C.textSecondary}}>Measurable</label><select style={{...S.select,width:'100%'}} value={form.measurableType} onChange={e=>setForm({...form,measurableType:e.target.value})}><option>Time</option><option>Length</option><option>Height</option></select></div>
+          {form.eventType==='Track' && (
+            <div style={{border:`1px solid ${C.borderLight}`,borderRadius:6,padding:'10px 12px',background:C.bg}}>
+              <div style={{fontSize:11,color:C.textMuted,marginBottom:6}}>
+                <strong style={{color:C.textSecondary}}>Lap structure (optional).</strong> Leave blank for normal races. Set when the start line isn't at the lap line (e.g. <strong>1500m</strong> outdoor first lap is 300m; <strong>3000m Steeplechase</strong> uses 270m + 7 × 390m).
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                <div>
+                  <label style={{fontSize:10,color:C.textMuted,fontWeight:600,textTransform:'uppercase',letterSpacing:'0.04em'}}>Outdoor (400m track)</label>
+                  <div style={{display:'flex',gap:6,marginTop:4}}>
+                    <input style={{...S.input,fontSize:12,padding:'5px 8px'}} placeholder="First lap (m)" type="text" inputMode="numeric" value={form.firstLapOutdoor} onChange={e=>setForm({...form,firstLapOutdoor:e.target.value})} />
+                    <input style={{...S.input,fontSize:12,padding:'5px 8px'}} placeholder="Lap (m)" type="text" inputMode="numeric" value={form.lapDistanceOutdoor} onChange={e=>setForm({...form,lapDistanceOutdoor:e.target.value})} />
+                  </div>
+                </div>
+                <div>
+                  <label style={{fontSize:10,color:C.textMuted,fontWeight:600,textTransform:'uppercase',letterSpacing:'0.04em'}}>Indoor (200m track)</label>
+                  <div style={{display:'flex',gap:6,marginTop:4}}>
+                    <input style={{...S.input,fontSize:12,padding:'5px 8px'}} placeholder="First lap (m)" type="text" inputMode="numeric" value={form.firstLapIndoor} onChange={e=>setForm({...form,firstLapIndoor:e.target.value})} />
+                    <input style={{...S.input,fontSize:12,padding:'5px 8px'}} placeholder="Lap (m)" type="text" inputMode="numeric" value={form.lapDistanceIndoor} onChange={e=>setForm({...form,lapDistanceIndoor:e.target.value})} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
           <button style={{...S.btn,...S.btnPrimary}} onClick={addEvent}>{editId?'Save Changes':'Add Event'}</button>
         </div>
       </Modal>
@@ -6230,14 +6333,22 @@ function MultiSplitTimer({ data, save, nav, events, addResult, addResults, getAt
   },[msPresetEventId]);
   const timerRef = useRef(null);
   const evt = events.find(e=>e.id===eventId);
-  const lapDist = trackType==='Indoor'?INDOOR_LAP:OUTDOOR_LAP;
-  const totalDist = getDistance(evt);
-  const totalLaps = totalDist>0?Math.ceil(totalDist/lapDist):999;
-  const firstLapDist = totalDist>0 ? (totalDist % lapDist || lapDist) : lapDist;
+  const _ls = getLapStructure(evt, trackType) || { lapDist: (trackType==='Indoor'?INDOOR_LAP:OUTDOOR_LAP), firstLap: 0, totalDist: 0 };
+  const lapDist = _ls.lapDist;
+  const totalDist = _ls.totalDist;
+  const firstLapDist = _ls.firstLap || lapDist;
+  const totalLaps = totalDist>0 ? (1 + Math.max(0, Math.round((totalDist - firstLapDist) / lapDist))) : 999;
   const getLapDist = (lapNum) => lapNum===1 ? firstLapDist : lapDist;
   const getCumDist = (lapNum) => firstLapDist + Math.max(0, lapNum-1) * lapDist;
   const getExpectedCum = (goalMs, lapNum) => totalDist>0 ? goalMs * getCumDist(lapNum) / totalDist : goalMs * lapNum / totalLaps;
   const getExpectedSplit = (goalMs, lapNum) => totalDist>0 ? goalMs * getLapDist(lapNum) / totalDist : goalMs / totalLaps;
+  const normalizedPace = (lapTime, lapNum) => lapTime * lapDist / getLapDist(lapNum);
+  const lapStructureLabel = (()=>{
+    if(totalDist<=0 || totalLaps>=999) return '';
+    if(firstLapDist===lapDist) return `${totalLaps} × ${lapDist}m = ${totalDist}m`;
+    const rest = totalLaps - 1;
+    return `1 × ${firstLapDist}m + ${rest} × ${lapDist}m = ${totalDist}m`;
+  })();
   const isRelayEvt = (evt||{}).entryType==='Relay';
   const legsPerAthlete = isRelayEvt ? Math.ceil(totalLaps/athletes.length) : totalLaps;
   const COLORS = ['#2b6cb0','#c96a1f','#25763b','#c53030','#6b46c1','#b8860b'];
@@ -6309,6 +6420,10 @@ function MultiSplitTimer({ data, save, nav, events, addResult, addResults, getAt
             <div><label style={{fontSize:12,color:C.textSecondary}}>Track</label><select style={{...S.select,width:'100%'}} value={trackType} onChange={e=>setTrackType(e.target.value)}><option>Indoor</option><option>Outdoor</option></select></div>
             {meetId==='practice-custom'&&<div><label style={{fontSize:12,color:C.textSecondary}}>Practice Date</label><input style={{...S.input}} type="date" id="practiceDate" defaultValue={new Date().toISOString().split('T')[0]} /></div>}
           </div>
+          {evt && lapStructureLabel && <div style={{marginTop:10,padding:'6px 10px',background:C.surface2,borderLeft:`3px solid ${C.accent}`,borderRadius:'0 6px 6px 0',fontSize:11,color:C.textSecondary,display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+            <span><strong style={{color:C.text}}>Lap structure:</strong> {lapStructureLabel}</span>
+            <span style={{fontSize:10,color:C.textMuted}}>Edit on the event under Settings → Events if this is wrong.</span>
+          </div>}
           <div style={{marginTop:16}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
               <span style={{fontSize:14,fontWeight:600,color:C.textSecondary}}>Athletes</span>
@@ -6407,6 +6522,7 @@ function MultiSplitTimer({ data, save, nav, events, addResult, addResults, getAt
             const avgLapPace=pacePerMeter*lapDist;
             const remainingDist=totalDist-distCovered;
             const predictedFinish=lapsCompleted>0?at.laps[lapsCompleted-1].cumulative+pacePerMeter*remainingDist:0;
+            const hasVariableLaps = lapsCompleted>0 && at.laps.some((l,li)=>getLapDist(l.lap)!==lapDist);
             return (<>
               {lapsCompleted>0&&totalLaps<999&&<div style={{display:'flex',gap:12,flexWrap:'wrap',marginBottom:6,fontSize:11}}>
                 <span style={{color:C.textMuted}}>Avg {lapDist}m pace: <strong style={{color:C.text}}>{formatTime(Math.round(avgLapPace))}</strong></span>
@@ -6414,19 +6530,25 @@ function MultiSplitTimer({ data, save, nav, events, addResult, addResults, getAt
                 {hasTarget&&lapsRemaining>0&&<span style={{color:C.textMuted}}>Target: <strong>{formatTime(at.goalMs)}</strong></span>}
               </div>}
               <table style={{width:'100%',borderCollapse:'collapse'}}>
-                <thead><tr><th style={S.th}>Lap</th><th style={S.th}>Split</th><th style={S.th}></th><th style={S.th}>Cumulative</th>{hasTarget&&<th style={S.th}>Pace</th>}</tr></thead>
+                <thead><tr><th style={S.th}>Lap</th><th style={S.th}>Split</th><th style={S.th}>Pace /{lapDist}m</th><th style={S.th}></th><th style={S.th}>Cumulative</th>{hasTarget&&<th style={S.th}>vs Goal</th>}</tr></thead>
                 <tbody>{at.laps.map((l,li)=>{
-                  const prevSplit=li>0?at.laps[li-1].split:null;
-                  const splitDiff=prevSplit!==null?l.split-prevSplit:0;
-                  const isFaster=prevSplit!==null&&l.split<prevSplit;
-                  const isSlower=prevSplit!==null&&l.split>prevSplit;
-                  const paceDiff=hasTarget?l.cumulative-getExpectedCum(at.goalMs,l.lap):0;
+                  const myLapDist = getLapDist(l.lap);
+                  const myPace = normalizedPace(l.split, l.lap);
+                  const prevPace = li>0 ? normalizedPace(at.laps[li-1].split, at.laps[li-1].lap) : null;
+                  const paceDiffPrev = prevPace!==null ? myPace - prevPace : 0;
+                  const isFaster = prevPace!==null && myPace < prevPace;
+                  const isSlower = prevPace!==null && myPace > prevPace;
+                  const goalDiff = hasTarget ? l.cumulative - getExpectedCum(at.goalMs, l.lap) : 0;
                   return (<tr key={l.lap}>
-                    <td style={S.td}><span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',minWidth:28,padding:'2px 8px',borderRadius:20,fontSize:12,fontWeight:700,background:C.white,color:athleteColor,border:`2px solid ${athleteColor}`}}>{l.lap}</span></td>
+                    <td style={S.td}>
+                      <span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',minWidth:28,padding:'2px 8px',borderRadius:20,fontSize:12,fontWeight:700,background:C.white,color:athleteColor,border:`2px solid ${athleteColor}`}}>{l.lap}</span>
+                      {hasVariableLaps && myLapDist!==lapDist && <span style={{fontSize:9,color:C.textMuted,marginLeft:4}}>({myLapDist}m)</span>}
+                    </td>
                     <td style={S.td}>{formatTime(l.split)}</td>
-                    <td style={{...S.td,fontSize:10,fontWeight:600,color:isFaster?C.success:isSlower?C.danger:C.textMuted,padding:'4px 2px'}}>{prevSplit!==null?(isFaster?'▼':'▲')+' '+formatDiff(splitDiff):''}</td>
+                    <td style={{...S.td,fontWeight:600}}>{formatTime(Math.round(myPace))}</td>
+                    <td style={{...S.td,fontSize:10,fontWeight:600,color:isFaster?C.success:isSlower?C.danger:C.textMuted,padding:'4px 2px'}}>{prevPace!==null?(isFaster?'▼':'▲')+' '+formatDiff(Math.round(paceDiffPrev)):''}</td>
                     <td style={S.td}>{formatTime(l.cumulative)}</td>
-                    {hasTarget&&<td style={{...S.td,fontWeight:600,fontSize:12}}><span style={{color:paceDiff<=0?C.success:C.danger}}>{formatDiff(paceDiff)}</span></td>}
+                    {hasTarget&&<td style={{...S.td,fontWeight:600,fontSize:12}}><span style={{color:goalDiff<=0?C.success:C.danger}}>{formatDiff(goalDiff)}</span></td>}
                   </tr>);
                 })}</tbody>
               </table>
@@ -6752,16 +6874,48 @@ const getReportStdLabels = (data) => {
   });
   return labels;
 };
-const stdEnabled = (stdName, enabledMap) => {
-  if(!enabledMap) return true;
+const resolveStdLabel = (data, stdName) => {
   const sn = (stdName||'').trim().toLowerCase();
-  if(!sn) return true;
-  for(const [label,on] of Object.entries(enabledMap)) {
-    if((label||'').trim().toLowerCase()===sn) return !!on;
+  if(!sn) return null;
+  const types = (data||{}).qualifyingStandardTypes||[];
+  for(const t of types) {
+    const tn = (t.name||'').trim().toLowerCase();
+    if(!tn) continue;
+    if(tn===sn && (!t.subtypes || t.subtypes.length===0)) return t.name;
+    for(const s of (t.subtypes||[])) {
+      const sub = (s||'').trim().toLowerCase();
+      if(!sub) continue;
+      const dashed = (t.name+' - '+s).trim().toLowerCase();
+      const spaced = (t.name+' '+s).trim().toLowerCase();
+      if(sn===dashed || sn===spaced) return `${t.name} - ${s}`;
+    }
+    if(sn===tn && (!t.subtypes || t.subtypes.length===0)) return t.name;
+    if(sn.startsWith(tn+' ') || sn.startsWith(tn+'-')) {
+      for(const s of (t.subtypes||[])) {
+        const sub = (s||'').trim().toLowerCase();
+        if(!sub) continue;
+        if(sn.includes(sub)) return `${t.name} - ${s}`;
+      }
+      if(!t.subtypes || t.subtypes.length===0) return t.name;
+    }
+  }
+  return null;
+};
+const stdEnabled = (data, stdName, enabledMap) => {
+  if(!enabledMap) return true;
+  const keys = Object.keys(enabledMap);
+  if(keys.length===0) return true;
+  const label = resolveStdLabel(data, stdName);
+  if(label===null) return true;
+  if(enabledMap[label] === false) return false;
+  if(enabledMap[label] === true) return true;
+  const target = label.trim().toLowerCase();
+  for(const [k, v] of Object.entries(enabledMap)) {
+    if((k||'').trim().toLowerCase()===target) return v !== false;
   }
   return true;
 };
-const filterEnabledQuals = (quals, enabledMap) => (quals||[]).filter(q=>stdEnabled(q.name, enabledMap));
+const filterEnabledQuals = (data, quals, enabledMap) => (quals||[]).filter(q=>stdEnabled(data, q.name, enabledMap));
 const computeAthleteSeasonStats = (data, events, athleteId, startDate, endDate, enabledStdMap) => {
   const inRange = (d) => (!startDate || d>=startDate) && (!endDate || d<=endDate);
   const allRes = (data.results||[]).filter(r=>!r.isPractice&&inRange(r.date));
@@ -6818,7 +6972,7 @@ const computeAthleteSeasonStats = (data, events, athleteId, startDate, endDate, 
     sorted.forEach(r=>{
       if(r.place) { const p=parseInt(r.place); if(p>0 && (bestPlace===null||p<bestPlace)) bestPlace=p; }
     });
-    const qualBest = filterEnabledQuals(getAllQualifyingForResult(data, events, {...best}), enabledStdMap);
+    const qualBest = filterEnabledQuals(data, getAllQualifyingForResult(data, events, {...best}), enabledStdMap);
     qualBest.forEach(q=>{ const key=q.name||'Q'; qualByType[key]=(qualByType[key]||0)+1; });
     const fmt = (v)=> isField ? `${Math.floor(v/12)}'${(v%12).toFixed(1)}"` : formatTime(v);
     const improvement = isField ? (last.value-first.value) : (first.value-last.value);
@@ -6848,7 +7002,7 @@ const computeAthleteSeasonStats = (data, events, athleteId, startDate, endDate, 
       const isField = isFieldEvent(evt);
       const isRly = !!r.isRelay;
       const mark = isField ? fieldToStr(r.ft||0,r.inch||0,r.qtr||0) : formatTime(r.timeMs||0);
-      const quals = filterEnabledQuals(getAllQualifyingForResult(data, events, r), enabledStdMap);
+      const quals = filterEnabledQuals(data, getAllQualifyingForResult(data, events, r), enabledStdMap);
       return { evt, isRelay:isRly, mark, place:r.place||'', quals, date:r.date };
     }).filter(Boolean).sort((a,b)=>getDefaultOrder(a.evt)-getDefaultOrder(b.evt));
     return { meet, meetId:mid, date:meetDate, rows };
@@ -6897,7 +7051,7 @@ const computeTeamSeasonStats = (data, events, athleteIds, startDate, endDate, en
   });
   const qualifiersByStd = {};
   indiv.forEach(r=>{
-    const qs = filterEnabledQuals(getAllQualifyingForResult(data, events, r), enabledStdMap);
+    const qs = filterEnabledQuals(data, getAllQualifyingForResult(data, events, r), enabledStdMap);
     qs.forEach(q=>{
       const k = q.name||'Q';
       qualifiersByStd[k] = qualifiersByStd[k] || new Set();
@@ -6905,7 +7059,7 @@ const computeTeamSeasonStats = (data, events, athleteIds, startDate, endDate, en
     });
   });
   relays.forEach(r=>{
-    const qs = filterEnabledQuals(getAllQualifyingForResult(data, events, {...r,timeMs:r.timeMs}), enabledStdMap);
+    const qs = filterEnabledQuals(data, getAllQualifyingForResult(data, events, {...r,timeMs:r.timeMs}), enabledStdMap);
     qs.forEach(q=>{
       const k = q.name||'Q';
       qualifiersByStd[k] = qualifiersByStd[k] || new Set();
@@ -6968,15 +7122,19 @@ const buildSeasonReportHTML = (data, events, season, team, athletes, options, fe
   const end = options.endDate || (season||{}).endDate || '';
   const _teamPrimary = (((team||{}).colors||{}).primary) || '#c96a1f';
   const _teamSecondary = (((team||{}).colors||{}).secondary) || '#2b6cb0';
-  const primary = _teamSecondary;
-  const secondary = _teamPrimary;
+  const primary = _teamPrimary;
+  const secondary = _teamSecondary;
   const schoolLine = (team||{}).name || 'Team';
   const seasonLine = (season||{}).name || 'Season Report';
   const titleLine = `${schoolLine} — ${seasonLine}`;
   const subLine = `${start||'(beginning)'} → ${end||'(today)'}  ·  ${athletes.length} athlete${athletes.length!==1?'s':''}`;
   const css = `<style>
     @page{size:portrait;margin:0.45in}
-    body{font-family:'Inter','Helvetica Neue',-apple-system,Helvetica,Arial,sans-serif;color:#1a1f2b;margin:0;font-size:11px;line-height:1.45;background:#fff}
+    *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important}
+    html,body{background:#eef0f3}
+    body{font-family:'Inter','Helvetica Neue',-apple-system,Helvetica,Arial,sans-serif;color:#1a1f2b;margin:0;font-size:11px;line-height:1.45}
+    .page-wrap{max-width:7.5in;margin:24px auto;padding:0.45in;background:#fff;box-shadow:0 4px 16px rgba(0,0,0,0.08);box-sizing:border-box}
+    @media print{html,body{background:#fff}.page-wrap{max-width:none;margin:0;padding:0;box-shadow:none;background:transparent}}
     .report-head{position:relative;overflow:hidden;padding:18px 22px;margin:0 0 16px;border-radius:10px;background:${primary};color:#fff;box-shadow:0 2px 6px rgba(0,0,0,0.08);display:flex;align-items:center;gap:18px}
     .report-head .head-text{flex:1;min-width:0}
     .report-head .head-logo{flex:0 0 auto;width:96px;height:96px;background:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;padding:9px;box-sizing:border-box;box-shadow:0 2px 6px rgba(0,0,0,0.18)}
@@ -7100,7 +7258,7 @@ const buildSeasonReportHTML = (data, events, season, team, athletes, options, fe
         const isRelay = !!r.isRelay;
         const involvedAthletes = isRelay ? (r.relayAthletes||[]).filter(id=>subsetIds.has(id)) : (subsetIds.has(r.athleteId) ? [r.athleteId] : []);
         if(!involvedAthletes.length) return;
-        const quals = filterEnabledQuals(getAllQualifyingForResult(data, events, r), enabledStdMap);
+        const quals = filterEnabledQuals(data, getAllQualifyingForResult(data, events, r), enabledStdMap);
         if(!quals.length) return;
         const meetObj = r.meetId ? (data.meets||[]).find(m=>m.id===r.meetId) : null;
         quals.forEach(q => {
@@ -7291,7 +7449,7 @@ const buildSeasonReportHTML = (data, events, season, team, athletes, options, fe
       body += '</div>';
     });
   }
-  return `<!DOCTYPE html><html><head><title>${esc(titleLine)}</title>${css}</head><body>${body}</body></html>`;
+  return `<!DOCTYPE html><html><head><title>${esc(titleLine)}</title>${css}</head><body><div class="page-wrap">${body}</div></body></html>`;
 };
 const openSeasonReport = (data, events, season, team, athletes, options, feedbackByAth) => {
   const w = window.open('','_blank','width=1000,height=800');
@@ -8103,6 +8261,10 @@ function BulkStandardEntry({ data, save, events, stdTypes, combos }) {
 function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
   const [tab, setTab] = useState('seasons');
   const [saved, setSaved] = useState(false);
+  const [editTemplateId, setEditTemplateId] = useState(null);
+  const [templateDragIdx, setTemplateDragIdx] = useState(null);
+  const [templateDragOver, setTemplateDragOver] = useState(null);
+  const [templateAddSearch, setTemplateAddSearch] = useState('');
   const [stdSortCol, setStdSortCol] = useState('event');
   const [stdSortDir, setStdSortDir] = useState('asc');
   const toggleStdSort = (col) => { if(stdSortCol===col) setStdSortDir(d=>d==='asc'?'desc':'asc'); else { setStdSortCol(col); setStdSortDir('asc'); } };
@@ -8161,7 +8323,7 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
   return (
     <div>
       <div style={{display:'flex',gap:4,marginBottom:16,flexWrap:'wrap'}}>
-        {[['seasons','Seasons'],['branding','Branding'],['meetTypes','Meet Types'],['qualifying','Qualifying'],['records','Records'],['team','Team'],['data','Data']].map(([k,l])=>(
+        {[['seasons','Seasons'],['branding','Branding'],['meetTypes','Meet Types'],['eventOrder','Event Order'],['qualifying','Qualifying'],['records','Records'],['team','Team'],['data','Data']].map(([k,l])=>(
           <button key={k} style={S.pill(tab===k)} onClick={()=>setTab(k)}>{l}</button>
         ))}
       </div>
@@ -8291,7 +8453,137 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
         </Modal>
         <ConfirmModal open={!!delMTId} onClose={()=>setDelMTId(null)} onConfirm={deleteMT} message="Delete this meet type?" />
       </div>)}
-      
+
+      {tab==='eventOrder' && (()=>{
+        const templates = data.eventOrderTemplates || [];
+        const editTemplate = editTemplateId ? templates.find(t=>t.id===editTemplateId) : null;
+        const saveTemplates = (next) => save({...data, eventOrderTemplates:next});
+        const seedFromDefault = () => {
+          const t = { id:uid(), name:'Standard', isDefault:true, entries:DEFAULT_MEET_ORDER.map(e=>({...e})) };
+          saveTemplates([t]);
+        };
+        const addTemplate = () => {
+          const base = (templates.find(t=>t.isDefault)||templates[0]||{entries:DEFAULT_MEET_ORDER.map(e=>({...e}))}).entries;
+          const t = { id:uid(), name:'New template', isDefault:templates.length===0, entries:(base||[]).map(e=>({...e})) };
+          saveTemplates([...templates, t]);
+          setEditTemplateId(t.id);
+        };
+        const renameTemplate = (id, name) => saveTemplates(templates.map(t=>t.id===id?{...t,name}:t));
+        const setDefaultTemplate = (id) => saveTemplates(templates.map(t=>({...t, isDefault:t.id===id})));
+        const duplicateTemplate = (id) => {
+          const src = templates.find(t=>t.id===id);
+          if(!src) return;
+          const copy = { id:uid(), name:`${src.name} copy`, isDefault:false, entries:(src.entries||[]).map(e=>({...e})) };
+          saveTemplates([...templates, copy]);
+        };
+        const deleteTemplate = (id) => {
+          if(!window.confirm('Delete this template? Meets using it will fall back to the default.')) return;
+          const next = templates.filter(t=>t.id!==id);
+          if(!next.some(t=>t.isDefault) && next[0]) next[0].isDefault = true;
+          saveTemplates(next);
+          if(editTemplateId===id) setEditTemplateId(null);
+        };
+        const allEntries = (data.events||[]).map(e=>({name:e.name,gender:e.gender}));
+        const uniqEntries = (()=>{const seen=new Set();const out=[];allEntries.forEach(e=>{const k=`${e.name}||${e.gender}`;if(!seen.has(k)){seen.add(k);out.push(e);}});return out;})();
+        const editEntries = editTemplate ? (editTemplate.entries||[]) : [];
+        const editKeys = new Set(editEntries.map(e=>`${e.name}||${e.gender}`));
+        const candidates = uniqEntries.filter(e=>!editKeys.has(`${e.name}||${e.gender}`))
+          .filter(e=>!templateAddSearch||(`${e.name} ${e.gender}`).toLowerCase().includes(templateAddSearch.toLowerCase()))
+          .sort((a,b)=>a.name.localeCompare(b.name)||a.gender.localeCompare(b.gender));
+        const updateEntries = (next) => saveTemplates(templates.map(t=>t.id===editTemplateId?{...t,entries:next}:t));
+        const moveEntry = (from, to) => {
+          if(from===to) return;
+          const next = [...editEntries];
+          const [m] = next.splice(from,1);
+          next.splice(to,0,m);
+          updateEntries(next);
+        };
+        const addEntry = (entry) => { updateEntries([...editEntries, entry]); setTemplateAddSearch(''); };
+        const removeEntry = (idx) => updateEntries(editEntries.filter((_,i)=>i!==idx));
+        const labelOf = (e) => `${e.name} - ${e.gender==='Boy'?'Boys':e.gender==='Girl'?'Girls':e.gender||'Mixed'}`;
+        if(templates.length === 0) {
+          return (<div>
+            <h2 style={S.h2}>Event Order Templates</h2>
+            <p style={{fontSize:12,color:C.textMuted,marginBottom:12}}>Save your usual running order so every new meet starts in the right sequence. You can keep several templates for different competition formats and pick one when you create a meet.</p>
+            <div style={{...S.card,padding:24,textAlign:'center'}}>
+              <p style={{margin:'0 0 12px',fontSize:13,color:C.textSecondary}}>No templates yet. Start with one based on the built-in standard order — you can rename and edit from there.</p>
+              <button style={{...S.btn,...S.btnPrimary}} onClick={seedFromDefault}>Create starter template</button>
+            </div>
+          </div>);
+        }
+        return (<div>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+            <h2 style={{...S.h2,margin:0}}>Event Order Templates</h2>
+            <button style={{...S.btn,...S.btnPrimary}} onClick={addTemplate}>+ New template</button>
+          </div>
+          <p style={{fontSize:12,color:C.textMuted,marginBottom:12}}>Templates store an ordered list of <em>event name + gender</em>. Mark one as default — it seeds the order for every new meet. Templates are portable: if you ever delete and recreate an event, the order survives.</p>
+          {templates.map(t=>(
+            <div key={t.id} style={{...S.card,marginBottom:8,padding:'10px 12px'}}>
+              <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+                <input style={{...S.input,flex:1,minWidth:160,fontSize:14,fontWeight:600}} value={t.name} onChange={e=>renameTemplate(t.id,e.target.value)} />
+                {t.isDefault
+                  ? <span style={{fontSize:10,fontWeight:700,padding:'3px 8px',borderRadius:8,background:C.successMuted,color:C.success,border:`1px solid ${C.success}`,textTransform:'uppercase',letterSpacing:'0.05em'}}>Default</span>
+                  : <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'4px 10px'}} onClick={()=>setDefaultTemplate(t.id)}>Set default</button>
+                }
+                <span style={{fontSize:11,color:C.textMuted}}>{(t.entries||[]).length} entries</span>
+                <button style={{...S.btn,...S.btnPrimary,fontSize:11,padding:'4px 10px'}} onClick={()=>setEditTemplateId(t.id)}>{editTemplateId===t.id?'Editing…':'Edit order'}</button>
+                <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'4px 10px'}} onClick={()=>duplicateTemplate(t.id)}>Duplicate</button>
+                {templates.length>1 && <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:13}} onClick={()=>deleteTemplate(t.id)} title="Delete">✕</button>}
+              </div>
+              {editTemplateId===t.id && (
+                <div style={{marginTop:10,borderTop:`1px dashed ${C.borderLight}`,paddingTop:10}}>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 280px',gap:14,alignItems:'start'}}>
+                    <div>
+                      <div style={{fontSize:10,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}}>Running order ({editEntries.length})</div>
+                      <div style={{maxHeight:'50vh',overflowY:'auto',border:`1px solid ${C.borderLight}`,borderRadius:6}}>
+                        {editEntries.length===0 && <div style={{padding:14,textAlign:'center',color:C.textMuted,fontSize:12}}>Empty. Add events from the right panel.</div>}
+                        {editEntries.map((entry,idx)=>{
+                          const isOver = templateDragOver===idx && templateDragIdx!==idx && templateDragIdx!==null;
+                          const isDragging = templateDragIdx===idx;
+                          return (<div key={idx}
+                            draggable
+                            onDragStart={e=>{setTemplateDragIdx(idx);try{e.dataTransfer.effectAllowed='move';}catch(_){}}}
+                            onDragOver={e=>{e.preventDefault();if(templateDragOver!==idx)setTemplateDragOver(idx);}}
+                            onDragLeave={()=>{if(templateDragOver===idx)setTemplateDragOver(null);}}
+                            onDrop={e=>{e.preventDefault();if(templateDragIdx===null||templateDragIdx===idx){setTemplateDragIdx(null);setTemplateDragOver(null);return;}moveEntry(templateDragIdx,idx);setTemplateDragIdx(null);setTemplateDragOver(null);}}
+                            onDragEnd={()=>{setTemplateDragIdx(null);setTemplateDragOver(null);}}
+                            style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',borderBottom:`1px solid ${C.borderLight}`,background:isDragging?C.surface2:(isOver?C.accentMuted:C.surface),borderTop:isOver?`2px solid ${C.accent}`:'2px solid transparent',cursor:'grab',userSelect:'none'}}>
+                            <span style={{fontSize:14,color:C.textMuted,minWidth:14,textAlign:'center',cursor:'grab'}}>⋮⋮</span>
+                            <span style={{fontSize:11,color:C.textMuted,minWidth:22,textAlign:'right'}}>{idx+1}.</span>
+                            <span style={{flex:1,fontSize:13,fontWeight:500}}>{labelOf(entry)}</span>
+                            <div style={{display:'flex',gap:2}}>
+                              <button style={{background:'none',border:`1px solid ${C.borderLight}`,borderRadius:4,padding:'3px 7px',cursor:idx===0?'default':'pointer',opacity:idx===0?0.3:1,fontSize:11}} disabled={idx===0} title="Move up" onClick={()=>moveEntry(idx,idx-1)}>↑</button>
+                              <button style={{background:'none',border:`1px solid ${C.borderLight}`,borderRadius:4,padding:'3px 7px',cursor:idx===editEntries.length-1?'default':'pointer',opacity:idx===editEntries.length-1?0.3:1,fontSize:11}} disabled={idx===editEntries.length-1} title="Move down" onClick={()=>moveEntry(idx,idx+1)}>↓</button>
+                              <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:13,padding:'0 4px'}} title="Remove" onClick={()=>removeEntry(idx)}>✕</button>
+                            </div>
+                          </div>);
+                        })}
+                      </div>
+                      <div style={{display:'flex',justifyContent:'flex-end',gap:6,marginTop:8}}>
+                        <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'4px 10px'}} onClick={()=>setEditTemplateId(null)}>Done</button>
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{fontSize:10,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}}>Add event</div>
+                      <input style={{...S.input,fontSize:12,padding:'5px 8px',marginBottom:6}} placeholder="Filter…" value={templateAddSearch} onChange={e=>setTemplateAddSearch(e.target.value)} />
+                      <div style={{maxHeight:'45vh',overflowY:'auto',border:`1px solid ${C.borderLight}`,borderRadius:6}}>
+                        {candidates.length===0 && <div style={{padding:10,textAlign:'center',color:C.textMuted,fontSize:11}}>{uniqEntries.length===0?'No events defined yet.':'Every event is already in the template.'}</div>}
+                        {candidates.map((entry,i)=>(
+                          <button key={`${entry.name}-${entry.gender}-${i}`} style={{display:'block',width:'100%',textAlign:'left',background:C.surface,border:'none',borderBottom:`1px solid ${C.borderLight}`,padding:'6px 10px',cursor:'pointer',fontSize:12}} onClick={()=>addEntry({name:entry.name,gender:entry.gender})}>
+                            <span style={{fontWeight:600}}>{entry.name}</span> <span style={{color:C.textMuted}}>· {entry.gender==='Boy'?'Boys':entry.gender==='Girl'?'Girls':entry.gender||'Mixed'}</span>
+                            <span style={{float:'right',color:C.accent,fontSize:11,fontWeight:700}}>+ Add</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>);
+      })()}
+
       {tab==='qualifying' && (()=>{
         const stdTypes = data.qualifyingStandardTypes||[];
         const allCombos = [];

@@ -1996,7 +1996,8 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
   const [reorderDragIdx, setReorderDragIdx] = useState(null);
   const [reorderDragOver, setReorderDragOver] = useState(null);
   const [selectedForTimer, setSelectedForTimer] = useState({});
-  const [meetTab, setMeetTab] = useState('events');
+  const [meetTab, setMeetTab] = useState('entries');
+  const [meetSubTab, setMeetSubTab] = useState('event');
   const [showManageEvents, setShowManageEvents] = useState(false);
   const [newEventForm, setNewEventForm] = useState({ name:'', gender:'Boy', eventType:'Track', entryType:'Individual', measurableType:'Time' });
   const [resultsEntryEvent, setResultsEntryEvent] = useState(null);
@@ -2013,7 +2014,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
   const [resSort, setResSort] = useState('name');
   const [resSortDir, setResSortDir] = useState('asc');
   const [editResultId, setEditResultId] = useState(null);
-  const [editResultForm, setEditResultForm] = useState({min:'',sec:'',ft:'',inch:'',qtr:''});
+  const [editResultForm, setEditResultForm] = useState({min:'',sec:'',ft:'',inch:'',qtr:'',place:''});
   const [splitsOpen, setSplitsOpen] = useState({});
   const [showRawMeetRows, setShowRawMeetRows] = useState(false);
   const saveEditResult = () => {
@@ -2027,6 +2028,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
     } else {
       updates = {timeMs:parseTimeToMs(editResultForm.min, editResultForm.sec), verified:true};
     }
+    if(editResultForm.place !== undefined) updates.place = editResultForm.place;
     save({...data, results:(data.results||[]).map(x=>x.id===editResultId?{...x,...updates}:x)});
     setEditResultId(null);
   };
@@ -2489,12 +2491,65 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
           {meet.maxEventsPerAthlete&&<span style={{fontSize:11,fontWeight:600,color:C.accent,padding:'3px 10px',borderRadius:10,background:C.accentMuted,border:`1px solid ${C.accent}`}}>Max {meet.maxEventsPerAthlete} events per athlete</span>}
         </div>
       )}
-      <div style={{display:'flex',gap:0,marginBottom:12,borderBottom:`2px solid ${C.border}`,alignItems:'center'}}>
-        {['events','athletes','results'].map(t=>(
-          <button key={t} style={{padding:'10px 20px',fontSize:13,fontWeight:600,border:'none',borderBottom:meetTab===t?`3px solid ${C.accent}`:'3px solid transparent',background:'none',color:meetTab===t?C.accent:C.textMuted,cursor:'pointer',textTransform:'uppercase',letterSpacing:'0.04em'}} onClick={()=>setMeetTab(t)}>{t==='events'?'By Event':t==='athletes'?'By Athlete':'Results'}</button>
+      {(()=>{
+        const allMeetResults = (data.results||[]).filter(r=>r.meetId===meetId);
+        const indivResults = allMeetResults.filter(r=>!r.isRelay&&!r.isRelaySplit);
+        const relayResults = allMeetResults.filter(r=>r.isRelay);
+        const athletesEntered = new Set();
+        let totalEntries = 0;
+        let cardsWithEntries = 0;
+        meetEvents.forEach(me => {
+          if((me.entries||[]).length > 0) cardsWithEntries++;
+          totalEntries += (me.entries||[]).length;
+          (me.entries||[]).forEach(en => {
+            if(en.athleteId) athletesEntered.add(en.athleteId);
+            (en.athletes||[]).forEach(a => a && a.athleteId && athletesEntered.add(a.athleteId));
+          });
+        });
+        const limitIssues = (athletesOverLimit||[]).length + (eventsOverLimit||[]).length;
+        const eventResultsByMek = new Set();
+        [...indivResults, ...relayResults].forEach(r => { eventResultsByMek.add(`${r.eventId}|${normalizeRound(r.round)}`); });
+        const pending = meetEvents.filter(me => (me.entries||[]).length > 0 && !eventResultsByMek.has(`${me.eventId}|${normalizeRound(me.round)}`)).length;
+        const prCount = indivResults.filter(r => {
+          if(!r.athleteId) return false;
+          const evt = events.find(e=>e.id===r.eventId); if(!evt) return false;
+          const allForAth = (data.results||[]).filter(rs => rs.athleteId===r.athleteId && rs.eventId===r.eventId && !rs.isRelay && !rs.isRelaySplit);
+          if(isFieldEvent(evt)) {
+            const myVal = (r.ft||0)*12+(r.inch||0)+(r.qtr||0);
+            return !allForAth.some(rs => rs.id!==r.id && (rs.date||'')<=(r.date||'') && ((rs.ft||0)*12+(rs.inch||0)+(rs.qtr||0)) > myVal);
+          }
+          if(!r.timeMs) return false;
+          return !allForAth.some(rs => rs.id!==r.id && (rs.date||'')<=(r.date||'') && rs.timeMs && rs.timeMs < r.timeMs);
+        }).length;
+        const qualsHit = [...indivResults, ...relayResults].filter(r => (getAllQualifyingForResult(data, events, r)||[]).length > 0).length;
+        const isEntriesTab = meetTab === 'entries';
+        const tileColor = isEntriesTab ? '#2b6cb0' : C.accent;
+        const tiles = isEntriesTab
+          ? [{v:athletesEntered.size,l:'Athletes'},{v:cardsWithEntries,l:'Events'},{v:totalEntries,l:'Entries'},{v:limitIssues,l:'Limit issues',dim:limitIssues===0}]
+          : [{v:indivResults.length+relayResults.length,l:'Results'},{v:prCount,l:'PRs'},{v:qualsHit,l:'Quals hit'},{v:pending,l:'Pending',dim:pending===0}];
+        return (
+          <div style={{display:'flex',gap:6,marginBottom:10,flexWrap:'wrap'}}>
+            {tiles.map((t,i)=>(
+              <div key={i} style={{flex:1,minWidth:96,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',textAlign:'center',background:C.surface,opacity:t.dim?0.55:1}}>
+                <div style={{fontSize:20,fontWeight:800,color:tileColor,lineHeight:1.05,fontVariantNumeric:'tabular-nums'}}>{t.v}</div>
+                <div style={{fontSize:9,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.06em',fontWeight:700,marginTop:2}}>{t.l}</div>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+      <div style={{display:'flex',gap:0,marginBottom:0,borderBottom:`2px solid ${C.border}`,alignItems:'center'}}>
+        {[['entries','Entries'],['results','Results']].map(([t,label])=>(
+          <button key={t} style={{padding:'10px 24px',fontSize:14,fontWeight:700,border:'none',borderBottom:meetTab===t?`3px solid ${C.accent}`:'3px solid transparent',background:'none',color:meetTab===t?C.accent:C.textMuted,cursor:'pointer',textTransform:'uppercase',letterSpacing:'0.05em'}} onClick={()=>setMeetTab(t)}>{label}</button>
         ))}
         <button style={{marginLeft:'auto',background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 14px',fontSize:12,fontWeight:600,color:C.textSecondary,cursor:'pointer'}} onClick={()=>setShowManageEvents(true)}>Manage Events</button>
-        <button style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 14px',fontSize:12,fontWeight:600,color:C.textSecondary,cursor:'pointer'}} onClick={()=>printMeet(meetTab)}>Print</button>
+        <button style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 14px',fontSize:12,fontWeight:600,color:C.textSecondary,cursor:'pointer'}} onClick={()=>printMeet(meetTab==='entries'?(meetSubTab==='event'?'events':'athletes'):'results')}>Print</button>
+      </div>
+      <div style={{display:'flex',gap:6,marginBottom:12,marginTop:10,flexWrap:'wrap',alignItems:'center'}}>
+        {[['event','By Event'],['athlete','By Athlete']].map(([k,label])=>{
+          const on = meetSubTab===k;
+          return (<button key={k} style={{padding:'6px 14px',fontSize:11,fontWeight:700,color:on?'#fff':C.textMuted,background:on?(meetTab==='results'?C.accent:'#2b6cb0'):C.surface2,border:`1px solid ${on?(meetTab==='results'?C.accent:'#2b6cb0'):C.border}`,borderRadius:18,cursor:'pointer',textTransform:'uppercase',letterSpacing:'0.04em'}} onClick={()=>setMeetSubTab(k)}>{label}</button>);
+        })}
       </div>
       {(meet.maxEventsPerAthlete||meet.maxEntriesPerEvent||meet.maxRelayEntries)&&(athletesOverLimit.length>0||eventsOverLimit.length>0)&&(
         <div style={{padding:'10px 14px',marginBottom:12,borderRadius:8,background:C.dangerMuted,border:`1px solid ${C.danger}`,fontSize:12}}>
@@ -2503,7 +2558,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
           {eventsOverLimit.length>0&&<div style={{color:C.danger}}>Over limit: {eventsOverLimit.map(id=>{const e=events.find(ev=>ev.id===id);const mx=getMaxForEvent(id);return e?`${getEventLabel(e)} (${eventEntryCounts[id]}/${mx})`:'';}).filter(Boolean).join(', ')}</div>}
         </div>
       )}
-      {meetTab==='events' && (<>
+      {meetSubTab==='event' && (meetTab==='entries' || meetTab==='results') && (<>
       <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap'}}>
         <input style={{...S.input,maxWidth:200}} placeholder="Search events..." value={filter} onChange={e=>setFilter(e.target.value)} />
         <select style={S.select} value={genderFilter} onChange={e=>setGenderFilter(e.target.value)}>
@@ -2599,19 +2654,21 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                 <span style={{fontWeight:700,fontSize:15}}>{getEventLabel(me.evt)}</span>
                 {(()=>{const r=normalizeRound(me.round); const existingRounds=meetEvents.filter(x=>x.eventId===me.eventId).map(x=>normalizeRound(x.round)); const showBadge=r!=='Open'||existingRounds.length>1; if(!showBadge) return null; const clr=ROUND_COLOR[r]||C.textMuted; return <span style={{fontSize:10,fontWeight:700,padding:'2px 9px',borderRadius:10,background:r==='Final'?clr:'transparent',color:r==='Final'?'#fff':clr,border:`1px solid ${clr}`,textTransform:'uppercase',letterSpacing:'0.05em'}}>{r}</span>;})()}
                 <span style={{fontSize:10,color:C.textMuted}}>{me.evt.eventType} - {me.evt.entryType}</span>
-                {meetDayCount > 1 && (
+                {meetTab==='entries' && meetDayCount > 1 && (
                   <select value={me.day} onChange={e=>setEventDay(me.eventId, parseInt(e.target.value), me.round)} style={{fontSize:10,fontWeight:600,padding:'2px 4px',borderRadius:10,border:`1px solid ${C.accent}`,background:C.accentMuted,color:C.accent,cursor:'pointer'}}>
                     {Array.from({length:meetDayCount},(_,i)=>i+1).map(d=><option key={d} value={d}>Day {d}</option>)}
                   </select>
                 )}
                 {me.entries.length>0&&(()=>{const mx=getMaxForEvent(me.eventId);const over=mx>0&&me.entries.length>mx;return <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,fontWeight:700,background:over?C.dangerMuted:C.surface2,color:over?C.danger:C.textSecondary,border:over?`1px solid ${C.danger}`:'none'}}>{me.entries.length}{mx>0?`/${mx}`:''}{over?' ⚠':''}</span>;})()}
-                {(()=>{const existingRounds=new Set(meetEvents.filter(x=>x.eventId===me.eventId).map(x=>normalizeRound(x.round)));const missing=ROUND_LABELS.filter(r=>!existingRounds.has(r));if(!missing.length) return null;return <select defaultValue="" onChange={e=>{if(e.target.value){addRoundCard(me.eventId, e.target.value);e.target.value='';}}} style={{fontSize:10,fontWeight:600,padding:'2px 4px',borderRadius:10,border:`1px dashed ${C.textMuted}`,background:'transparent',color:C.textSecondary,cursor:'pointer'}}><option value="">+ Round…</option>{missing.map(r=><option key={r} value={r}>{r}</option>)}</select>;})()}
-                {(()=>{const r=normalizeRound(me.round);if(r==='Open')return null;return <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:11,padding:'2px 6px'}} onClick={()=>removeRoundCard(me.eventId, me.round)} title={`Remove ${r} card for this event`}>✕ {r}</button>;})()}
+                {meetTab==='entries' && (()=>{const existingRounds=new Set(meetEvents.filter(x=>x.eventId===me.eventId).map(x=>normalizeRound(x.round)));const missing=ROUND_LABELS.filter(r=>!existingRounds.has(r));if(!missing.length) return null;return <select defaultValue="" onChange={e=>{if(e.target.value){addRoundCard(me.eventId, e.target.value);e.target.value='';}}} style={{fontSize:10,fontWeight:600,padding:'2px 4px',borderRadius:10,border:`1px dashed ${C.textMuted}`,background:'transparent',color:C.textSecondary,cursor:'pointer'}}><option value="">+ Round…</option>{missing.map(r=><option key={r} value={r}>{r}</option>)}</select>;})()}
+                {meetTab==='entries' && (()=>{const r=normalizeRound(me.round);if(r==='Open')return null;return <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:11,padding:'2px 6px'}} onClick={()=>removeRoundCard(me.eventId, me.round)} title={`Remove ${r} card for this event`}>✕ {r}</button>;})()}
               </div>
               <div style={{display:'flex',gap:6}}>
-                <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'6px 14px'}} onClick={()=>{setEditEntryIdx(null);setShowEntryModal({eventId:me.eventId,round:me.round});}}>+ Entry</button>
-                {hasEntries && <button style={{...S.btn,...S.btnPrimary,fontSize:12,padding:'6px 14px'}} onClick={()=>goToRecord(me)}>Record</button>}
-                {hasEntries && (()=>{const mek=`${me.eventId}|${normalizeRound(me.round)}`;const on=resultsEntryEvent===mek;return <button style={{...S.btn,fontSize:12,padding:'6px 14px',background:on?C.accent+'20':C.surface2,color:on?C.accent:C.textSecondary,border:`1px solid ${on?C.accent:C.border}`}} onClick={()=>{if(on){setResultsEntryEvent(null);setResultsEntryData({});}else openResultsEntry(me);}}>Results</button>;})()}
+                {meetTab==='entries' && <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'6px 14px'}} onClick={()=>{setEditEntryIdx(null);setShowEntryModal({eventId:me.eventId,round:me.round});}}>+ Entry</button>}
+                {meetTab==='entries' && hasEntries && <button style={{...S.btn,...S.btnPrimary,fontSize:12,padding:'6px 14px'}} onClick={()=>goToRecord(me)}>Record</button>}
+                {meetTab==='entries' && hasEntries && (()=>{const mek=`${me.eventId}|${normalizeRound(me.round)}`;const on=resultsEntryEvent===mek;return <button style={{...S.btn,fontSize:12,padding:'6px 14px',background:on?C.accent+'20':C.surface2,color:on?C.accent:C.textSecondary,border:`1px solid ${on?C.accent:C.border}`}} onClick={()=>{if(on){setResultsEntryEvent(null);setResultsEntryData({});}else openResultsEntry(me);}}>Results</button>;})()}
+                {meetTab==='results' && hasEntries && (()=>{const mek=`${me.eventId}|${normalizeRound(me.round)}`;const on=resultsEntryEvent===mek;return <button style={{...S.btn,...S.btnPrimary,fontSize:12,padding:'6px 14px'}} onClick={()=>{if(on){setResultsEntryEvent(null);setResultsEntryData({});}else openResultsEntry(me);}}>{on?'Close':'Edit Results'}</button>;})()}
+                {meetTab==='results' && !hasEntries && <span style={{fontSize:11,color:C.textMuted,padding:'6px 10px',fontStyle:'italic'}}>No entries on this card</span>}
               </div>
             </div>
             {(()=>{
@@ -2803,7 +2860,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
       })()}
       {!filtered.length && <div style={{...S.card,textAlign:'center',padding:20,color:C.textMuted}}>No events match your filters.</div>}
       </>)}
-      {meetTab==='athletes' && (()=>{
+      {meetTab==='entries' && meetSubTab==='athlete' && (()=>{
         const notParticipating = meet.notParticipating||[];
         const athleteEntryMap = {};
         meetEvents.forEach(me=>{
@@ -2904,7 +2961,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
           })}
         </div>);
       })()}
-      {meetTab==='results' && (()=>{
+      {meetTab==='results' && meetSubTab==='athlete' && (()=>{
         const allMeetResults = (data.results||[]).filter(r=>r.meetId===meetId);
         const meetResults = allMeetResults.filter(r=>!r.isRelay&&!r.isRelaySplit);
         const _relayRaw = allMeetResults.filter(r=>r.isRelay);
@@ -3195,11 +3252,13 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                         <tr key={r.id}>
                           <td style={{...S.td,padding:'4px 6px',fontSize:12}}>
                             {getEventLabel(evt)}
+                            {(()=>{const rr=normalizeRound(r.round);if(rr==='Open')return null;const clr=ROUND_COLOR[rr]||C.textMuted;return <span style={{fontSize:9,fontWeight:700,padding:'1px 7px',borderRadius:8,background:rr==='Final'?clr:'transparent',color:rr==='Final'?'#fff':clr,border:`1px solid ${clr}`,textTransform:'uppercase',letterSpacing:'0.05em',marginLeft:6}}>{rr}</span>;})()}
                             {r.isRelaySplit&&<span style={{fontSize:9,color:'#6b46c1',fontWeight:600,marginLeft:4}}>{r.relayLeg?`Leg ${r.relayLeg} split`:'Relay'}</span>}
                             {Array.isArray(r.splits)&&r.splits.length>=2&&<button style={{marginLeft:6,background:'none',border:'none',color:C.accent,cursor:'pointer',fontSize:10,fontWeight:600,padding:0}} onClick={()=>setSplitsOpen(p=>({...p,[r.id]:!p[r.id]}))} title="Show lap splits">{splitsOpen[r.id]?'▾':'▸'} splits</button>}
                           </td>
                           <td style={{...S.td,padding:'4px 6px',fontWeight:600,fontSize:13}}>
                             {valStr}
+                            {r.place&&<span style={{fontSize:10,fontWeight:700,color:C.accent,marginLeft:8,padding:'1px 7px',borderRadius:8,background:C.accentMuted,border:`1px solid ${C.accent}`}}>{r.place}{r.place==='1'?'st':r.place==='2'?'nd':r.place==='3'?'rd':'th'}</span>}
                             {relayComposite&&<span style={{fontSize:10,color:C.textMuted,fontWeight:400,marginLeft:6}}>({formatTime(relayComposite.timeMs)} total)</span>}
                           </td>
                           <td style={{...S.td,padding:'4px 6px'}}>
@@ -3215,7 +3274,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                             {!r._fromComposite&&<div style={{display:'flex',gap:3}}>
                               {!r.verified&&<button style={{...S.btn,...S.btnSecondary,fontSize:9,padding:'2px 6px'}} onClick={()=>verifyResult(r.id)} title="Mark as verified">✓</button>}
                               {r.verified&&<button style={{...S.btn,fontSize:9,padding:'2px 6px',background:'rgba(43,108,176,0.1)',color:'#2b6cb0',border:'1px solid #2b6cb0'}} onClick={()=>unverifyResult(r.id)} title="Unverify">✓</button>}
-                              <button style={{...S.btn,...S.btnSecondary,fontSize:9,padding:'2px 6px'}} onClick={()=>{if(isEditing){setEditResultId(null);}else{setEditResultId(r.id);if(isField)setEditResultForm({ft:r.ft||'',inch:r.inch||'',qtr:r.qtr||''});else{const ms=r.timeMs||0;setEditResultForm({min:Math.floor(ms/60000)+'',sec:((ms%60000)/1000).toFixed(2)});}}}}>{isEditing?'Cancel':'Edit'}</button>
+                              <button style={{...S.btn,...S.btnSecondary,fontSize:9,padding:'2px 6px'}} onClick={()=>{if(isEditing){setEditResultId(null);}else{setEditResultId(r.id);if(isField)setEditResultForm({ft:r.ft||'',inch:r.inch||'',qtr:r.qtr||'',place:(r.place||'')+''});else{const ms=r.timeMs||0;setEditResultForm({min:Math.floor(ms/60000)+'',sec:((ms%60000)/1000).toFixed(2),place:(r.place||'')+''});}}}}>{isEditing?'Cancel':'Edit'}</button>
                               <button style={{...S.btn,...S.btnDanger,fontSize:9,padding:'2px 6px'}} onClick={()=>deleteResult(r.id)}>✕</button>
                             </div>}
                           </td>
@@ -3235,6 +3294,8 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                                 <span style={{fontSize:11,color:C.textMuted}}>:</span>
                                 <input style={{...S.input,width:70,fontSize:12,padding:'4px 6px',textAlign:'center'}} type="text" inputMode="decimal" placeholder="00.00" value={editResultForm.sec} onChange={e=>setEditResultForm(f=>({...f,sec:e.target.value}))} />
                               </>)}
+                              <span style={{fontSize:11,color:C.textMuted,marginLeft:8}}>Place:</span>
+                              <input style={{...S.input,width:46,fontSize:12,padding:'4px 6px',textAlign:'center'}} type="text" inputMode="numeric" placeholder="#" value={editResultForm.place||''} onChange={e=>setEditResultForm(f=>({...f,place:e.target.value}))} />
                               <button style={{...S.btn,...S.btnPrimary,fontSize:11,padding:'4px 12px'}} onClick={saveEditResult}>Save & Verify</button>
                             </div>
                           </td>

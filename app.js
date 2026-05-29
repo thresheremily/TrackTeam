@@ -6230,14 +6230,24 @@ function MultiSplitTimer({ data, save, nav, events, addResult, addResults, getAt
   },[msPresetEventId]);
   const timerRef = useRef(null);
   const evt = events.find(e=>e.id===eventId);
-  const lapDist = trackType==='Indoor'?INDOOR_LAP:OUTDOOR_LAP;
+  const _trackLapDefault = trackType==='Indoor'?INDOOR_LAP:OUTDOOR_LAP;
+  const _evtLapOverride = parseFloat((evt||{})[trackType==='Indoor'?'lapDistanceIndoor':'lapDistanceOutdoor']);
+  const lapDist = _evtLapOverride>0 ? _evtLapOverride : _trackLapDefault;
   const totalDist = getDistance(evt);
-  const totalLaps = totalDist>0?Math.ceil(totalDist/lapDist):999;
-  const firstLapDist = totalDist>0 ? (totalDist % lapDist || lapDist) : lapDist;
+  const _firstLapOverride = parseFloat((evt||{})[trackType==='Indoor'?'firstLapIndoor':'firstLapOutdoor']);
+  const firstLapDist = totalDist>0 ? (_firstLapOverride>0 ? _firstLapOverride : (totalDist % lapDist || lapDist)) : lapDist;
+  const totalLaps = totalDist>0 ? (1 + Math.max(0, Math.round((totalDist - firstLapDist) / lapDist))) : 999;
   const getLapDist = (lapNum) => lapNum===1 ? firstLapDist : lapDist;
   const getCumDist = (lapNum) => firstLapDist + Math.max(0, lapNum-1) * lapDist;
   const getExpectedCum = (goalMs, lapNum) => totalDist>0 ? goalMs * getCumDist(lapNum) / totalDist : goalMs * lapNum / totalLaps;
   const getExpectedSplit = (goalMs, lapNum) => totalDist>0 ? goalMs * getLapDist(lapNum) / totalDist : goalMs / totalLaps;
+  const normalizedPace = (lapTime, lapNum) => lapTime * lapDist / getLapDist(lapNum);
+  const lapStructureLabel = (()=>{
+    if(totalDist<=0 || totalLaps>=999) return '';
+    if(firstLapDist===lapDist) return `${totalLaps} × ${lapDist}m = ${totalDist}m`;
+    const rest = totalLaps - 1;
+    return `1 × ${firstLapDist}m + ${rest} × ${lapDist}m = ${totalDist}m`;
+  })();
   const isRelayEvt = (evt||{}).entryType==='Relay';
   const legsPerAthlete = isRelayEvt ? Math.ceil(totalLaps/athletes.length) : totalLaps;
   const COLORS = ['#2b6cb0','#c96a1f','#25763b','#c53030','#6b46c1','#b8860b'];
@@ -6752,16 +6762,48 @@ const getReportStdLabels = (data) => {
   });
   return labels;
 };
-const stdEnabled = (stdName, enabledMap) => {
-  if(!enabledMap) return true;
+const resolveStdLabel = (data, stdName) => {
   const sn = (stdName||'').trim().toLowerCase();
-  if(!sn) return true;
-  for(const [label,on] of Object.entries(enabledMap)) {
-    if((label||'').trim().toLowerCase()===sn) return !!on;
+  if(!sn) return null;
+  const types = (data||{}).qualifyingStandardTypes||[];
+  for(const t of types) {
+    const tn = (t.name||'').trim().toLowerCase();
+    if(!tn) continue;
+    if(tn===sn && (!t.subtypes || t.subtypes.length===0)) return t.name;
+    for(const s of (t.subtypes||[])) {
+      const sub = (s||'').trim().toLowerCase();
+      if(!sub) continue;
+      const dashed = (t.name+' - '+s).trim().toLowerCase();
+      const spaced = (t.name+' '+s).trim().toLowerCase();
+      if(sn===dashed || sn===spaced) return `${t.name} - ${s}`;
+    }
+    if(sn===tn && (!t.subtypes || t.subtypes.length===0)) return t.name;
+    if(sn.startsWith(tn+' ') || sn.startsWith(tn+'-')) {
+      for(const s of (t.subtypes||[])) {
+        const sub = (s||'').trim().toLowerCase();
+        if(!sub) continue;
+        if(sn.includes(sub)) return `${t.name} - ${s}`;
+      }
+      if(!t.subtypes || t.subtypes.length===0) return t.name;
+    }
+  }
+  return null;
+};
+const stdEnabled = (data, stdName, enabledMap) => {
+  if(!enabledMap) return true;
+  const keys = Object.keys(enabledMap);
+  if(keys.length===0) return true;
+  const label = resolveStdLabel(data, stdName);
+  if(label===null) return true;
+  if(enabledMap[label] === false) return false;
+  if(enabledMap[label] === true) return true;
+  const target = label.trim().toLowerCase();
+  for(const [k, v] of Object.entries(enabledMap)) {
+    if((k||'').trim().toLowerCase()===target) return v !== false;
   }
   return true;
 };
-const filterEnabledQuals = (quals, enabledMap) => (quals||[]).filter(q=>stdEnabled(q.name, enabledMap));
+const filterEnabledQuals = (data, quals, enabledMap) => (quals||[]).filter(q=>stdEnabled(data, q.name, enabledMap));
 const computeAthleteSeasonStats = (data, events, athleteId, startDate, endDate, enabledStdMap) => {
   const inRange = (d) => (!startDate || d>=startDate) && (!endDate || d<=endDate);
   const allRes = (data.results||[]).filter(r=>!r.isPractice&&inRange(r.date));
@@ -6818,7 +6860,7 @@ const computeAthleteSeasonStats = (data, events, athleteId, startDate, endDate, 
     sorted.forEach(r=>{
       if(r.place) { const p=parseInt(r.place); if(p>0 && (bestPlace===null||p<bestPlace)) bestPlace=p; }
     });
-    const qualBest = filterEnabledQuals(getAllQualifyingForResult(data, events, {...best}), enabledStdMap);
+    const qualBest = filterEnabledQuals(data, getAllQualifyingForResult(data, events, {...best}), enabledStdMap);
     qualBest.forEach(q=>{ const key=q.name||'Q'; qualByType[key]=(qualByType[key]||0)+1; });
     const fmt = (v)=> isField ? `${Math.floor(v/12)}'${(v%12).toFixed(1)}"` : formatTime(v);
     const improvement = isField ? (last.value-first.value) : (first.value-last.value);
@@ -6848,7 +6890,7 @@ const computeAthleteSeasonStats = (data, events, athleteId, startDate, endDate, 
       const isField = isFieldEvent(evt);
       const isRly = !!r.isRelay;
       const mark = isField ? fieldToStr(r.ft||0,r.inch||0,r.qtr||0) : formatTime(r.timeMs||0);
-      const quals = filterEnabledQuals(getAllQualifyingForResult(data, events, r), enabledStdMap);
+      const quals = filterEnabledQuals(data, getAllQualifyingForResult(data, events, r), enabledStdMap);
       return { evt, isRelay:isRly, mark, place:r.place||'', quals, date:r.date };
     }).filter(Boolean).sort((a,b)=>getDefaultOrder(a.evt)-getDefaultOrder(b.evt));
     return { meet, meetId:mid, date:meetDate, rows };
@@ -6897,7 +6939,7 @@ const computeTeamSeasonStats = (data, events, athleteIds, startDate, endDate, en
   });
   const qualifiersByStd = {};
   indiv.forEach(r=>{
-    const qs = filterEnabledQuals(getAllQualifyingForResult(data, events, r), enabledStdMap);
+    const qs = filterEnabledQuals(data, getAllQualifyingForResult(data, events, r), enabledStdMap);
     qs.forEach(q=>{
       const k = q.name||'Q';
       qualifiersByStd[k] = qualifiersByStd[k] || new Set();
@@ -6905,7 +6947,7 @@ const computeTeamSeasonStats = (data, events, athleteIds, startDate, endDate, en
     });
   });
   relays.forEach(r=>{
-    const qs = filterEnabledQuals(getAllQualifyingForResult(data, events, {...r,timeMs:r.timeMs}), enabledStdMap);
+    const qs = filterEnabledQuals(data, getAllQualifyingForResult(data, events, {...r,timeMs:r.timeMs}), enabledStdMap);
     qs.forEach(q=>{
       const k = q.name||'Q';
       qualifiersByStd[k] = qualifiersByStd[k] || new Set();
@@ -7104,7 +7146,7 @@ const buildSeasonReportHTML = (data, events, season, team, athletes, options, fe
         const isRelay = !!r.isRelay;
         const involvedAthletes = isRelay ? (r.relayAthletes||[]).filter(id=>subsetIds.has(id)) : (subsetIds.has(r.athleteId) ? [r.athleteId] : []);
         if(!involvedAthletes.length) return;
-        const quals = filterEnabledQuals(getAllQualifyingForResult(data, events, r), enabledStdMap);
+        const quals = filterEnabledQuals(data, getAllQualifyingForResult(data, events, r), enabledStdMap);
         if(!quals.length) return;
         const meetObj = r.meetId ? (data.meets||[]).find(m=>m.id===r.meetId) : null;
         quals.forEach(q => {

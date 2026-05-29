@@ -119,6 +119,35 @@ const TRACK_DISTANCES = {
   '4x100m':400,'4x200m':800,'4x400m':1600,'4x800m':3200,
 };
 const getDistance = (evt) => TRACK_DISTANCES[(evt||{}).name] || 0;
+// Built-in defaults for races whose start line isn't at the lap line. Override on the event itself.
+const LAP_STRUCTURE_DEFAULTS = {
+  outdoor: {
+    '1500m': { firstLap: 300, lapDist: 400 },
+    '3000m': { firstLap: 200, lapDist: 400 },
+    '5000m': { firstLap: 200, lapDist: 400 },
+    '3000m Steeplechase': { firstLap: 270, lapDist: 390 },
+    '2000m Steeplechase': { firstLap: 200, lapDist: 360 },
+  },
+  indoor: {
+    '1500m': { firstLap: 100, lapDist: 200 },
+  },
+};
+const getLapStructure = (evt, trackType) => {
+  if(!evt) return null;
+  const isIndoor = trackType === 'Indoor';
+  const trackDefault = isIndoor ? INDOOR_LAP : OUTDOOR_LAP;
+  const builtin = (LAP_STRUCTURE_DEFAULTS[isIndoor?'indoor':'outdoor']||{})[evt.name];
+  const override = isIndoor
+    ? { firstLap: parseFloat(evt.firstLapIndoor), lapDist: parseFloat(evt.lapDistanceIndoor) }
+    : { firstLap: parseFloat(evt.firstLapOutdoor), lapDist: parseFloat(evt.lapDistanceOutdoor) };
+  const lapDist = override.lapDist > 0 ? override.lapDist : (builtin ? builtin.lapDist : trackDefault);
+  const totalDist = getDistance(evt);
+  let firstLap;
+  if(override.firstLap > 0) firstLap = override.firstLap;
+  else if(builtin && builtin.firstLap > 0) firstLap = builtin.firstLap;
+  else firstLap = totalDist > 0 ? (totalDist % lapDist || lapDist) : lapDist;
+  return { lapDist, firstLap, totalDist };
+};
 const DEFAULT_MEET_ORDER = [
   {name:'4x800m',gender:'Girl'},{name:'4x800m',gender:'Boy'},
   {name:'100m Hurdles',gender:'Girl'},{name:'110m Hurdles',gender:'Boy'},
@@ -5839,7 +5868,7 @@ function EventsPage({ data, save, nav }) {
   const [sortDir, setSortDir] = useState('asc');
   const [showAdd, setShowAdd] = useState(false);
   const [editId, setEditId] = useState(null);
-  const [form, setForm] = useState({ name:'', eventType:'Track', entryType:'Individual', gender:'Boy', trackType:'Both', measurableType:'Time' });
+  const [form, setForm] = useState({ name:'', eventType:'Track', entryType:'Individual', gender:'Boy', trackType:'Both', measurableType:'Time', firstLapOutdoor:'', firstLapIndoor:'', lapDistanceOutdoor:'', lapDistanceIndoor:'' });
   const [delId, setDelId] = useState(null);
   const [expandedEvent, setExpandedEvent] = useState(null);
   const [showAddStandard, setShowAddStandard] = useState(null);
@@ -5879,14 +5908,22 @@ function EventsPage({ data, save, nav }) {
     if(av>bv) return sortDir==='asc'?1:-1;
     return 0;
   });
+  const _toNumStr = (v) => { const n = parseFloat(v); return (isFinite(n) && n>0) ? n+'' : ''; };
   const addEvent = () => {
     if(!form.name) return;
-    if(editId) { save({...data, events:(data.events||[]).map(e=>e.id===editId?{...e,...form}:e)}); setEditId(null); }
-    else { save({...data, events:[...(data.events||[]),{id:uid(),...form,qualifyingStandards:[],schoolRecords:[]}]}); }
-    setShowAdd(false); setForm({ name:'', eventType:'Track', entryType:'Individual', gender:'Boy', trackType:'Both', measurableType:'Time' });
+    const lapFields = {
+      firstLapOutdoor: _toNumStr(form.firstLapOutdoor)?parseFloat(form.firstLapOutdoor):null,
+      firstLapIndoor: _toNumStr(form.firstLapIndoor)?parseFloat(form.firstLapIndoor):null,
+      lapDistanceOutdoor: _toNumStr(form.lapDistanceOutdoor)?parseFloat(form.lapDistanceOutdoor):null,
+      lapDistanceIndoor: _toNumStr(form.lapDistanceIndoor)?parseFloat(form.lapDistanceIndoor):null,
+    };
+    const cleaned = { name:form.name, eventType:form.eventType, entryType:form.entryType, gender:form.gender, trackType:form.trackType, measurableType:form.measurableType, ...lapFields };
+    if(editId) { save({...data, events:(data.events||[]).map(e=>e.id===editId?{...e,...cleaned}:e)}); setEditId(null); }
+    else { save({...data, events:[...(data.events||[]),{id:uid(),...cleaned,qualifyingStandards:[],schoolRecords:[]}]}); }
+    setShowAdd(false); setForm({ name:'', eventType:'Track', entryType:'Individual', gender:'Boy', trackType:'Both', measurableType:'Time', firstLapOutdoor:'', firstLapIndoor:'', lapDistanceOutdoor:'', lapDistanceIndoor:'' });
   };
   const startEdit = (evt) => {
-    setForm({ name:evt.name, eventType:evt.eventType, entryType:evt.entryType, gender:evt.gender, trackType:evt.trackType, measurableType:evt.measurableType });
+    setForm({ name:evt.name, eventType:evt.eventType, entryType:evt.entryType, gender:evt.gender, trackType:evt.trackType, measurableType:evt.measurableType, firstLapOutdoor:(evt.firstLapOutdoor||'')+'', firstLapIndoor:(evt.firstLapIndoor||'')+'', lapDistanceOutdoor:(evt.lapDistanceOutdoor||'')+'', lapDistanceIndoor:(evt.lapDistanceIndoor||'')+'' });
     setEditId(evt.id); setShowAdd(true);
   };
   const deleteEvent = () => { save({...data, events:(data.events||[]).filter(e=>e.id!==delId)}); setDelId(null); };
@@ -5914,7 +5951,7 @@ function EventsPage({ data, save, nav }) {
   return (
     <div>
       <div style={{display:'flex',justifyContent:'flex-end',gap:6,marginBottom:12}}>
-        <button style={{...S.btn,...S.btnPrimary}} onClick={()=>{setForm({name:'',eventType:'Track',entryType:'Individual',gender:'Boy',trackType:'Both',measurableType:'Time'});setEditId(null);setShowAdd(true);}}>+ Add Event</button>
+        <button style={{...S.btn,...S.btnPrimary}} onClick={()=>{setForm({name:'',eventType:'Track',entryType:'Individual',gender:'Boy',trackType:'Both',measurableType:'Time',firstLapOutdoor:'',firstLapIndoor:'',lapDistanceOutdoor:'',lapDistanceIndoor:''});setEditId(null);setShowAdd(true);}}>+ Add Event</button>
       </div>
       <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
         <input style={{...S.input,maxWidth:180}} placeholder="Search..." value={search} onChange={e=>setSearch(e.target.value)} />
@@ -6014,6 +6051,29 @@ function EventsPage({ data, save, nav }) {
             <div><label style={{fontSize:12,color:C.textSecondary}}>Track Type</label><select style={{...S.select,width:'100%'}} value={form.trackType} onChange={e=>setForm({...form,trackType:e.target.value})}><option>Indoor</option><option>Outdoor</option><option>Both</option></select></div>
           </div>
           <div><label style={{fontSize:12,color:C.textSecondary}}>Measurable</label><select style={{...S.select,width:'100%'}} value={form.measurableType} onChange={e=>setForm({...form,measurableType:e.target.value})}><option>Time</option><option>Length</option><option>Height</option></select></div>
+          {form.eventType==='Track' && (
+            <div style={{border:`1px solid ${C.borderLight}`,borderRadius:6,padding:'10px 12px',background:C.bg}}>
+              <div style={{fontSize:11,color:C.textMuted,marginBottom:6}}>
+                <strong style={{color:C.textSecondary}}>Lap structure (optional).</strong> Leave blank for normal races. Set when the start line isn't at the lap line (e.g. <strong>1500m</strong> outdoor first lap is 300m; <strong>3000m Steeplechase</strong> uses 270m + 7 × 390m).
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                <div>
+                  <label style={{fontSize:10,color:C.textMuted,fontWeight:600,textTransform:'uppercase',letterSpacing:'0.04em'}}>Outdoor (400m track)</label>
+                  <div style={{display:'flex',gap:6,marginTop:4}}>
+                    <input style={{...S.input,fontSize:12,padding:'5px 8px'}} placeholder="First lap (m)" type="text" inputMode="numeric" value={form.firstLapOutdoor} onChange={e=>setForm({...form,firstLapOutdoor:e.target.value})} />
+                    <input style={{...S.input,fontSize:12,padding:'5px 8px'}} placeholder="Lap (m)" type="text" inputMode="numeric" value={form.lapDistanceOutdoor} onChange={e=>setForm({...form,lapDistanceOutdoor:e.target.value})} />
+                  </div>
+                </div>
+                <div>
+                  <label style={{fontSize:10,color:C.textMuted,fontWeight:600,textTransform:'uppercase',letterSpacing:'0.04em'}}>Indoor (200m track)</label>
+                  <div style={{display:'flex',gap:6,marginTop:4}}>
+                    <input style={{...S.input,fontSize:12,padding:'5px 8px'}} placeholder="First lap (m)" type="text" inputMode="numeric" value={form.firstLapIndoor} onChange={e=>setForm({...form,firstLapIndoor:e.target.value})} />
+                    <input style={{...S.input,fontSize:12,padding:'5px 8px'}} placeholder="Lap (m)" type="text" inputMode="numeric" value={form.lapDistanceIndoor} onChange={e=>setForm({...form,lapDistanceIndoor:e.target.value})} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
           <button style={{...S.btn,...S.btnPrimary}} onClick={addEvent}>{editId?'Save Changes':'Add Event'}</button>
         </div>
       </Modal>
@@ -6230,12 +6290,10 @@ function MultiSplitTimer({ data, save, nav, events, addResult, addResults, getAt
   },[msPresetEventId]);
   const timerRef = useRef(null);
   const evt = events.find(e=>e.id===eventId);
-  const _trackLapDefault = trackType==='Indoor'?INDOOR_LAP:OUTDOOR_LAP;
-  const _evtLapOverride = parseFloat((evt||{})[trackType==='Indoor'?'lapDistanceIndoor':'lapDistanceOutdoor']);
-  const lapDist = _evtLapOverride>0 ? _evtLapOverride : _trackLapDefault;
-  const totalDist = getDistance(evt);
-  const _firstLapOverride = parseFloat((evt||{})[trackType==='Indoor'?'firstLapIndoor':'firstLapOutdoor']);
-  const firstLapDist = totalDist>0 ? (_firstLapOverride>0 ? _firstLapOverride : (totalDist % lapDist || lapDist)) : lapDist;
+  const _ls = getLapStructure(evt, trackType) || { lapDist: (trackType==='Indoor'?INDOOR_LAP:OUTDOOR_LAP), firstLap: 0, totalDist: 0 };
+  const lapDist = _ls.lapDist;
+  const totalDist = _ls.totalDist;
+  const firstLapDist = _ls.firstLap || lapDist;
   const totalLaps = totalDist>0 ? (1 + Math.max(0, Math.round((totalDist - firstLapDist) / lapDist))) : 999;
   const getLapDist = (lapNum) => lapNum===1 ? firstLapDist : lapDist;
   const getCumDist = (lapNum) => firstLapDist + Math.max(0, lapNum-1) * lapDist;
@@ -6319,6 +6377,10 @@ function MultiSplitTimer({ data, save, nav, events, addResult, addResults, getAt
             <div><label style={{fontSize:12,color:C.textSecondary}}>Track</label><select style={{...S.select,width:'100%'}} value={trackType} onChange={e=>setTrackType(e.target.value)}><option>Indoor</option><option>Outdoor</option></select></div>
             {meetId==='practice-custom'&&<div><label style={{fontSize:12,color:C.textSecondary}}>Practice Date</label><input style={{...S.input}} type="date" id="practiceDate" defaultValue={new Date().toISOString().split('T')[0]} /></div>}
           </div>
+          {evt && lapStructureLabel && <div style={{marginTop:10,padding:'6px 10px',background:C.surface2,borderLeft:`3px solid ${C.accent}`,borderRadius:'0 6px 6px 0',fontSize:11,color:C.textSecondary,display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+            <span><strong style={{color:C.text}}>Lap structure:</strong> {lapStructureLabel}</span>
+            <span style={{fontSize:10,color:C.textMuted}}>Edit on the event under Settings → Events if this is wrong.</span>
+          </div>}
           <div style={{marginTop:16}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
               <span style={{fontSize:14,fontWeight:600,color:C.textSecondary}}>Athletes</span>
@@ -6417,6 +6479,7 @@ function MultiSplitTimer({ data, save, nav, events, addResult, addResults, getAt
             const avgLapPace=pacePerMeter*lapDist;
             const remainingDist=totalDist-distCovered;
             const predictedFinish=lapsCompleted>0?at.laps[lapsCompleted-1].cumulative+pacePerMeter*remainingDist:0;
+            const hasVariableLaps = lapsCompleted>0 && at.laps.some((l,li)=>getLapDist(l.lap)!==lapDist);
             return (<>
               {lapsCompleted>0&&totalLaps<999&&<div style={{display:'flex',gap:12,flexWrap:'wrap',marginBottom:6,fontSize:11}}>
                 <span style={{color:C.textMuted}}>Avg {lapDist}m pace: <strong style={{color:C.text}}>{formatTime(Math.round(avgLapPace))}</strong></span>
@@ -6424,19 +6487,25 @@ function MultiSplitTimer({ data, save, nav, events, addResult, addResults, getAt
                 {hasTarget&&lapsRemaining>0&&<span style={{color:C.textMuted}}>Target: <strong>{formatTime(at.goalMs)}</strong></span>}
               </div>}
               <table style={{width:'100%',borderCollapse:'collapse'}}>
-                <thead><tr><th style={S.th}>Lap</th><th style={S.th}>Split</th><th style={S.th}></th><th style={S.th}>Cumulative</th>{hasTarget&&<th style={S.th}>Pace</th>}</tr></thead>
+                <thead><tr><th style={S.th}>Lap</th><th style={S.th}>Split</th><th style={S.th}>Pace /{lapDist}m</th><th style={S.th}></th><th style={S.th}>Cumulative</th>{hasTarget&&<th style={S.th}>vs Goal</th>}</tr></thead>
                 <tbody>{at.laps.map((l,li)=>{
-                  const prevSplit=li>0?at.laps[li-1].split:null;
-                  const splitDiff=prevSplit!==null?l.split-prevSplit:0;
-                  const isFaster=prevSplit!==null&&l.split<prevSplit;
-                  const isSlower=prevSplit!==null&&l.split>prevSplit;
-                  const paceDiff=hasTarget?l.cumulative-getExpectedCum(at.goalMs,l.lap):0;
+                  const myLapDist = getLapDist(l.lap);
+                  const myPace = normalizedPace(l.split, l.lap);
+                  const prevPace = li>0 ? normalizedPace(at.laps[li-1].split, at.laps[li-1].lap) : null;
+                  const paceDiffPrev = prevPace!==null ? myPace - prevPace : 0;
+                  const isFaster = prevPace!==null && myPace < prevPace;
+                  const isSlower = prevPace!==null && myPace > prevPace;
+                  const goalDiff = hasTarget ? l.cumulative - getExpectedCum(at.goalMs, l.lap) : 0;
                   return (<tr key={l.lap}>
-                    <td style={S.td}><span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',minWidth:28,padding:'2px 8px',borderRadius:20,fontSize:12,fontWeight:700,background:C.white,color:athleteColor,border:`2px solid ${athleteColor}`}}>{l.lap}</span></td>
+                    <td style={S.td}>
+                      <span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',minWidth:28,padding:'2px 8px',borderRadius:20,fontSize:12,fontWeight:700,background:C.white,color:athleteColor,border:`2px solid ${athleteColor}`}}>{l.lap}</span>
+                      {hasVariableLaps && myLapDist!==lapDist && <span style={{fontSize:9,color:C.textMuted,marginLeft:4}}>({myLapDist}m)</span>}
+                    </td>
                     <td style={S.td}>{formatTime(l.split)}</td>
-                    <td style={{...S.td,fontSize:10,fontWeight:600,color:isFaster?C.success:isSlower?C.danger:C.textMuted,padding:'4px 2px'}}>{prevSplit!==null?(isFaster?'▼':'▲')+' '+formatDiff(splitDiff):''}</td>
+                    <td style={{...S.td,fontWeight:600}}>{formatTime(Math.round(myPace))}</td>
+                    <td style={{...S.td,fontSize:10,fontWeight:600,color:isFaster?C.success:isSlower?C.danger:C.textMuted,padding:'4px 2px'}}>{prevPace!==null?(isFaster?'▼':'▲')+' '+formatDiff(Math.round(paceDiffPrev)):''}</td>
                     <td style={S.td}>{formatTime(l.cumulative)}</td>
-                    {hasTarget&&<td style={{...S.td,fontWeight:600,fontSize:12}}><span style={{color:paceDiff<=0?C.success:C.danger}}>{formatDiff(paceDiff)}</span></td>}
+                    {hasTarget&&<td style={{...S.td,fontWeight:600,fontSize:12}}><span style={{color:goalDiff<=0?C.success:C.danger}}>{formatDiff(goalDiff)}</span></td>}
                   </tr>);
                 })}</tbody>
               </table>

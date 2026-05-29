@@ -1760,7 +1760,7 @@ function AttendancePage({ data, save, nav, season, activeAthletes }) {
     </div>
   );
 }
-function MeetFormModal({ editId, initial, meetTypes, onSave, onClose }) {
+function MeetFormModal({ editId, initial, meetTypes, eventOrderTemplates, onSave, onClose }) {
   const [f, setF] = useState({...initial});
   return (
     <Modal open={true} onClose={onClose} width={500}>
@@ -1790,6 +1790,15 @@ function MeetFormModal({ editId, initial, meetTypes, onSave, onClose }) {
             </select>
           </div>
         </div>
+        {(eventOrderTemplates||[]).length>0 && (
+          <div><label style={{fontSize:12,color:C.textSecondary}}>Event Order</label>
+            <select style={{...S.select,width:'100%'}} value={f.eventOrderTemplateId||''} onChange={e=>setF({...f,eventOrderTemplateId:e.target.value})}>
+              <option value="">Use default template</option>
+              {eventOrderTemplates.map(t=><option key={t.id} value={t.id}>{t.name}{t.isDefault?' (default)':''}</option>)}
+            </select>
+            <div style={{fontSize:10,color:C.textMuted,marginTop:3}}>Seeds the running order for this meet. You can still tweak per-meet with the Reorder button.</div>
+          </div>
+        )}
         <div style={{padding:'10px 12px',background:C.bg,borderRadius:6,border:`1px solid ${C.borderLight}`}}>
           <div style={{fontSize:12,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',marginBottom:8}}>Entry Restrictions</div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
@@ -1946,8 +1955,9 @@ function MeetsPage({ data, save, nav, events }) {
       {showAdd && <MeetFormModal
         key={openCount}
         editId={(editMeet||{}).id}
-        initial={editMeet ? {name:editMeet.name||'',startDate:(editMeet.startDate||editMeet.date||'').split('T')[0],endDate:(editMeet.endDate||'').split('T')[0],venue:editMeet.venue||'',city:editMeet.city||'',state:editMeet.state||'',trackType:editMeet.trackType||'Outdoor',timingSystem:editMeet.timingSystem||'FAT',meetTypeId:editMeet.meetTypeId||'',maxEntriesPerEvent:editMeet.maxEntriesPerEvent||'',maxEventsPerAthlete:editMeet.maxEventsPerAthlete||'',notes:editMeet.notes||''} : {name:'',startDate:'',endDate:'',venue:'',city:'',state:'',trackType:'Outdoor',timingSystem:'FAT',meetTypeId:'',maxEntriesPerEvent:'',maxEventsPerAthlete:'',notes:''}}
+        initial={editMeet ? {name:editMeet.name||'',startDate:(editMeet.startDate||editMeet.date||'').split('T')[0],endDate:(editMeet.endDate||'').split('T')[0],venue:editMeet.venue||'',city:editMeet.city||'',state:editMeet.state||'',trackType:editMeet.trackType||'Outdoor',timingSystem:editMeet.timingSystem||'FAT',meetTypeId:editMeet.meetTypeId||'',eventOrderTemplateId:editMeet.eventOrderTemplateId||'',maxEntriesPerEvent:editMeet.maxEntriesPerEvent||'',maxEventsPerAthlete:editMeet.maxEventsPerAthlete||'',notes:editMeet.notes||''} : {name:'',startDate:'',endDate:'',venue:'',city:'',state:'',trackType:'Outdoor',timingSystem:'FAT',meetTypeId:'',eventOrderTemplateId:'',maxEntriesPerEvent:'',maxEventsPerAthlete:'',notes:''}}
         meetTypes={meetTypes}
+        eventOrderTemplates={data.eventOrderTemplates||[]}
         onSave={(f)=>{
           if((editMeet||{}).id) { save({...data, meets:data.meets.map(m=>m.id===editMeet.id?{...m,...f}:m)}); }
           else { const meetEvents=events.filter(e=>e.trackType===f.trackType||e.trackType==='Both').map(e=>({eventId:e.id,entries:[]})); save({...data, meets:[...data.meets,{id:uid(),...f,events:meetEvents}]}); }
@@ -2117,8 +2127,8 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
     if(idxA >= 0 && idxB >= 0) return idxA - idxB;
     if(idxA >= 0) return -1;
     if(idxB >= 0) return 1;
-    const dA = getDefaultOrder(a.evt);
-    const dB = getDefaultOrder(b.evt);
+    const dA = getDefaultOrder(a.evt, data, meet);
+    const dB = getDefaultOrder(b.evt, data, meet);
     if(dA !== dB) return dA - dB;
     return a.evt.name.localeCompare(b.evt.name);
   });
@@ -2213,7 +2223,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
     const css = '<style>'+orient+'body{font-family:-apple-system,Helvetica,Arial,sans-serif;font-size:11px;padding:0;color:#111;margin:0}table{width:100%;border-collapse:collapse}th{text-align:left;font-size:9px;color:#555;text-transform:uppercase;letter-spacing:0.05em;border-bottom:2px solid #333;padding:4px 6px;white-space:nowrap}td{padding:3px 6px;border-bottom:1px solid #ddd;font-size:11px;vertical-align:top}.evt-hdr{background:#f0f0f0;font-weight:700;font-size:12px;padding:6px;border-bottom:2px solid #555;border-top:2px solid #555;margin-top:0}.evt-sub{font-weight:400;font-size:10px;color:#666;margin-left:8px}.relay-hdr td{background:#f8f8f8;font-weight:600;font-size:10px;color:#444;border-bottom:1px solid #bbb}.alt td{font-style:italic;color:#888;font-size:10px}.rl{border-bottom:1px solid #888;display:inline-block;min-width:70px} .rl-sm{border-bottom:1px solid #888;display:inline-block;min-width:35px}@media print{body{padding:0}}</style>';
     let body = '';
     if(isEvt) {
-      const sorted = [...meetEvents].sort((a,b)=>{const oa=meet.eventOrder||[];const ia=oa.indexOf(a.eventId);const ib=oa.indexOf(b.eventId);if(ia>=0&&ib>=0)return ia-ib;if(ia>=0)return -1;if(ib>=0)return 1;return getDefaultOrder(a.evt)-getDefaultOrder(b.evt);});
+      const sorted = [...meetEvents].sort((a,b)=>{const oa=meet.eventOrder||[];const ia=oa.indexOf(a.eventId);const ib=oa.indexOf(b.eventId);if(ia>=0&&ib>=0)return ia-ib;if(ia>=0)return -1;if(ib>=0)return 1;return getDefaultOrder(a.evt, data, meet)-getDefaultOrder(b.evt, data, meet);});
       body += '<table>';
       sorted.forEach(me=>{
         if(!me.entries.length) return;
@@ -3332,8 +3342,20 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
             );
           })}
         </div>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginTop:14}}>
-          <button style={{...S.btn,fontSize:11,padding:'6px 10px',background:'transparent',color:C.textMuted,border:`1px solid ${C.border}`}} onClick={()=>setReorderList(filtered.map(me=>me.eventId))}>Reset (filtered order)</button>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginTop:14,flexWrap:'wrap'}}>
+          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+            <button style={{...S.btn,fontSize:11,padding:'6px 10px',background:'transparent',color:C.textMuted,border:`1px solid ${C.border}`}} onClick={()=>setReorderList(filtered.map(me=>me.eventId))}>Reset (filtered order)</button>
+            <button style={{...S.btn,fontSize:11,padding:'6px 10px',background:'transparent',color:C.accent,border:`1px solid ${C.accent}`}} onClick={()=>{
+              const name = window.prompt('Save current order as a new template — name it:', `Order from ${meet.name||'this meet'}`);
+              if(!name) return;
+              const entries = reorderList.map(eid=>{const e=events.find(ev=>ev.id===eid); return e?{name:e.name, gender:e.gender}:null;}).filter(Boolean);
+              if(!entries.length) { alert('No events to save.'); return; }
+              const newTemplate = { id:uid(), name:name.trim(), isDefault:false, entries };
+              const templates = [...(data.eventOrderTemplates||[]), newTemplate];
+              save({...data, eventOrderTemplates:templates, meets:data.meets.map(m=>m.id===meetId?{...m, eventOrderTemplateId:newTemplate.id}:m)});
+              alert(`Saved as "${name.trim()}" and pinned to this meet. You can edit it under Settings → Event Order.`);
+            }}>Save as new template…</button>
+          </div>
           <div style={{display:'flex',gap:8}}>
             <button style={{...S.btn,...S.btnSecondary}} onClick={()=>setShowReorderModal(false)}>Cancel</button>
             <button style={{...S.btn,...S.btnPrimary}} onClick={()=>{saveEventOrder(reorderList);setShowReorderModal(false);}}>Save Order</button>
@@ -8239,6 +8261,10 @@ function BulkStandardEntry({ data, save, events, stdTypes, combos }) {
 function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
   const [tab, setTab] = useState('seasons');
   const [saved, setSaved] = useState(false);
+  const [editTemplateId, setEditTemplateId] = useState(null);
+  const [templateDragIdx, setTemplateDragIdx] = useState(null);
+  const [templateDragOver, setTemplateDragOver] = useState(null);
+  const [templateAddSearch, setTemplateAddSearch] = useState('');
   const [stdSortCol, setStdSortCol] = useState('event');
   const [stdSortDir, setStdSortDir] = useState('asc');
   const toggleStdSort = (col) => { if(stdSortCol===col) setStdSortDir(d=>d==='asc'?'desc':'asc'); else { setStdSortCol(col); setStdSortDir('asc'); } };
@@ -8297,7 +8323,7 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
   return (
     <div>
       <div style={{display:'flex',gap:4,marginBottom:16,flexWrap:'wrap'}}>
-        {[['seasons','Seasons'],['branding','Branding'],['meetTypes','Meet Types'],['qualifying','Qualifying'],['records','Records'],['team','Team'],['data','Data']].map(([k,l])=>(
+        {[['seasons','Seasons'],['branding','Branding'],['meetTypes','Meet Types'],['eventOrder','Event Order'],['qualifying','Qualifying'],['records','Records'],['team','Team'],['data','Data']].map(([k,l])=>(
           <button key={k} style={S.pill(tab===k)} onClick={()=>setTab(k)}>{l}</button>
         ))}
       </div>
@@ -8427,7 +8453,137 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
         </Modal>
         <ConfirmModal open={!!delMTId} onClose={()=>setDelMTId(null)} onConfirm={deleteMT} message="Delete this meet type?" />
       </div>)}
-      
+
+      {tab==='eventOrder' && (()=>{
+        const templates = data.eventOrderTemplates || [];
+        const editTemplate = editTemplateId ? templates.find(t=>t.id===editTemplateId) : null;
+        const saveTemplates = (next) => save({...data, eventOrderTemplates:next});
+        const seedFromDefault = () => {
+          const t = { id:uid(), name:'Standard', isDefault:true, entries:DEFAULT_MEET_ORDER.map(e=>({...e})) };
+          saveTemplates([t]);
+        };
+        const addTemplate = () => {
+          const base = (templates.find(t=>t.isDefault)||templates[0]||{entries:DEFAULT_MEET_ORDER.map(e=>({...e}))}).entries;
+          const t = { id:uid(), name:'New template', isDefault:templates.length===0, entries:(base||[]).map(e=>({...e})) };
+          saveTemplates([...templates, t]);
+          setEditTemplateId(t.id);
+        };
+        const renameTemplate = (id, name) => saveTemplates(templates.map(t=>t.id===id?{...t,name}:t));
+        const setDefaultTemplate = (id) => saveTemplates(templates.map(t=>({...t, isDefault:t.id===id})));
+        const duplicateTemplate = (id) => {
+          const src = templates.find(t=>t.id===id);
+          if(!src) return;
+          const copy = { id:uid(), name:`${src.name} copy`, isDefault:false, entries:(src.entries||[]).map(e=>({...e})) };
+          saveTemplates([...templates, copy]);
+        };
+        const deleteTemplate = (id) => {
+          if(!window.confirm('Delete this template? Meets using it will fall back to the default.')) return;
+          const next = templates.filter(t=>t.id!==id);
+          if(!next.some(t=>t.isDefault) && next[0]) next[0].isDefault = true;
+          saveTemplates(next);
+          if(editTemplateId===id) setEditTemplateId(null);
+        };
+        const allEntries = (data.events||[]).map(e=>({name:e.name,gender:e.gender}));
+        const uniqEntries = (()=>{const seen=new Set();const out=[];allEntries.forEach(e=>{const k=`${e.name}||${e.gender}`;if(!seen.has(k)){seen.add(k);out.push(e);}});return out;})();
+        const editEntries = editTemplate ? (editTemplate.entries||[]) : [];
+        const editKeys = new Set(editEntries.map(e=>`${e.name}||${e.gender}`));
+        const candidates = uniqEntries.filter(e=>!editKeys.has(`${e.name}||${e.gender}`))
+          .filter(e=>!templateAddSearch||(`${e.name} ${e.gender}`).toLowerCase().includes(templateAddSearch.toLowerCase()))
+          .sort((a,b)=>a.name.localeCompare(b.name)||a.gender.localeCompare(b.gender));
+        const updateEntries = (next) => saveTemplates(templates.map(t=>t.id===editTemplateId?{...t,entries:next}:t));
+        const moveEntry = (from, to) => {
+          if(from===to) return;
+          const next = [...editEntries];
+          const [m] = next.splice(from,1);
+          next.splice(to,0,m);
+          updateEntries(next);
+        };
+        const addEntry = (entry) => { updateEntries([...editEntries, entry]); setTemplateAddSearch(''); };
+        const removeEntry = (idx) => updateEntries(editEntries.filter((_,i)=>i!==idx));
+        const labelOf = (e) => `${e.name} - ${e.gender==='Boy'?'Boys':e.gender==='Girl'?'Girls':e.gender||'Mixed'}`;
+        if(templates.length === 0) {
+          return (<div>
+            <h2 style={S.h2}>Event Order Templates</h2>
+            <p style={{fontSize:12,color:C.textMuted,marginBottom:12}}>Save your usual running order so every new meet starts in the right sequence. You can keep several templates for different competition formats and pick one when you create a meet.</p>
+            <div style={{...S.card,padding:24,textAlign:'center'}}>
+              <p style={{margin:'0 0 12px',fontSize:13,color:C.textSecondary}}>No templates yet. Start with one based on the built-in standard order — you can rename and edit from there.</p>
+              <button style={{...S.btn,...S.btnPrimary}} onClick={seedFromDefault}>Create starter template</button>
+            </div>
+          </div>);
+        }
+        return (<div>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+            <h2 style={{...S.h2,margin:0}}>Event Order Templates</h2>
+            <button style={{...S.btn,...S.btnPrimary}} onClick={addTemplate}>+ New template</button>
+          </div>
+          <p style={{fontSize:12,color:C.textMuted,marginBottom:12}}>Templates store an ordered list of <em>event name + gender</em>. Mark one as default — it seeds the order for every new meet. Templates are portable: if you ever delete and recreate an event, the order survives.</p>
+          {templates.map(t=>(
+            <div key={t.id} style={{...S.card,marginBottom:8,padding:'10px 12px'}}>
+              <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+                <input style={{...S.input,flex:1,minWidth:160,fontSize:14,fontWeight:600}} value={t.name} onChange={e=>renameTemplate(t.id,e.target.value)} />
+                {t.isDefault
+                  ? <span style={{fontSize:10,fontWeight:700,padding:'3px 8px',borderRadius:8,background:C.successMuted,color:C.success,border:`1px solid ${C.success}`,textTransform:'uppercase',letterSpacing:'0.05em'}}>Default</span>
+                  : <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'4px 10px'}} onClick={()=>setDefaultTemplate(t.id)}>Set default</button>
+                }
+                <span style={{fontSize:11,color:C.textMuted}}>{(t.entries||[]).length} entries</span>
+                <button style={{...S.btn,...S.btnPrimary,fontSize:11,padding:'4px 10px'}} onClick={()=>setEditTemplateId(t.id)}>{editTemplateId===t.id?'Editing…':'Edit order'}</button>
+                <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'4px 10px'}} onClick={()=>duplicateTemplate(t.id)}>Duplicate</button>
+                {templates.length>1 && <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:13}} onClick={()=>deleteTemplate(t.id)} title="Delete">✕</button>}
+              </div>
+              {editTemplateId===t.id && (
+                <div style={{marginTop:10,borderTop:`1px dashed ${C.borderLight}`,paddingTop:10}}>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 280px',gap:14,alignItems:'start'}}>
+                    <div>
+                      <div style={{fontSize:10,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}}>Running order ({editEntries.length})</div>
+                      <div style={{maxHeight:'50vh',overflowY:'auto',border:`1px solid ${C.borderLight}`,borderRadius:6}}>
+                        {editEntries.length===0 && <div style={{padding:14,textAlign:'center',color:C.textMuted,fontSize:12}}>Empty. Add events from the right panel.</div>}
+                        {editEntries.map((entry,idx)=>{
+                          const isOver = templateDragOver===idx && templateDragIdx!==idx && templateDragIdx!==null;
+                          const isDragging = templateDragIdx===idx;
+                          return (<div key={idx}
+                            draggable
+                            onDragStart={e=>{setTemplateDragIdx(idx);try{e.dataTransfer.effectAllowed='move';}catch(_){}}}
+                            onDragOver={e=>{e.preventDefault();if(templateDragOver!==idx)setTemplateDragOver(idx);}}
+                            onDragLeave={()=>{if(templateDragOver===idx)setTemplateDragOver(null);}}
+                            onDrop={e=>{e.preventDefault();if(templateDragIdx===null||templateDragIdx===idx){setTemplateDragIdx(null);setTemplateDragOver(null);return;}moveEntry(templateDragIdx,idx);setTemplateDragIdx(null);setTemplateDragOver(null);}}
+                            onDragEnd={()=>{setTemplateDragIdx(null);setTemplateDragOver(null);}}
+                            style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',borderBottom:`1px solid ${C.borderLight}`,background:isDragging?C.surface2:(isOver?C.accentMuted:C.surface),borderTop:isOver?`2px solid ${C.accent}`:'2px solid transparent',cursor:'grab',userSelect:'none'}}>
+                            <span style={{fontSize:14,color:C.textMuted,minWidth:14,textAlign:'center',cursor:'grab'}}>⋮⋮</span>
+                            <span style={{fontSize:11,color:C.textMuted,minWidth:22,textAlign:'right'}}>{idx+1}.</span>
+                            <span style={{flex:1,fontSize:13,fontWeight:500}}>{labelOf(entry)}</span>
+                            <div style={{display:'flex',gap:2}}>
+                              <button style={{background:'none',border:`1px solid ${C.borderLight}`,borderRadius:4,padding:'3px 7px',cursor:idx===0?'default':'pointer',opacity:idx===0?0.3:1,fontSize:11}} disabled={idx===0} title="Move up" onClick={()=>moveEntry(idx,idx-1)}>↑</button>
+                              <button style={{background:'none',border:`1px solid ${C.borderLight}`,borderRadius:4,padding:'3px 7px',cursor:idx===editEntries.length-1?'default':'pointer',opacity:idx===editEntries.length-1?0.3:1,fontSize:11}} disabled={idx===editEntries.length-1} title="Move down" onClick={()=>moveEntry(idx,idx+1)}>↓</button>
+                              <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:13,padding:'0 4px'}} title="Remove" onClick={()=>removeEntry(idx)}>✕</button>
+                            </div>
+                          </div>);
+                        })}
+                      </div>
+                      <div style={{display:'flex',justifyContent:'flex-end',gap:6,marginTop:8}}>
+                        <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'4px 10px'}} onClick={()=>setEditTemplateId(null)}>Done</button>
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{fontSize:10,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}}>Add event</div>
+                      <input style={{...S.input,fontSize:12,padding:'5px 8px',marginBottom:6}} placeholder="Filter…" value={templateAddSearch} onChange={e=>setTemplateAddSearch(e.target.value)} />
+                      <div style={{maxHeight:'45vh',overflowY:'auto',border:`1px solid ${C.borderLight}`,borderRadius:6}}>
+                        {candidates.length===0 && <div style={{padding:10,textAlign:'center',color:C.textMuted,fontSize:11}}>{uniqEntries.length===0?'No events defined yet.':'Every event is already in the template.'}</div>}
+                        {candidates.map((entry,i)=>(
+                          <button key={`${entry.name}-${entry.gender}-${i}`} style={{display:'block',width:'100%',textAlign:'left',background:C.surface,border:'none',borderBottom:`1px solid ${C.borderLight}`,padding:'6px 10px',cursor:'pointer',fontSize:12}} onClick={()=>addEntry({name:entry.name,gender:entry.gender})}>
+                            <span style={{fontWeight:600}}>{entry.name}</span> <span style={{color:C.textMuted}}>· {entry.gender==='Boy'?'Boys':entry.gender==='Girl'?'Girls':entry.gender||'Mixed'}</span>
+                            <span style={{float:'right',color:C.accent,fontSize:11,fontWeight:700}}>+ Add</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>);
+      })()}
+
       {tab==='qualifying' && (()=>{
         const stdTypes = data.qualifyingStandardTypes||[];
         const allCombos = [];

@@ -49,6 +49,9 @@ const DEFAULT_EVENTS = [
 ].map((e,i) => ({ id: `evt_${i}`, ...e, qualifyingStandards: [], schoolRecords: [] }));
 const INDOOR_LAP = 200;
 const OUTDOOR_LAP = 400;
+const ROUND_LABELS = ['Open','Trial','Prelim','Quarterfinal','Semifinal','Final'];
+const ROUND_COLOR = { Open:'#788396', Trial:'#788396', Prelim:'#788396', Quarterfinal:'#2b6cb0', Semifinal:'#2b6cb0', Final:'#c96a1f' };
+const normalizeRound = (r) => (r && ROUND_LABELS.includes(r)) ? r : 'Open';
 const CLOSE_THRESHOLD = 0.03;
 const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat'];
 const EXERCISE_COLUMNS = [
@@ -2101,18 +2104,28 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
     }
     return 1;
   })();
-  const storedEntries = {};
-  const storedDays = {};
+  const storedByEvent = {};
   (meet.events||[]).forEach(me => {
-    storedEntries[me.eventId] = me.entries || [];
-    if(me.day) storedDays[me.eventId] = me.day;
+    const r = normalizeRound(me.round);
+    if(!storedByEvent[me.eventId]) storedByEvent[me.eventId] = {};
+    storedByEvent[me.eventId][r] = me;
   });
-  const meetEvents = applicableEvents.map(evt => ({
-    eventId: evt.id,
-    evt,
-    entries: storedEntries[evt.id] || [],
-    day: Math.min(storedDays[evt.id] || 1, meetDayCount),
-  }));
+  const meetEvents = applicableEvents.flatMap(evt => {
+    const stored = storedByEvent[evt.id] || {};
+    const rounds = Object.keys(stored);
+    if(rounds.length === 0) {
+      return [{ eventId: evt.id, evt, round: 'Open', entries: [], day: 1 }];
+    }
+    // Sort rounds in racing order: Open → Trial → Prelim → Quarter → Semi → Final
+    rounds.sort((a,b)=>ROUND_LABELS.indexOf(a)-ROUND_LABELS.indexOf(b));
+    return rounds.map(round => ({
+      eventId: evt.id,
+      evt,
+      round,
+      entries: stored[round].entries || [],
+      day: Math.min(stored[round].day || 1, meetDayCount),
+    }));
+  });
   const eventOrder = meet.eventOrder || [];
   const filtered = meetEvents.filter(me => {
     if(genderFilter && me.evt.gender !== genderFilter) return false;
@@ -2156,22 +2169,38 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
     next.splice(newIdx, 0, moved);
     saveEventOrder(next);
   };
-  const saveEntries = (eventId, newEntries) => {
+  const saveEntries = (eventId, newEntries, round) => {
+    const r = normalizeRound(round);
     const updatedMeetEvents = [...(meet.events||[])];
-    const idx = updatedMeetEvents.findIndex(me=>me.eventId===eventId);
-    if(idx>=0) updatedMeetEvents[idx] = {...updatedMeetEvents[idx], entries:newEntries};
-    else updatedMeetEvents.push({eventId, entries:newEntries});
+    const idx = updatedMeetEvents.findIndex(me=>me.eventId===eventId && normalizeRound(me.round)===r);
+    if(idx>=0) updatedMeetEvents[idx] = {...updatedMeetEvents[idx], entries:newEntries, round:r};
+    else updatedMeetEvents.push({eventId, round:r, entries:newEntries});
     save({...data, meets:data.meets.map(m=>m.id===meetId?{...m, events:updatedMeetEvents}:m)});
   };
-  const setEventDay = (eventId, day) => {
+  const setEventDay = (eventId, day, round) => {
+    const r = normalizeRound(round);
     const updatedMeetEvents = [...(meet.events||[])];
-    const idx = updatedMeetEvents.findIndex(me=>me.eventId===eventId);
-    if(idx>=0) updatedMeetEvents[idx] = {...updatedMeetEvents[idx], day};
-    else updatedMeetEvents.push({eventId, entries:[], day});
+    const idx = updatedMeetEvents.findIndex(me=>me.eventId===eventId && normalizeRound(me.round)===r);
+    if(idx>=0) updatedMeetEvents[idx] = {...updatedMeetEvents[idx], day, round:r};
+    else updatedMeetEvents.push({eventId, round:r, entries:[], day});
     save({...data, meets:data.meets.map(m=>m.id===meetId?{...m, events:updatedMeetEvents}:m)});
   };
-  const swapRelayLegs = (eventId, entryIdx, legA, legB) => {
-    const me = (meet.events||[]).find(e=>e.eventId===eventId);
+  const addRoundCard = (eventId, round) => {
+    const r = normalizeRound(round);
+    const exists = (meet.events||[]).some(me=>me.eventId===eventId && normalizeRound(me.round)===r);
+    if(exists) return;
+    const updatedMeetEvents = [...(meet.events||[]), {eventId, round:r, entries:[]}];
+    save({...data, meets:data.meets.map(m=>m.id===meetId?{...m, events:updatedMeetEvents}:m)});
+  };
+  const removeRoundCard = (eventId, round) => {
+    const r = normalizeRound(round);
+    if(!window.confirm(`Remove the ${r} card for this event? Any entries on it will be deleted.`)) return;
+    const updatedMeetEvents = (meet.events||[]).filter(me=>!(me.eventId===eventId && normalizeRound(me.round)===r));
+    save({...data, meets:data.meets.map(m=>m.id===meetId?{...m, events:updatedMeetEvents}:m)});
+  };
+  const swapRelayLegs = (eventId, round, entryIdx, legA, legB) => {
+    const r = normalizeRound(round);
+    const me = (meet.events||[]).find(e=>e.eventId===eventId && normalizeRound(e.round)===r);
     if(!me) return;
     const newEntries = (me.entries||[]).map((en,i)=>{
       if(i!==entryIdx) return en;
@@ -2180,7 +2209,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
       [athletes[legA], athletes[legB]] = [athletes[legB], athletes[legA]];
       return {...en, athletes};
     });
-    saveEntries(eventId, newEntries);
+    saveEntries(eventId, newEntries, r);
   };
   const toggleExcludeEvent = (eventId) => {
     const cur = meet.excludedEvents || [];
@@ -2316,6 +2345,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
   };
   const openResultsEntry = (me) => {
     const evt = me.evt;
+    const meR = normalizeRound(me.round);
     const isField = isFieldEvent(evt);
     const isRelay = evt.entryType==='Relay';
     const entries = me.entries||[];
@@ -2326,7 +2356,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
         const athleteIds = (en.athletes||[]).map(a=>a.athleteId).filter(Boolean);
         const sortedKey = [...athleteIds].sort().join(',');
         const aidSet = new Set(athleteIds);
-        const allRelayComposites = (data.results||[]).filter(r=>r.eventId===evt.id&&r.meetId===meetId&&r.isRelay);
+        const allRelayComposites = (data.results||[]).filter(r=>r.eventId===evt.id&&r.meetId===meetId&&r.isRelay&&normalizeRound(r.round)===meR);
         let existingComposite = allRelayComposites.find(r=>[...(r.relayAthletes||[])].sort().join(',')===sortedKey);
         if(!existingComposite && aidSet.size > 0) {
           existingComposite = allRelayComposites.find(r=>{
@@ -2358,7 +2388,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
       const athleteIds = entries.flatMap(en=>[en.athleteId]).filter(Boolean);
       const unique = [...new Set(athleteIds)];
       unique.forEach(aid=>{
-        const existing = (data.results||[]).find(r=>r.athleteId===aid&&r.eventId===evt.id&&r.meetId===meetId&&!r.isRelay&&!r.isRelaySplit);
+        const existing = (data.results||[]).find(r=>r.athleteId===aid&&r.eventId===evt.id&&r.meetId===meetId&&!r.isRelay&&!r.isRelaySplit&&normalizeRound(r.round)===meR);
         if(existing) {
           if(isField) pre[aid] = {ft:(existing.ft||'')+'',inch:(existing.inch||'')+'',qtr:(existing.qtr||'')+'',place:(existing.place||'')+'',resultId:existing.id,verified:!!existing.verified};
           else {const ms=existing.timeMs||0;pre[aid]={min:Math.floor(ms/60000)+'',sec:((ms%60000)/1000).toFixed(2),place:(existing.place||'')+'',resultId:existing.id,verified:!!existing.verified};}
@@ -2368,9 +2398,10 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
       });
     }
     setResultsEntryData(pre);
-    setResultsEntryEvent(me.eventId);
+    setResultsEntryEvent(`${me.eventId}|${meR}`);
   };
-  const saveResultsEntry = (eventId) => {
+  const saveResultsEntry = (eventId, round) => {
+    const r = normalizeRound(round);
     const evt = events.find(e=>e.id===eventId);
     if(!evt) return;
     const isField = isFieldEvent(evt);
@@ -2383,27 +2414,27 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
         if(!hasValue && !(v.legs||[]).length) return;
         const timeMs = parseTimeToMs(v.min, v.sec);
         if(v.resultId) {
-          if(hasValue) updatedResults = updatedResults.map(r=>r.id===v.resultId?{...r,timeMs,place:v.place||'',verified:true}:r);
+          if(hasValue) updatedResults = updatedResults.map(rr=>rr.id===v.resultId?{...rr,timeMs,place:v.place||'',verified:true,round:r}:rr);
         } else if(hasValue) {
-          updatedResults.push({id:uid(),eventId,meetId,date:raceDate,timeMs,isRelay:true,relayAthletes:v.athleteIds||[],place:v.place||'',verified:true,splits:[]});
+          updatedResults.push({id:uid(),eventId,meetId,date:raceDate,timeMs,isRelay:true,relayAthletes:v.athleteIds||[],place:v.place||'',verified:true,round:r,splits:[]});
         }
         (v.legs||[]).forEach(leg => {
           if(!leg.id) return;
           const legMs = parseTimeToMs(leg.min, leg.sec);
-          updatedResults = updatedResults.map(r => r.id===leg.id ? {...r, timeMs:legMs} : r);
+          updatedResults = updatedResults.map(rr => rr.id===leg.id ? {...rr, timeMs:legMs, round:r} : rr);
         });
       } else {
         const aid = key;
         const hasValue = isField?(v.ft||v.inch||v.qtr):(v.min||v.sec);
         if(!hasValue) return;
         if(v.resultId) {
-          updatedResults = updatedResults.map(r=>{
-            if(r.id!==v.resultId) return r;
-            if(isField) return {...r,ft:parseInt(v.ft)||0,inch:parseInt(v.inch)||0,qtr:parseFloat(v.qtr)||0,place:v.place||'',verified:true};
-            return {...r,timeMs:parseTimeToMs(v.min,v.sec),place:v.place||'',verified:true};
+          updatedResults = updatedResults.map(rr=>{
+            if(rr.id!==v.resultId) return rr;
+            if(isField) return {...rr,ft:parseInt(v.ft)||0,inch:parseInt(v.inch)||0,qtr:parseFloat(v.qtr)||0,place:v.place||'',verified:true,round:r};
+            return {...rr,timeMs:parseTimeToMs(v.min,v.sec),place:v.place||'',verified:true,round:r};
           });
         } else {
-          const newR = {id:uid(),athleteId:aid,eventId,meetId,date:raceDate,verified:true,place:v.place||''};
+          const newR = {id:uid(),athleteId:aid,eventId,meetId,date:raceDate,verified:true,place:v.place||'',round:r};
           if(isField) {newR.ft=parseInt(v.ft)||0;newR.inch=parseInt(v.inch)||0;newR.qtr=parseFloat(v.qtr)||0;}
           else newR.timeMs=parseTimeToMs(v.min,v.sec);
           updatedResults.push(newR);
@@ -2564,20 +2595,23 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
           {showHeader && <div style={{fontSize:11,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',letterSpacing:'0.05em',padding:'10px 4px 4px',borderBottom:`2px solid ${C.border}`,marginTop:meIdx===0?0:12,marginBottom:6}}>Day {me.day}</div>}
           <div style={{...S.card,padding:'14px 16px',borderLeft:`3px solid ${me.evt.gender==='Boy'?C.blue:me.evt.gender==='Girl'?'#d53f8c':C.accent}`,border:`1px solid ${C.border}`}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:hasEntries?8:0,flexWrap:'wrap',gap:6}}>
-              <div style={{display:'flex',alignItems:'center',gap:6}}>
+              <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
                 <span style={{fontWeight:700,fontSize:15}}>{getEventLabel(me.evt)}</span>
+                {(()=>{const r=normalizeRound(me.round); const existingRounds=meetEvents.filter(x=>x.eventId===me.eventId).map(x=>normalizeRound(x.round)); const showBadge=r!=='Open'||existingRounds.length>1; if(!showBadge) return null; const clr=ROUND_COLOR[r]||C.textMuted; return <span style={{fontSize:10,fontWeight:700,padding:'2px 9px',borderRadius:10,background:r==='Final'?clr:'transparent',color:r==='Final'?'#fff':clr,border:`1px solid ${clr}`,textTransform:'uppercase',letterSpacing:'0.05em'}}>{r}</span>;})()}
                 <span style={{fontSize:10,color:C.textMuted}}>{me.evt.eventType} - {me.evt.entryType}</span>
                 {meetDayCount > 1 && (
-                  <select value={me.day} onChange={e=>setEventDay(me.eventId, parseInt(e.target.value))} style={{fontSize:10,fontWeight:600,padding:'2px 4px',borderRadius:10,border:`1px solid ${C.accent}`,background:C.accentMuted,color:C.accent,cursor:'pointer'}}>
+                  <select value={me.day} onChange={e=>setEventDay(me.eventId, parseInt(e.target.value), me.round)} style={{fontSize:10,fontWeight:600,padding:'2px 4px',borderRadius:10,border:`1px solid ${C.accent}`,background:C.accentMuted,color:C.accent,cursor:'pointer'}}>
                     {Array.from({length:meetDayCount},(_,i)=>i+1).map(d=><option key={d} value={d}>Day {d}</option>)}
                   </select>
                 )}
                 {me.entries.length>0&&(()=>{const mx=getMaxForEvent(me.eventId);const over=mx>0&&me.entries.length>mx;return <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,fontWeight:700,background:over?C.dangerMuted:C.surface2,color:over?C.danger:C.textSecondary,border:over?`1px solid ${C.danger}`:'none'}}>{me.entries.length}{mx>0?`/${mx}`:''}{over?' ⚠':''}</span>;})()}
+                {(()=>{const existingRounds=new Set(meetEvents.filter(x=>x.eventId===me.eventId).map(x=>normalizeRound(x.round)));const missing=ROUND_LABELS.filter(r=>!existingRounds.has(r));if(!missing.length) return null;return <select defaultValue="" onChange={e=>{if(e.target.value){addRoundCard(me.eventId, e.target.value);e.target.value='';}}} style={{fontSize:10,fontWeight:600,padding:'2px 4px',borderRadius:10,border:`1px dashed ${C.textMuted}`,background:'transparent',color:C.textSecondary,cursor:'pointer'}}><option value="">+ Round…</option>{missing.map(r=><option key={r} value={r}>{r}</option>)}</select>;})()}
+                {(()=>{const r=normalizeRound(me.round);if(r==='Open')return null;return <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:11,padding:'2px 6px'}} onClick={()=>removeRoundCard(me.eventId, me.round)} title={`Remove ${r} card for this event`}>✕ {r}</button>;})()}
               </div>
               <div style={{display:'flex',gap:6}}>
-                <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'6px 14px'}} onClick={()=>{setEditEntryIdx(null);setShowEntryModal(me.eventId);}}>+ Entry</button>
+                <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'6px 14px'}} onClick={()=>{setEditEntryIdx(null);setShowEntryModal({eventId:me.eventId,round:me.round});}}>+ Entry</button>
                 {hasEntries && <button style={{...S.btn,...S.btnPrimary,fontSize:12,padding:'6px 14px'}} onClick={()=>goToRecord(me)}>Record</button>}
-                {hasEntries && <button style={{...S.btn,fontSize:12,padding:'6px 14px',background:resultsEntryEvent===me.eventId?C.accent+'20':C.surface2,color:resultsEntryEvent===me.eventId?C.accent:C.textSecondary,border:`1px solid ${resultsEntryEvent===me.eventId?C.accent:C.border}`}} onClick={()=>{if(resultsEntryEvent===me.eventId){setResultsEntryEvent(null);setResultsEntryData({});}else openResultsEntry(me);}}>Results</button>}
+                {hasEntries && (()=>{const mek=`${me.eventId}|${normalizeRound(me.round)}`;const on=resultsEntryEvent===mek;return <button style={{...S.btn,fontSize:12,padding:'6px 14px',background:on?C.accent+'20':C.surface2,color:on?C.accent:C.textSecondary,border:`1px solid ${on?C.accent:C.border}`}} onClick={()=>{if(on){setResultsEntryEvent(null);setResultsEntryData({});}else openResultsEntry(me);}}>Results</button>;})()}
               </div>
             </div>
             {(()=>{
@@ -2600,7 +2634,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                         <tr key={`${ei}-header`} style={{background:C.accentMuted}}>
                           <td colSpan={2} style={{...S.td,fontWeight:700,fontSize:11,color:C.accent,textTransform:'uppercase',borderBottom:`2px solid ${C.accent}`,padding:'6px 12px'}}>Relay #{ei+1}</td>
                           <td style={{...S.td,borderBottom:`2px solid ${C.accent}`,padding:'6px 12px'}}></td>
-                          <td style={{...S.td,borderBottom:`2px solid ${C.accent}`,padding:'6px 12px'}}><div style={{display:'flex',gap:4}}><button style={{...S.btn,...S.btnSecondary,fontSize:10,padding:'2px 6px'}} onClick={()=>{setEditEntryIdx(ei);setShowEntryModal(me.eventId);}}>Edit</button><button style={{...S.btn,...S.btnDanger,fontSize:10,padding:'2px 6px'}} onClick={()=>saveEntries(me.eventId,entries.filter((_,i)=>i!==ei))}>✕</button></div></td>
+                          <td style={{...S.td,borderBottom:`2px solid ${C.accent}`,padding:'6px 12px'}}><div style={{display:'flex',gap:4}}><button style={{...S.btn,...S.btnSecondary,fontSize:10,padding:'2px 6px'}} onClick={()=>{setEditEntryIdx(ei);setShowEntryModal({eventId:me.eventId,round:me.round});}}>Edit</button><button style={{...S.btn,...S.btnDanger,fontSize:10,padding:'2px 6px'}} onClick={()=>saveEntries(me.eventId,entries.filter((_,i)=>i!==ei),me.round)}>✕</button></div></td>
                         </tr>,
                         ...(en.athletes||[]).map((a,ai) => {
                           const ath = data.athletes.find(at=>at.id===a.athleteId);
@@ -2613,8 +2647,8 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                               <td style={S.td}>{a.goalMs ? formatTime(a.goalMs) : '-'}</td>
                               <td style={S.td}>
                                 <div style={{display:'flex',gap:2}}>
-                                  <button style={{background:'none',border:`1px solid ${C.border}`,borderRadius:4,cursor:'pointer',padding:'2px 6px',fontSize:11,color:ai===0?C.border:C.textSecondary}} disabled={ai===0} onClick={()=>swapRelayLegs(me.eventId,ei,ai,ai-1)}>↑</button>
-                                  <button style={{background:'none',border:`1px solid ${C.border}`,borderRadius:4,cursor:'pointer',padding:'2px 6px',fontSize:11,color:ai>=legCount-1?C.border:C.textSecondary}} disabled={ai>=legCount-1} onClick={()=>swapRelayLegs(me.eventId,ei,ai,ai+1)}>↓</button>
+                                  <button style={{background:'none',border:`1px solid ${C.border}`,borderRadius:4,cursor:'pointer',padding:'2px 6px',fontSize:11,color:ai===0?C.border:C.textSecondary}} disabled={ai===0} onClick={()=>swapRelayLegs(me.eventId,me.round,ei,ai,ai-1)}>↑</button>
+                                  <button style={{background:'none',border:`1px solid ${C.border}`,borderRadius:4,cursor:'pointer',padding:'2px 6px',fontSize:11,color:ai>=legCount-1?C.border:C.textSecondary}} disabled={ai>=legCount-1} onClick={()=>swapRelayLegs(me.eventId,me.round,ei,ai,ai+1)}>↓</button>
                                 </div>
                               </td>
                             </tr>
@@ -2636,23 +2670,23 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                         <td style={{...S.td,fontWeight:500}}>{ath?athDisplay(ath):'-'}</td>
                         <td style={S.td}>{pr ? (isFieldEvent(me.evt) ? fieldToStr(pr.ft,pr.inch,pr.qtr) : formatTime(pr.timeMs)) : '-'}</td>
                         <td style={S.td}>{en.goalMs ? formatTime(en.goalMs) : '-'}</td>
-                        <td style={S.td}><div style={{display:'flex',gap:4}}><button style={{...S.btn,...S.btnSecondary,fontSize:10,padding:'2px 6px'}} onClick={()=>{setEditEntryIdx(ei);setShowEntryModal(me.eventId);}}>Edit</button><button style={{...S.btn,...S.btnDanger,fontSize:10,padding:'2px 6px'}} onClick={()=>saveEntries(me.eventId,entries.filter((_,i)=>i!==ei))}>✕</button></div></td>
+                        <td style={S.td}><div style={{display:'flex',gap:4}}><button style={{...S.btn,...S.btnSecondary,fontSize:10,padding:'2px 6px'}} onClick={()=>{setEditEntryIdx(ei);setShowEntryModal({eventId:me.eventId,round:me.round});}}>Edit</button><button style={{...S.btn,...S.btnDanger,fontSize:10,padding:'2px 6px'}} onClick={()=>saveEntries(me.eventId,entries.filter((_,i)=>i!==ei),me.round)}>✕</button></div></td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
             )}
-            {resultsEntryEvent===me.eventId&&(()=>{
+            {resultsEntryEvent===`${me.eventId}|${normalizeRound(me.round)}`&&(()=>{
               const isField = isFieldEvent(me.evt);
               const isRelay = me.evt.entryType==='Relay';
               const entries = me.entries||[];
               if(isRelay) {
                 return (<div style={{marginTop:8,padding:'10px 12px',background:C.bg,borderRadius:8,border:`1px solid ${C.accent}`}}>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-                    <span style={{fontSize:13,fontWeight:700,color:C.accent}}>Enter Relay Results</span>
+                    <span style={{fontSize:13,fontWeight:700,color:C.accent}}>Enter Relay Results{normalizeRound(me.round)!=='Open'&&<span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:8,background:ROUND_COLOR[normalizeRound(me.round)]||C.textMuted,color:'#fff',marginLeft:6,textTransform:'uppercase',letterSpacing:'0.05em'}}>{normalizeRound(me.round)}</span>}</span>
                     <div style={{display:'flex',gap:6}}>
-                      <button style={{...S.btn,...S.btnPrimary,fontSize:12,padding:'6px 16px'}} onClick={()=>saveResultsEntry(me.eventId)}>Save All</button>
+                      <button style={{...S.btn,...S.btnPrimary,fontSize:12,padding:'6px 16px'}} onClick={()=>saveResultsEntry(me.eventId, me.round)}>Save All</button>
                       <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'6px 12px'}} onClick={()=>{setResultsEntryEvent(null);setResultsEntryData({});}}>Cancel</button>
                     </div>
                   </div>
@@ -2715,7 +2749,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                     </div>);
                   })}
                   <div style={{display:'flex',justifyContent:'flex-end',marginTop:4}}>
-                    <button style={{...S.btn,...S.btnPrimary,fontSize:13,padding:'8px 24px'}} onClick={()=>saveResultsEntry(me.eventId)}>Save All Results</button>
+                    <button style={{...S.btn,...S.btnPrimary,fontSize:13,padding:'8px 24px'}} onClick={()=>saveResultsEntry(me.eventId, me.round)}>Save All Results</button>
                   </div>
                 </div>);
               }
@@ -2723,9 +2757,9 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
               const unique = [...new Set(athleteIds)];
               return (<div style={{marginTop:8,padding:'10px 12px',background:C.bg,borderRadius:8,border:`1px solid ${C.accent}`}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-                  <span style={{fontSize:13,fontWeight:700,color:C.accent}}>Enter Results</span>
+                  <span style={{fontSize:13,fontWeight:700,color:C.accent}}>Enter Results{normalizeRound(me.round)!=='Open'&&<span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:8,background:ROUND_COLOR[normalizeRound(me.round)]||C.textMuted,color:'#fff',marginLeft:6,textTransform:'uppercase',letterSpacing:'0.05em'}}>{normalizeRound(me.round)}</span>}</span>
                   <div style={{display:'flex',gap:6}}>
-                    <button style={{...S.btn,...S.btnPrimary,fontSize:12,padding:'6px 16px'}} onClick={()=>saveResultsEntry(me.eventId)}>Save All</button>
+                    <button style={{...S.btn,...S.btnPrimary,fontSize:12,padding:'6px 16px'}} onClick={()=>saveResultsEntry(me.eventId, me.round)}>Save All</button>
                     <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'6px 12px'}} onClick={()=>{setResultsEntryEvent(null);setResultsEntryData({});}}>Cancel</button>
                   </div>
                 </div>
@@ -2758,7 +2792,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                   })}</tbody>
                 </table>
                 <div style={{display:'flex',justifyContent:'flex-end',marginTop:8}}>
-                  <button style={{...S.btn,...S.btnPrimary,fontSize:13,padding:'8px 24px'}} onClick={()=>saveResultsEntry(me.eventId)}>Save All Results</button>
+                  <button style={{...S.btn,...S.btnPrimary,fontSize:13,padding:'8px 24px'}} onClick={()=>saveResultsEntry(me.eventId, me.round)}>Save All Results</button>
                 </div>
               </div>);
             })()}
@@ -2807,10 +2841,10 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
           saveEntries(evtObj.id, newEntries);
         };
         const addAthleteEntry = (athleteId, eventId) => {
-          const me = (meet.events||[]).find(e=>e.eventId===eventId);
+          const me = (meet.events||[]).find(e=>e.eventId===eventId && (e.round||'Open')==='Open');
           const entries = me ? [...(me.entries||[])] : [];
           entries.push({athleteId, goalMs:0});
-          saveEntries(eventId, entries);
+          saveEntries(eventId, entries, 'Open');
         };
         const activeAthletes = data.athletes.filter(a=>a.active!==false);
         let athList = activeAthletes.filter(a=>{
@@ -3362,11 +3396,12 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
           </div>
         </div>
       </Modal>
-      <MeetEntryModal data={data} save={save} meetId={meetId} eventId={showEntryModal} events={events} open={!!showEntryModal} onClose={()=>{setShowEntryModal(null);setEditEntryIdx(null);}} getAthletePR={getAthletePR} saveEntries={saveEntries} editEntryIdx={editEntryIdx} />
+      <MeetEntryModal data={data} save={save} meetId={meetId} eventId={(showEntryModal||{}).eventId||null} round={(showEntryModal||{}).round||'Open'} events={events} open={!!showEntryModal} onClose={()=>{setShowEntryModal(null);setEditEntryIdx(null);}} getAthletePR={getAthletePR} saveEntries={saveEntries} editEntryIdx={editEntryIdx} />
     </div>
   );
 }
-function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, getAthletePR, saveEntries, editEntryIdx }) {
+function MeetEntryModal({ data, save, meetId, eventId, round, events, open, onClose, getAthletePR, saveEntries, editEntryIdx }) {
+  const meRound = round || 'Open';
   const [entries, setEntries] = useState([{ athleteId:'', search:'', goalMin:0, goalSec:0, goalSource:'custom' }]);
   const [relayAthletes, setRelayAthletes] = useState([{ athleteId:'', search:'', goalMin:0, goalSec:0, goalSource:'custom' },{ athleteId:'', search:'', goalMin:0, goalSec:0, goalSource:'custom' },{ athleteId:'', search:'', goalMin:0, goalSec:0, goalSource:'custom' },{ athleteId:'', search:'', goalMin:0, goalSec:0, goalSource:'custom' }]);
   const [relayAlternates, setRelayAlternates] = useState([]);
@@ -3383,7 +3418,7 @@ function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, ge
   const evt = events.find(e=>e.id===eventId);
   if(!evt) return null;
   const meet = data.meets.find(m=>m.id===meetId);
-  const me = ((meet||{}).events||[]).find(e=>e.eventId===eventId);
+  const me = ((meet||{}).events||[]).find(e=>e.eventId===eventId && (e.round||'Open')===meRound);
   const existingEntries = (me||{}).entries || [];
   const maxEntries = evt && evt.entryType==='Relay' ? ((meet||{}).maxRelayEntries || null) : ((meet||{}).maxEntriesPerEvent || null);
   const maxEvents = (meet||{}).maxEventsPerAthlete || null;
@@ -3482,9 +3517,9 @@ function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, ge
     const newEntries = valid.map(en=>({ athleteId:en.athleteId, goalMs:resolveGoalMs(en), goalSource:en.goalSource||'custom' }));
     if(isEditing) {
       const updated = [...existingEntries]; updated[editEntryIdx] = newEntries[0];
-      saveEntries(eventId, updated);
+      saveEntries(eventId, updated, meRound);
     } else {
-      saveEntries(eventId, [...existingEntries, ...newEntries]);
+      saveEntries(eventId, [...existingEntries, ...newEntries], meRound);
     }
     initRef.current = null;
     setEntries([{ athleteId:'', search:'', goalMin:0, goalSec:0, goalSource:'custom' }]);
@@ -3512,9 +3547,9 @@ function MeetEntryModal({ data, save, meetId, eventId, events, open, onClose, ge
     setRestrictionError('');
     if(isEditing) {
       const updated = [...existingEntries]; updated[editEntryIdx] = { athletes, alternates };
-      saveEntries(eventId, updated);
+      saveEntries(eventId, updated, meRound);
     } else {
-      saveEntries(eventId, [...existingEntries, { athletes, alternates }]);
+      saveEntries(eventId, [...existingEntries, { athletes, alternates }], meRound);
     }
     initRef.current = null;
     setRelayAthletes([{ athleteId:'', search:'', goalMin:0, goalSec:0, goalSource:'custom' },{ athleteId:'', search:'', goalMin:0, goalSec:0, goalSource:'custom' },{ athleteId:'', search:'', goalMin:0, goalSec:0, goalSource:'custom' },{ athleteId:'', search:'', goalMin:0, goalSec:0, goalSource:'custom' }]);

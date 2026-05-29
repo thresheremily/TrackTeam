@@ -167,9 +167,30 @@ const DEFAULT_MEET_ORDER = [
   {name:'2000m Steeplechase',gender:'Girl'},{name:'3000m Steeplechase',gender:'Boy'},
   {name:'4x400m',gender:'Girl'},{name:'4x400m',gender:'Boy'},
 ];
-const getDefaultOrder = (evt) => {
-  const idx = DEFAULT_MEET_ORDER.findIndex(o=>o.name===evt.name&&o.gender===evt.gender);
+const getOrderIndex = (evt, entries) => {
+  const list = entries && entries.length ? entries : DEFAULT_MEET_ORDER;
+  const idx = list.findIndex(o=>o.name===(evt||{}).name&&o.gender===(evt||{}).gender);
   return idx>=0?idx:500;
+};
+const getSystemOrderEntries = (data) => {
+  const templates = (data||{}).eventOrderTemplates || [];
+  const def = templates.find(t=>t.isDefault) || templates[0];
+  return def && Array.isArray(def.entries) && def.entries.length ? def.entries : DEFAULT_MEET_ORDER;
+};
+const getMeetOrderEntries = (data, meet) => {
+  const templates = (data||{}).eventOrderTemplates || [];
+  if(meet && meet.eventOrderTemplateId) {
+    const t = templates.find(t=>t.id===meet.eventOrderTemplateId);
+    if(t && Array.isArray(t.entries) && t.entries.length) return t.entries;
+  }
+  return getSystemOrderEntries(data);
+};
+const getDefaultOrder = (evt, dataOrEntries, meet) => {
+  // back-compat: getDefaultOrder(evt) and getDefaultOrder(evt, entries) both work
+  let entries = null;
+  if(Array.isArray(dataOrEntries)) entries = dataOrEntries;
+  else if(dataOrEntries && typeof dataOrEntries === 'object' && 'eventOrderTemplates' in dataOrEntries) entries = meet ? getMeetOrderEntries(dataOrEntries, meet) : getSystemOrderEntries(dataOrEntries);
+  return getOrderIndex(evt, entries);
 };
 const getSortedMeetEventIds = (data, events, meetId) => {
   const meet = (data.meets||[]).find(m=>m.id===meetId);

@@ -2571,7 +2571,6 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
           <option value="">Individual & Relay</option><option value="Individual">Individual</option><option value="Relay">Relay</option>
         </select>
         <button style={{...S.btn,...S.btnPrimary,fontSize:11,padding:'4px 10px'}} onClick={()=>{setReorderList(filtered.map(me=>me.eventId));setReorderDragIdx(null);setReorderDragOver(null);setShowReorderModal(true);}}>↕ Reorder events</button>
-        {eventOrder.length > 0 && <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'4px 10px'}} onClick={()=>saveEventOrder([])}>Reset Order</button>}
       </div>
       {meetDayCount > 1 && (
         <div style={{display:'flex',gap:6,marginBottom:10,flexWrap:'wrap',alignItems:'center'}}>
@@ -2681,7 +2680,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                 {!evtNote&&<button style={{background:'none',border:'none',color:C.textMuted,cursor:'pointer',fontSize:10,padding:'2px 0'}} onClick={()=>{const v=prompt('Add note (e.g. minimum height, entry requirement):');if(v)save({...data,meets:data.meets.map(m=>m.id===meetId?{...m,eventNotes:{...(m.eventNotes||{}),[me.eventId]:v}}:m)});}}>+ Add note</button>}
               </div>);
             })()}
-            {hasEntries && (
+            {meetTab==='entries' && hasEntries && (
               <table style={{width:'100%',borderCollapse:'collapse'}}>
                 <thead><tr><th style={S.th}>Athlete</th><th style={S.th}>PR</th><th style={S.th}>Goal</th><th style={{...S.th,width:70}}></th></tr></thead>
                 <tbody>
@@ -2734,6 +2733,80 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                 </tbody>
               </table>
             )}
+            {meetTab==='results' && hasEntries && (()=>{
+              const meR = normalizeRound(me.round);
+              const isField = isFieldEvent(me.evt);
+              const isRelay = me.evt.entryType === 'Relay';
+              const cardResults = (data.results||[]).filter(r => r.eventId === me.eventId && r.meetId === meetId && normalizeRound(r.round) === meR && !r.isRelaySplit);
+              if(isRelay) {
+                return (<table style={{width:'100%',borderCollapse:'collapse'}}>
+                  <thead><tr>
+                    <th style={S.th}>Relay</th>
+                    <th style={S.th}>Lineup</th>
+                    <th style={{...S.th,textAlign:'right'}}>Total time</th>
+                    <th style={{...S.th,width:60,textAlign:'center'}}>Place</th>
+                    <th style={S.th}></th>
+                  </tr></thead>
+                  <tbody>
+                    {entries.map((en,ei)=>{
+                      const athleteIds = (en.athletes||[]).map(a=>a.athleteId).filter(Boolean);
+                      const sortedKey = [...athleteIds].sort().join(',');
+                      const composite = cardResults.find(r => r.isRelay && [...(r.relayAthletes||[])].sort().join(',')===sortedKey);
+                      const lineupNames = athleteIds.map(aid=>{const ath=data.athletes.find(a=>a.id===aid);return ath?athDisplay(ath):'?';}).join(', ')||'(no lineup)';
+                      const time = composite ? formatTime(composite.timeMs||0) : '—';
+                      const place = composite&&composite.place;
+                      const quals = composite ? getAllQualifyingForResult(data, events, composite) : [];
+                      return (<tr key={ei}>
+                        <td style={{...S.td,fontWeight:700,color:'#6b46c1',fontSize:11}}>#{ei+1}</td>
+                        <td style={{...S.td,fontSize:12}}>{lineupNames}</td>
+                        <td style={{...S.td,textAlign:'right',fontWeight:700,fontSize:13,color:composite?C.text:C.textMuted}}>{time}</td>
+                        <td style={{...S.td,textAlign:'center'}}>{place && <span style={{fontSize:10,fontWeight:700,color:C.accent,padding:'1px 7px',borderRadius:8,background:C.accentMuted,border:`1px solid ${C.accent}`}}>{place}</span>}</td>
+                        <td style={S.td}>
+                          <div style={{display:'flex',gap:3,flexWrap:'wrap'}}>
+                            {composite && composite.verified && <VerifiedBadge verified={true} small />}
+                            {quals.map(q=><QStdBadge key={q.id} data={data} std={q} />)}
+                          </div>
+                        </td>
+                      </tr>);
+                    })}
+                  </tbody>
+                </table>);
+              }
+              const athleteIds = entries.flatMap(en=>[en.athleteId]).filter(Boolean);
+              const unique = [...new Set(athleteIds)];
+              return (<table style={{width:'100%',borderCollapse:'collapse'}}>
+                <thead><tr>
+                  <th style={S.th}>Athlete</th>
+                  <th style={{...S.th,textAlign:'right'}}>{isField?'Mark':'Time'}</th>
+                  <th style={{...S.th,width:60,textAlign:'center'}}>Place</th>
+                  <th style={S.th}></th>
+                </tr></thead>
+                <tbody>
+                  {unique.map(aid=>{
+                    const ath = data.athletes.find(a=>a.id===aid);
+                    if(!ath) return null;
+                    const result = cardResults.find(r=>r.athleteId===aid);
+                    const time = result ? (isField?fieldToStr(result.ft||0,result.inch||0,result.qtr||0):formatTime(result.timeMs||0)) : '—';
+                    const place = result&&result.place;
+                    const quals = result ? getAllQualifyingForResult(data, events, result) : [];
+                    return (<tr key={aid}>
+                      <td style={{...S.td,fontSize:12,fontWeight:500}}>
+                        {athDisplay(ath)}
+                        {ath.gradYear && <span style={{color:C.textMuted,fontSize:11,marginLeft:4}}>'{(ath.gradYear+'').slice(-2)}</span>}
+                      </td>
+                      <td style={{...S.td,textAlign:'right',fontWeight:700,fontSize:13,color:result?C.text:C.textMuted}}>{time}</td>
+                      <td style={{...S.td,textAlign:'center'}}>{place && <span style={{fontSize:10,fontWeight:700,color:C.accent,padding:'1px 7px',borderRadius:8,background:C.accentMuted,border:`1px solid ${C.accent}`}}>{place}</span>}</td>
+                      <td style={S.td}>
+                        <div style={{display:'flex',gap:3,flexWrap:'wrap'}}>
+                          {result && result.verified && <VerifiedBadge verified={true} small />}
+                          {quals.map(q=><QStdBadge key={q.id} data={data} std={q} />)}
+                        </div>
+                      </td>
+                    </tr>);
+                  })}
+                </tbody>
+              </table>);
+            })()}
             {resultsEntryEvent===`${me.eventId}|${normalizeRound(me.round)}`&&(()=>{
               const isField = isFieldEvent(me.evt);
               const isRelay = me.evt.entryType==='Relay';
@@ -3440,6 +3513,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginTop:14,flexWrap:'wrap'}}>
           <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
             <button style={{...S.btn,fontSize:11,padding:'6px 10px',background:'transparent',color:C.textMuted,border:`1px solid ${C.border}`}} onClick={()=>setReorderList(filtered.map(me=>me.eventId))}>Reset (filtered order)</button>
+            {eventOrder.length > 0 && <button style={{...S.btn,fontSize:11,padding:'6px 10px',background:'transparent',color:C.danger,border:`1px solid ${C.danger}`}} onClick={()=>{if(!window.confirm('Clear the custom order for this meet and fall back to the template default?')) return; saveEventOrder([]); setShowReorderModal(false);}} title="Clear this meet's custom order and fall back to the template default">Reset to template default</button>}
             <button style={{...S.btn,fontSize:11,padding:'6px 10px',background:'transparent',color:C.accent,border:`1px solid ${C.accent}`}} onClick={()=>{
               const name = window.prompt('Save current order as a new template — name it:', `Order from ${meet.name||'this meet'}`);
               if(!name) return;

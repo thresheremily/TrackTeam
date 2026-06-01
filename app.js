@@ -8808,6 +8808,9 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
   const [collapsedDimensions, setCollapsedDimensions] = useState({});
   const [collapsedOppSections, setCollapsedOppSections] = useState({});
   const [collapsedStdTypeIds, setCollapsedStdTypeIds] = useState({});
+  const [oppSearch, setOppSearch] = useState('');
+  const [oppFilters, setOppFilters] = useState({});
+  const [oppSortDir, setOppSortDir] = useState('asc');
   useEffect(() => { setTeamName((team||{}).name||''); setSchool((team||{}).school||''); setPrimaryColor(((team||{}).colors||{}).primary||'#c96a1f'); setSecondaryColor(((team||{}).colors||{}).secondary||'#2b6cb0'); }, [team]);
   const handleSaveBranding = async () => {
     await updateTeam(team.id, { name:teamName.trim(), school:school.trim(), colors:{primary:primaryColor,secondary:secondaryColor} });
@@ -9188,26 +9191,55 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
             {!isSecCollapsed('opponents') && <div style={{padding:'0 14px 12px'}}>
             {opponents.length===0 ? (
               <div style={{fontSize:12,color:C.textMuted,textAlign:'center',padding:14,fontStyle:'italic'}}>No opponents yet. Use "+ Add Opponent" at the top to add one.</div>
-            ) : (
-              <div>
-                {[...opponents].sort((a,b)=>a.name.localeCompare(b.name)).map(o=>{
-                  const label = getOpponentDimensionsLabel(o.id, opponents, dimensions, data);
-                  const anyAssigned = Object.values(o.dimensionValues||{}).some(Boolean);
-                  return (
-                    <div key={o.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'8px 10px',borderBottom:`1px solid ${C.borderLight}`}}>
-                      <div style={{minWidth:0,flex:1}}>
-                        <div style={{fontSize:13,fontWeight:600,color:C.text}}>{o.name}</div>
-                        <div style={{fontSize:11,color:anyAssigned?C.textMuted:C.danger,marginTop:2,fontStyle:anyAssigned?'normal':'italic'}}>{anyAssigned?label:'Uncategorized'}</div>
+            ) : (()=>{
+              const activeFilterCount = Object.values(oppFilters).filter(v=>v).length;
+              const sortedOpps = [...opponents].sort((a,b)=>oppSortDir==='asc'?a.name.localeCompare(b.name):b.name.localeCompare(a.name));
+              const filteredOpps = sortedOpps.filter(o=>{
+                if(oppSearch.trim() && !o.name.toLowerCase().includes(oppSearch.toLowerCase())) return false;
+                for(const [dimId, valueId] of Object.entries(oppFilters)) {
+                  if(!valueId) continue;
+                  const assigned = (o.dimensionValues||{})[dimId];
+                  if(valueId === '__none') { if(assigned) return false; }
+                  else if(assigned !== valueId) return false;
+                }
+                return true;
+              });
+              return (
+                <div>
+                  <div style={{display:'flex',flexWrap:'wrap',gap:6,alignItems:'center',marginBottom:10,padding:'8px 10px',background:C.bg,borderRadius:6}}>
+                    <input style={{...S.input,fontSize:12,padding:'4px 8px',flex:'1 1 160px',minWidth:120}} placeholder="Search by name…" value={oppSearch} onChange={e=>setOppSearch(e.target.value)} />
+                    {dimensions.map(d=>(
+                      <select key={d.id} style={{...S.select,fontSize:11,padding:'3px 6px'}} value={oppFilters[d.id]||''} onChange={e=>setOppFilters(f=>({...f,[d.id]:e.target.value}))} title={`Filter by ${d.name}`}>
+                        <option value="">All {d.name}</option>
+                        <option value="__none">— No {d.name}</option>
+                        {getDimensionValues(d).map(v=><option key={v.id} value={v.id}>{v.name}</option>)}
+                      </select>
+                    ))}
+                    <button onClick={()=>setOppSortDir(d=>d==='asc'?'desc':'asc')} style={{...S.btn,fontSize:11,padding:'4px 10px',background:'transparent',color:C.textSecondary,border:`1px solid ${C.border}`}} title="Toggle sort direction">Name {oppSortDir==='asc'?'↑':'↓'}</button>
+                    {(activeFilterCount>0||oppSearch) && <button onClick={()=>{setOppFilters({});setOppSearch('');}} style={{...S.btn,fontSize:11,padding:'4px 10px',background:'transparent',color:C.danger,border:`1px solid ${C.danger}`}}>Clear</button>}
+                  </div>
+                  {filteredOpps.length===0 ? (
+                    <div style={{fontSize:12,color:C.textMuted,textAlign:'center',padding:14,fontStyle:'italic'}}>No opponents match these filters.</div>
+                  ) : filteredOpps.map(o=>{
+                    const label = getOpponentDimensionsLabel(o.id, opponents, dimensions, data);
+                    const anyAssigned = Object.values(o.dimensionValues||{}).some(Boolean);
+                    return (
+                      <div key={o.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'8px 10px',borderBottom:`1px solid ${C.borderLight}`}}>
+                        <div style={{minWidth:0,flex:1}}>
+                          <div style={{fontSize:13,fontWeight:600,color:C.text}}>{o.name}</div>
+                          <div style={{fontSize:11,color:anyAssigned?C.textMuted:C.danger,marginTop:2,fontStyle:anyAssigned?'normal':'italic'}}>{anyAssigned?label:'Uncategorized'}</div>
+                        </div>
+                        <div style={{display:'flex',gap:4}}>
+                          <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'3px 10px'}} onClick={()=>{setOppForm({name:o.name,dimensionValues:{...(o.dimensionValues||{})}});setEditOppId(o.id);setShowAddOpp(true);}}>Edit</button>
+                          <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12}} onClick={()=>setDelOppId(o.id)}>✕</button>
+                        </div>
                       </div>
-                      <div style={{display:'flex',gap:4}}>
-                        <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'3px 10px'}} onClick={()=>{setOppForm({name:o.name,dimensionValues:{...(o.dimensionValues||{})}});setEditOppId(o.id);setShowAddOpp(true);}}>Edit</button>
-                        <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12}} onClick={()=>setDelOppId(o.id)}>✕</button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+                    );
+                  })}
+                  {(activeFilterCount>0||oppSearch) && <div style={{fontSize:10,color:C.textMuted,marginTop:6,fontStyle:'italic'}}>Showing {filteredOpps.length} of {opponents.length} opponent{opponents.length===1?'':'s'}.</div>}
+                </div>
+              );
+            })()}
             </div>}
           </div>
 

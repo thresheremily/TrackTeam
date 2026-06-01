@@ -129,15 +129,20 @@ const getOpponentValueName = (opponent, dimensionId, dimensions) => {
   const v = (dim.values||[]).find(x=>x.id===opponent.dimensionValues[dimensionId]);
   return v ? v.name : '';
 };
-const getOpponentDimensionsLabel = (opponentId, opponents, dimensions) => {
-  if(!opponentId || opponentId === 'self') return '';
+const getOurTeamDimensionValues = (data) => (data && data.ourTeamDimensionValues) || {};
+const getDimensionsLabelForValues = (dimensionValues, dimensions) => {
+  if(!dimensions.length) return '';
+  return dimensions.map(d => {
+    const v = (d.values||[]).find(x=>x.id===(dimensionValues||{})[d.id]);
+    return v ? v.name : '—';
+  }).join(' · ');
+};
+const getOpponentDimensionsLabel = (opponentId, opponents, dimensions, data) => {
+  if(!opponentId) return '';
+  if(opponentId === 'self') return getDimensionsLabelForValues(getOurTeamDimensionValues(data), dimensions);
   const o = opponents.find(x=>x.id===opponentId);
   if(!o) return '';
-  const parts = dimensions.map(d => {
-    const name = getOpponentValueName(o, d.id, dimensions);
-    return name ? name : '—';
-  });
-  return parts.length ? parts.join(' · ') : '';
+  return getDimensionsLabelForValues(o.dimensionValues||{}, dimensions);
 };
 const collectKnownTags = (data) => {
   const set = new Set();
@@ -3535,7 +3540,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                   <tbody>
                     {rows.map((r,idx)=>{
                       const isSelf = r.opponentId === 'self';
-                      const dimLabel = isSelf ? '' : getOpponentDimensionsLabel(r.opponentId, opponents, dimensions);
+                      const dimLabel = getOpponentDimensionsLabel(r.opponentId, opponents, dimensions, data);
                       return (
                         <tr key={r.id||idx} style={{background:isSelf?C.accentMuted:'transparent'}}>
                           <td style={{...S.td,padding:'4px 6px'}}>
@@ -3545,7 +3550,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                               {opponents.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}
                             </select>
                           </td>
-                          <td style={{...S.td,padding:'4px 6px',color:C.textMuted,fontSize:11}}>{isSelf?'—':(dimLabel||<span style={{fontStyle:'italic',color:C.textMuted}}>(no categories)</span>)}</td>
+                          <td style={{...S.td,padding:'4px 6px',color:C.textMuted,fontSize:11}}>{dimLabel||<span style={{fontStyle:'italic',color:C.textMuted}}>{isSelf?'(set under Settings → Opponents)':'(no categories)'}</span>}</td>
                           <td style={{...S.td,padding:'4px 6px',textAlign:'right'}}><input style={{...S.input,fontSize:12,textAlign:'right',padding:'4px 8px'}} type="number" step="0.5" value={r.points==null?'':r.points} onChange={e=>updateRow(key,idx,{points:e.target.value===''?'':parseFloat(e.target.value)})} /></td>
                           <td style={{...S.td,padding:'4px 6px',textAlign:'right'}}><input style={{...S.input,fontSize:12,textAlign:'right',padding:'4px 8px'}} type="number" min="1" value={r.place==null?'':r.place} onChange={e=>updateRow(key,idx,{place:e.target.value===''?'':parseInt(e.target.value)})} /></td>
                           <td style={{...S.td,padding:'4px 6px',textAlign:'center'}}><button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:14}} onClick={()=>removeRow(key,idx)} title="Remove team">✕</button></td>
@@ -6420,7 +6425,7 @@ function EventsPage({ data, save, nav }) {
                           const mq = Math.max(parseInt(std.minQualifiers)||1, getStdMinQualifiers(data, std.name));
                           return (
                           <div key={std.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'4px 0',fontSize:12}}>
-                            <span style={{flex:1}}><span style={{fontWeight:600}}>{std.name}</span> - {evt.measurableType==='Time'?formatTime(std.timeMs):fieldToStr(std.ft,std.inch,std.qtr)}{mq>1&&<span style={{marginLeft:6,fontSize:10,color:'#b8860b',fontWeight:600}} title="Set under Settings → Qualifying">needs {mq} to count</span>}</span>
+                            <span style={{flex:1}}><span style={{fontWeight:600}}>{std.name}</span> - {evt.measurableType==='Time'?formatTime(std.timeMs):fieldToStr(std.ft,std.inch,std.qtr)}{mq>1&&<span style={{marginLeft:6,fontSize:10,color:'#b8860b',fontWeight:600}} title="Set under Settings → Standards">needs {mq} to count</span>}</span>
                             <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12}} onClick={()=>removeStandard(evt.id,std.id)}>✕</button>
                           </div>
                           );
@@ -6513,7 +6518,7 @@ function EventsPage({ data, save, nav }) {
           {(()=>{const evt=(data.events||[]).find(e=>e.id===showAddStandard);
             return (evt||{}).measurableType==='Time' ? <TimeDropdown min={stdForm.min} sec={stdForm.sec} onMinChange={v=>setStdForm({...stdForm,min:v})} onSecChange={v=>setStdForm({...stdForm,sec:v})} label="Time" /> : <FieldMeasure ft={stdForm.ft} inch={stdForm.inch} qtr={stdForm.qtr} onFtChange={v=>setStdForm({...stdForm,ft:v})} onInchChange={v=>setStdForm({...stdForm,inch:v})} onQtrChange={v=>setStdForm({...stdForm,qtr:v})} />;
           })()}
-          <span style={{fontSize:11,color:C.textMuted}}>Tip: how many athletes must hit a standard before it counts (e.g. 3 for "3rd entry" rules) is set per standard type under Settings → Qualifying.</span>
+          <span style={{fontSize:11,color:C.textMuted}}>Tip: how many athletes must hit a standard before it counts (e.g. 3 for "3rd entry" rules) is set per standard type under Settings → Standards.</span>
           <button style={{...S.btn,...S.btnPrimary}} onClick={()=>addStandard(showAddStandard)}>Add Standard</button>
         </div>
       </Modal>
@@ -8459,7 +8464,7 @@ function SeasonResultsPage({ data, save, nav, events, getAthletePR, season, team
           if(subs.length===0) allStdCombos.push({typeId:t.id,label:t.name,typeName:t.name,subtype:null,abbrev:baseAbbrev,color:baseColor,timingType:t.timingType||'Both'});
           else subs.forEach(s=>allStdCombos.push({typeId:t.id,label:t.name+' - '+s,typeName:t.name,subtype:s,abbrev:baseAbbrev+'-'+s.slice(0,1).toUpperCase(),color:baseColor,timingType:(t.subtypeTimingTypes||{})[s]||'Both'}));
         });
-        if(!allStdCombos.length) return <div style={{...S.card,textAlign:'center',padding:30,color:C.textMuted}}>No qualifying standard types defined. Set them up in Settings → Qualifying.</div>;
+        if(!allStdCombos.length) return <div style={{...S.card,textAlign:'center',padding:30,color:C.textMuted}}>No qualifying standard types defined. Set them up in Settings → Standards.</div>;
         return (<div>
           {allStdCombos.map(combo=>{
             const qualifiedByEvent = {};
@@ -8801,6 +8806,8 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
   const [valueDraft, setValueDraft] = useState('');
   const [delValueKey, setDelValueKey] = useState(null);
   const [collapsedDimensions, setCollapsedDimensions] = useState({});
+  const [collapsedOppSections, setCollapsedOppSections] = useState({});
+  const [collapsedStdTypeIds, setCollapsedStdTypeIds] = useState({});
   useEffect(() => { setTeamName((team||{}).name||''); setSchool((team||{}).school||''); setPrimaryColor(((team||{}).colors||{}).primary||'#c96a1f'); setSecondaryColor(((team||{}).colors||{}).secondary||'#2b6cb0'); }, [team]);
   const handleSaveBranding = async () => {
     await updateTeam(team.id, { name:teamName.trim(), school:school.trim(), colors:{primary:primaryColor,secondary:secondaryColor} });
@@ -8842,7 +8849,7 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
   return (
     <div>
       <div style={{display:'flex',gap:4,marginBottom:16,flexWrap:'wrap'}}>
-        {[['seasons','Seasons'],['branding','Branding'],['meetTypes','Meet Types'],['opponents','Opponents'],['eventOrder','Event Order'],['qualifying','Qualifying'],['records','Records'],['team','Team'],['data','Data']].map(([k,l])=>(
+        {[['seasons','Seasons'],['branding','Branding'],['meetTypes','Meet Types'],['opponents','Opponents'],['eventOrder','Event Order'],['standards','Standards'],['records','Records'],['team','Team'],['data','Data']].map(([k,l])=>(
           <button key={k} style={S.pill(tab===k)} onClick={()=>setTab(k)}>{l}</button>
         ))}
       </div>
@@ -9009,7 +9016,8 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
             const dv = {...o.dimensionValues}; delete dv[delDimensionId];
             return {...o, dimensionValues:dv};
           });
-          save({...data, opponentDimensions:nextDims, opponents:nextOpp});
+          const nextOurDV = {...(data.ourTeamDimensionValues||{})}; delete nextOurDV[delDimensionId];
+          save({...data, opponentDimensions:nextDims, opponents:nextOpp, ourTeamDimensionValues:nextOurDV});
           setDelDimensionId(null);
         };
 
@@ -9036,7 +9044,9 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
             const dv = {...o.dimensionValues}; delete dv[delValueKey.dimId];
             return {...o, dimensionValues:dv};
           });
-          save({...data, opponentDimensions:dimensions.map(d=>d.id===dim.id?nextDim:d), opponents:nextOpp});
+          const ourDV = data.ourTeamDimensionValues||{};
+          const nextOurDV = ourDV[delValueKey.dimId] === delValueKey.valueId ? (()=>{const x={...ourDV}; delete x[delValueKey.dimId]; return x;})() : ourDV;
+          save({...data, opponentDimensions:dimensions.map(d=>d.id===dim.id?nextDim:d), opponents:nextOpp, ourTeamDimensionValues:nextOurDV});
           setDelValueKey(null);
         };
 
@@ -9062,19 +9072,70 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
 
         const toggleCollapseDim = (did) => setCollapsedDimensions(c=>({...c,[did]:!c[did]}));
 
+        const SECTION_KEYS = ['team','dimensions','opponents'];
+        const isSecCollapsed = (k) => !!collapsedOppSections[k];
+        const toggleSec = (k) => setCollapsedOppSections(s=>({...s,[k]:!s[k]}));
+        const allOppCollapsed = SECTION_KEYS.every(k=>isSecCollapsed(k));
+        const noneOppCollapsed = SECTION_KEYS.every(k=>!isSecCollapsed(k));
         return (<div>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6,gap:8,flexWrap:'wrap'}}>
             <h2 style={{...S.h2,margin:0}}>Opponents</h2>
-            <button style={{...S.btn,...S.btnPrimary}} onClick={()=>{setOppForm({name:'',dimensionValues:{}});setEditOppId(null);setShowAddOpp(true);}}>+ Add Opponent</button>
+            <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+              <button style={{...S.btn,fontSize:11,padding:'4px 10px',background:'transparent',color:C.textSecondary,border:`1px solid ${C.border}`}} onClick={()=>{const next={};SECTION_KEYS.forEach(k=>{next[k]=true;});setCollapsedOppSections(next);}} disabled={allOppCollapsed}>Collapse all</button>
+              <button style={{...S.btn,fontSize:11,padding:'4px 10px',background:'transparent',color:C.textSecondary,border:`1px solid ${C.border}`}} onClick={()=>setCollapsedOppSections({})} disabled={noneOppCollapsed}>Expand all</button>
+              <button style={{...S.btn,...S.btnPrimary}} onClick={()=>{setOppForm({name:'',dimensionValues:{}});setEditOppId(null);setShowAddOpp(true);}}>+ Add Opponent</button>
+            </div>
           </div>
           <p style={{fontSize:12,color:C.textMuted,marginBottom:14}}>Set up the categories your state uses (Section, Class, League, Division — name them whatever you want). Each one is independent, so a school can be in any combination. The End-of-Season report can group team scores by any dimension.</p>
 
+          {/* Our team's dimension values */}
+          {dimensions.length>0 && (()=>{
+            const ourDV = getOurTeamDimensionValues(data);
+            const setOurDV = (dimId, valueId) => {
+              const next = {...ourDV};
+              if(valueId) next[dimId] = valueId; else delete next[dimId];
+              save({...data, ourTeamDimensionValues:next});
+            };
+            const teamLabel = (team && (team.school||team.name)) || 'Our Team';
+            const collapsed = isSecCollapsed('team');
+            return (
+              <div style={{...S.card,padding:0,marginBottom:14,borderLeft:`4px solid ${C.accent}`,overflow:'hidden'}}>
+                <div onClick={()=>toggleSec('team')} style={{display:'flex',alignItems:'center',gap:8,padding:'12px 14px',cursor:'pointer',userSelect:'none'}}>
+                  <span style={{fontSize:11,color:C.textSecondary,width:14}}>{collapsed?'▶':'▼'}</span>
+                  <span style={{fontSize:12,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:'0.05em'}}>Our Team</span>
+                  <span style={{fontSize:13,fontWeight:600,color:C.text}}>{teamLabel}</span>
+                </div>
+                {!collapsed && <div style={{padding:'0 14px 12px'}}>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:10}}>
+                    {dimensions.map(d=>{
+                      const values = getDimensionValues(d);
+                      return (
+                        <div key={d.id}>
+                          <label style={{fontSize:11,color:C.textSecondary,display:'block',marginBottom:3}}>{d.name}</label>
+                          <select style={{...S.select,width:'100%',fontSize:12}} value={ourDV[d.id]||''} onChange={e=>setOurDV(d.id, e.target.value)}>
+                            <option value="">— (none)</option>
+                            {values.map(v=><option key={v.id} value={v.id}>{v.name}</option>)}
+                          </select>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div style={{fontSize:10,color:C.textMuted,marginTop:8,fontStyle:'italic'}}>Records which categories your own team belongs to. Shown on the team-scores rows for "us" and used wherever the report compares to opponents.</div>
+                </div>}
+              </div>
+            );
+          })()}
+
           {/* Dimensions editor */}
-          <div style={{...S.card,padding:'12px 14px',marginBottom:14}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-              <div style={{fontSize:12,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',letterSpacing:'0.05em'}}>Dimensions</div>
-              <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'3px 10px'}} onClick={addDimension}>+ Add Dimension</button>
+          <div style={{...S.card,padding:0,marginBottom:14,overflow:'hidden'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 14px',gap:8,flexWrap:'wrap'}}>
+              <div onClick={()=>toggleSec('dimensions')} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',userSelect:'none',flex:1,minWidth:0}}>
+                <span style={{fontSize:11,color:C.textSecondary,width:14}}>{isSecCollapsed('dimensions')?'▶':'▼'}</span>
+                <div style={{fontSize:12,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',letterSpacing:'0.05em'}}>Dimensions{dimensions.length>0?` (${dimensions.length})`:''}</div>
+              </div>
+              <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'3px 10px'}} onClick={(e)=>{e.stopPropagation();addDimension();}}>+ Add Dimension</button>
             </div>
+            {!isSecCollapsed('dimensions') && <div style={{padding:'0 14px 12px'}}>
             {dimensions.length===0 ? (
               <div style={{fontSize:11,color:C.textMuted,fontStyle:'italic',padding:'4px 0'}}>No dimensions yet. Add one (e.g. "Section") to start.</div>
             ) : dimensions.map((d,i)=>{
@@ -9113,19 +9174,22 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
                 </div>
               );
             })}
+            </div>}
           </div>
 
           {/* Opponents list */}
-          <div style={{...S.card,padding:'12px 14px'}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+          <div style={{...S.card,padding:0,overflow:'hidden'}}>
+            <div onClick={()=>toggleSec('opponents')} style={{display:'flex',alignItems:'center',gap:8,padding:'12px 14px',cursor:'pointer',userSelect:'none'}}>
+              <span style={{fontSize:11,color:C.textSecondary,width:14}}>{isSecCollapsed('opponents')?'▶':'▼'}</span>
               <div style={{fontSize:12,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',letterSpacing:'0.05em'}}>Opponents{opponents.length>0?` (${opponents.length})`:''}{unplacedCount>0?` · ${unplacedCount} uncategorized`:''}</div>
             </div>
+            {!isSecCollapsed('opponents') && <div style={{padding:'0 14px 12px'}}>
             {opponents.length===0 ? (
               <div style={{fontSize:12,color:C.textMuted,textAlign:'center',padding:14,fontStyle:'italic'}}>No opponents yet. Use "+ Add Opponent" at the top to add one.</div>
             ) : (
               <div>
                 {[...opponents].sort((a,b)=>a.name.localeCompare(b.name)).map(o=>{
-                  const label = getOpponentDimensionsLabel(o.id, opponents, dimensions);
+                  const label = getOpponentDimensionsLabel(o.id, opponents, dimensions, data);
                   const anyAssigned = Object.values(o.dimensionValues||{}).some(Boolean);
                   return (
                     <div key={o.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'8px 10px',borderBottom:`1px solid ${C.borderLight}`}}>
@@ -9142,6 +9206,7 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
                 })}
               </div>
             )}
+            </div>}
           </div>
 
           {/* Opponent add/edit */}
@@ -9303,7 +9368,7 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
         </div>);
       })()}
 
-      {tab==='qualifying' && (()=>{
+      {tab==='standards' && (()=>{
         const stdTypes = data.qualifyingStandardTypes||[];
         const allCombos = [];
         stdTypes.forEach(t=>{
@@ -9313,8 +9378,16 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
           if(subs.length===0) allCombos.push({typeId:t.id,typeName:t.name,subtype:null,label:t.name,timingType:t.timingType||'Both',abbrev:baseAbbrev,color:baseColor});
           else subs.forEach(s=>allCombos.push({typeId:t.id,typeName:t.name,subtype:s,label:t.name+' - '+s,timingType:(t.subtypeTimingTypes||{})[s]||'Both',abbrev:baseAbbrev+(s?'-'+s.slice(0,1).toUpperCase():''),color:baseColor}));
         });
+        const allCollapsedStd = stdTypes.length>0 && stdTypes.every(t=>collapsedStdTypeIds[t.id]);
+        const noneCollapsedStd = stdTypes.every(t=>!collapsedStdTypeIds[t.id]);
         return (<div>
-          <h2 style={{...S.h2,marginBottom:12}}>Qualifying Standard Types</h2>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12,gap:8,flexWrap:'wrap'}}>
+            <h2 style={{...S.h2,margin:0}}>Standards</h2>
+            {stdTypes.length>0 && <div style={{display:'flex',gap:6}}>
+              <button style={{...S.btn,fontSize:11,padding:'4px 10px',background:'transparent',color:C.textSecondary,border:`1px solid ${C.border}`}} onClick={()=>{const next={};stdTypes.forEach(t=>{next[t.id]=true;});setCollapsedStdTypeIds(next);}} disabled={allCollapsedStd}>Collapse all</button>
+              <button style={{...S.btn,fontSize:11,padding:'4px 10px',background:'transparent',color:C.textSecondary,border:`1px solid ${C.border}`}} onClick={()=>setCollapsedStdTypeIds({})} disabled={noneCollapsedStd}>Expand all</button>
+            </div>}
+          </div>
           <p style={{fontSize:12,color:C.textMuted,marginBottom:10}}>Define standard types (e.g. IAC Qualifier, State Qualifier) with optional sub-types (e.g. FAT, Hand Timing, Automatic, Provisional). Then bulk-enter marks. The <strong>"Min. qualifiers"</strong> box (or <strong>"min"</strong> on a sub-type) is how many athletes/relays must hit a standard before it shows as met on the Results page — set it to 3 for a "3rd entry" rule, or leave it at 1 for a normal standard.</p>
           <div style={{...S.card,marginBottom:16,padding:'10px 14px',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
             <span style={{fontSize:13,fontWeight:600,color:C.text}}>"Close to qualifying" cutoff</span>
@@ -9325,56 +9398,63 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
             <span style={{fontSize:11,color:C.textMuted}}>Athletes whose mark is within this much of a standard show as "close" — even if someone else already qualified.</span>
           </div>
           <div style={{...S.card,marginBottom:16}}>
-            {stdTypes.map(t=>(
+            {stdTypes.map(t=>{
+              const stCollapsed = !!collapsedStdTypeIds[t.id];
+              return (
               <div key={t.id} style={{padding:'8px 0',borderBottom:`1px solid ${C.borderLight}`,marginBottom:4}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
                   <div style={{display:'flex',alignItems:'center',gap:6,flex:1}}>
+                    <button onClick={()=>setCollapsedStdTypeIds(c=>({...c,[t.id]:!c[t.id]}))} style={{background:'none',border:'none',cursor:'pointer',fontSize:11,color:C.textSecondary,width:14,padding:0}} title={stCollapsed?'Expand':'Collapse'}>{stCollapsed?'▶':'▼'}</button>
                     <input style={{...S.input,fontWeight:700,fontSize:14,color:t.color||'#2b6cb0',border:'none',borderBottom:`2px solid ${t.color||'#2b6cb0'}`,borderRadius:0,padding:'4px 6px',background:'transparent',maxWidth:200}} value={t.name} onChange={e=>save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,name:e.target.value}:x)})} />
                     <input style={{...S.input,width:55,fontSize:12,padding:'4px 6px',textAlign:'center',fontWeight:700,border:`2px solid ${C.border}`,borderRadius:6}} value={t.abbrev||''} placeholder="ABBR" onChange={e=>save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,abbrev:e.target.value.slice(0,5)}:x)})} title="Short abbreviation for badges" />
                     <span style={{fontSize:10,fontWeight:700,padding:'3px 10px',borderRadius:10,background:safeHexToRgba(t.color||'#2b6cb0',0.12),color:t.color||'#2b6cb0',border:`1px solid ${t.color||'#2b6cb0'}`}}>{t.abbrev||t.name.slice(0,4).toUpperCase()}</span>
+                    {stCollapsed && (t.subtypes||[]).length>0 && <span style={{fontSize:10,color:C.textMuted}}>{(t.subtypes||[]).length} sub-type{(t.subtypes||[]).length===1?'':'s'}</span>}
                   </div>
                   <button style={{...S.btn,...S.btnDanger,fontSize:11,padding:'4px 10px'}} onClick={()=>save({...data,qualifyingStandardTypes:stdTypes.filter(x=>x.id!==t.id)})}>Remove</button>
                 </div>
-                <div style={{display:'flex',gap:3,marginTop:6,flexWrap:'wrap'}}>
-                  {['#2b6cb0','#25763b','#c9a830','#c53030','#6b46c1','#c96a1f','#d53f8c','#0d9488','#1e40af','#7c3aed','#b45309','#4338ca','#047857','#be185d','#374151','#0369a1'].map(clr=>(
-                    <button key={clr} style={{width:22,height:22,borderRadius:6,border:(t.color||'#2b6cb0')===clr?'3px solid #1a1e26':`2px solid ${clr}40`,background:clr,cursor:'pointer',padding:0}} onClick={()=>save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,color:clr}:x)})} />
-                  ))}
-                </div>
-                <div style={{marginTop:6,display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
-                  {!(t.subtypes||[]).length&&<select style={{...S.select,fontSize:11,padding:'4px 8px',width:110}} value={t.timingType||'Both'} onChange={e=>save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,timingType:e.target.value}:x)})}>
-                    <option value="Both">All Timing</option><option value="FAT">FAT Only</option><option value="Hand">Hand Only</option>
-                  </select>}
-                  {!(t.subtypes||[]).length&&<span style={{display:'flex',alignItems:'center',gap:4}} title="How many athletes (or relays) must hit a standard of this type before it counts as met — e.g. 3 for a '3rd entry' rule. Leave at 1 for normal standards.">
-                    <span style={{fontSize:10,color:C.textMuted,fontWeight:600}}>Min. qualifiers to count:</span>
-                    <input style={{...S.input,width:38,fontSize:11,padding:'3px 4px',textAlign:'center'}} type="text" inputMode="numeric" value={(t.minQualifiers||1)+''} onChange={e=>save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,minQualifiers:Math.max(1,parseInt(e.target.value)||1)}:x)})} />
-                  </span>}
-                </div>
-                {t.lastUpdated&&<div style={{fontSize:9,color:C.textMuted,marginTop:4}}>Last updated: {new Date(t.lastUpdated).toLocaleDateString()} {new Date(t.lastUpdated).toLocaleTimeString()}</div>}
-                {(t.subtypes||[]).length>0&&<div style={{marginTop:8}}>
-                  <div style={{fontSize:10,fontWeight:600,color:C.textMuted,textTransform:'uppercase',marginBottom:4}}>Sub-types</div>
-                  <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                    {(t.subtypes||[]).map((s,si)=>(
-                      <div key={si} style={{display:'flex',alignItems:'center',gap:4,fontSize:12,padding:'4px 10px',borderRadius:8,background:C.surface2,border:`1px solid ${C.border}`}}>
-                        <input style={{border:'none',background:'transparent',fontSize:12,color:C.text,width:Math.max(50,s.length*8),padding:0,fontWeight:600}} value={s} onChange={e=>{const ns=[...(t.subtypes||[])];ns[si]=e.target.value;save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,subtypes:ns}:x)});}} />
-                        <select style={{border:'none',background:'transparent',fontSize:10,color:C.textMuted,padding:0,cursor:'pointer'}} value={(t.subtypeTimingTypes||{})[s]||'Both'} onChange={e=>{const st={...(t.subtypeTimingTypes||{})};st[s]=e.target.value;save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,subtypeTimingTypes:st}:x)});}}>
-                          <option value="Both">All</option><option value="FAT">FAT</option><option value="Hand">Hand</option>
-                        </select>
-                        <span style={{fontSize:9,color:C.textMuted,fontWeight:600}} title="Minimum athletes (or relays) who must hit this standard before it counts as met">min</span>
-                        <input style={{border:`1px solid ${C.border}`,borderRadius:3,background:C.surface,fontSize:10,color:C.text,width:24,padding:'1px 2px',textAlign:'center'}} type="text" inputMode="numeric" value={(((t.subtypeMinQualifiers||{})[s])||1)+''} onChange={e=>{const sm={...(t.subtypeMinQualifiers||{})};sm[s]=Math.max(1,parseInt(e.target.value)||1);save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,subtypeMinQualifiers:sm}:x)});}} title="Minimum athletes (or relays) who must hit this standard before it counts as met" />
-                        <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12,padding:0,fontWeight:700}} onClick={()=>save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,subtypes:(x.subtypes||[]).filter((_,j)=>j!==si)}:x)})}>✕</button>
-                      </div>
+                {!stCollapsed && <>
+                  <div style={{display:'flex',gap:3,marginTop:6,flexWrap:'wrap'}}>
+                    {['#2b6cb0','#25763b','#c9a830','#c53030','#6b46c1','#c96a1f','#d53f8c','#0d9488','#1e40af','#7c3aed','#b45309','#4338ca','#047857','#be185d','#374151','#0369a1'].map(clr=>(
+                      <button key={clr} style={{width:22,height:22,borderRadius:6,border:(t.color||'#2b6cb0')===clr?'3px solid #1a1e26':`2px solid ${clr}40`,background:clr,cursor:'pointer',padding:0}} onClick={()=>save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,color:clr}:x)})} />
                     ))}
                   </div>
-                </div>}
-                <div style={{marginTop:6}}>
-                  <input style={{...S.input,width:160,fontSize:12,padding:'4px 8px'}} placeholder="+ add sub-type" onKeyDown={e=>{if(e.key==='Enter'&&e.target.value.trim()){save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,subtypes:[...(x.subtypes||[]),e.target.value.trim()]}:x)});e.target.value='';}}} />
-                </div>
-                <div style={{marginTop:8}}>
-                  <label style={{fontSize:10,fontWeight:600,color:C.textMuted,textTransform:'uppercase',display:'block',marginBottom:3}}>Notes</label>
-                  <textarea style={{...S.input,width:'100%',fontSize:12,padding:'6px 8px',minHeight:50,resize:'vertical',fontFamily:'inherit'}} placeholder="Qualifying rules, deadlines, special conditions..." value={t.notes||''} onChange={e=>save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,notes:e.target.value}:x)})} />
-                </div>
+                  <div style={{marginTop:6,display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
+                    {!(t.subtypes||[]).length&&<select style={{...S.select,fontSize:11,padding:'4px 8px',width:110}} value={t.timingType||'Both'} onChange={e=>save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,timingType:e.target.value}:x)})}>
+                      <option value="Both">All Timing</option><option value="FAT">FAT Only</option><option value="Hand">Hand Only</option>
+                    </select>}
+                    {!(t.subtypes||[]).length&&<span style={{display:'flex',alignItems:'center',gap:4}} title="How many athletes (or relays) must hit a standard of this type before it counts as met — e.g. 3 for a '3rd entry' rule. Leave at 1 for normal standards.">
+                      <span style={{fontSize:10,color:C.textMuted,fontWeight:600}}>Min. qualifiers to count:</span>
+                      <input style={{...S.input,width:38,fontSize:11,padding:'3px 4px',textAlign:'center'}} type="text" inputMode="numeric" value={(t.minQualifiers||1)+''} onChange={e=>save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,minQualifiers:Math.max(1,parseInt(e.target.value)||1)}:x)})} />
+                    </span>}
+                  </div>
+                  {t.lastUpdated&&<div style={{fontSize:9,color:C.textMuted,marginTop:4}}>Last updated: {new Date(t.lastUpdated).toLocaleDateString()} {new Date(t.lastUpdated).toLocaleTimeString()}</div>}
+                  {(t.subtypes||[]).length>0&&<div style={{marginTop:8}}>
+                    <div style={{fontSize:10,fontWeight:600,color:C.textMuted,textTransform:'uppercase',marginBottom:4}}>Sub-types</div>
+                    <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                      {(t.subtypes||[]).map((s,si)=>(
+                        <div key={si} style={{display:'flex',alignItems:'center',gap:4,fontSize:12,padding:'4px 10px',borderRadius:8,background:C.surface2,border:`1px solid ${C.border}`}}>
+                          <input style={{border:'none',background:'transparent',fontSize:12,color:C.text,width:Math.max(50,s.length*8),padding:0,fontWeight:600}} value={s} onChange={e=>{const ns=[...(t.subtypes||[])];ns[si]=e.target.value;save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,subtypes:ns}:x)});}} />
+                          <select style={{border:'none',background:'transparent',fontSize:10,color:C.textMuted,padding:0,cursor:'pointer'}} value={(t.subtypeTimingTypes||{})[s]||'Both'} onChange={e=>{const st={...(t.subtypeTimingTypes||{})};st[s]=e.target.value;save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,subtypeTimingTypes:st}:x)});}}>
+                            <option value="Both">All</option><option value="FAT">FAT</option><option value="Hand">Hand</option>
+                          </select>
+                          <span style={{fontSize:9,color:C.textMuted,fontWeight:600}} title="Minimum athletes (or relays) who must hit this standard before it counts as met">min</span>
+                          <input style={{border:`1px solid ${C.border}`,borderRadius:3,background:C.surface,fontSize:10,color:C.text,width:24,padding:'1px 2px',textAlign:'center'}} type="text" inputMode="numeric" value={(((t.subtypeMinQualifiers||{})[s])||1)+''} onChange={e=>{const sm={...(t.subtypeMinQualifiers||{})};sm[s]=Math.max(1,parseInt(e.target.value)||1);save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,subtypeMinQualifiers:sm}:x)});}} title="Minimum athletes (or relays) who must hit this standard before it counts as met" />
+                          <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12,padding:0,fontWeight:700}} onClick={()=>save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,subtypes:(x.subtypes||[]).filter((_,j)=>j!==si)}:x)})}>✕</button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>}
+                  <div style={{marginTop:6}}>
+                    <input style={{...S.input,width:160,fontSize:12,padding:'4px 8px'}} placeholder="+ add sub-type" onKeyDown={e=>{if(e.key==='Enter'&&e.target.value.trim()){save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,subtypes:[...(x.subtypes||[]),e.target.value.trim()]}:x)});e.target.value='';}}} />
+                  </div>
+                  <div style={{marginTop:8}}>
+                    <label style={{fontSize:10,fontWeight:600,color:C.textMuted,textTransform:'uppercase',display:'block',marginBottom:3}}>Notes</label>
+                    <textarea style={{...S.input,width:'100%',fontSize:12,padding:'6px 8px',minHeight:50,resize:'vertical',fontFamily:'inherit'}} placeholder="Qualifying rules, deadlines, special conditions..." value={t.notes||''} onChange={e=>save({...data,qualifyingStandardTypes:stdTypes.map(x=>x.id===t.id?{...x,notes:e.target.value}:x)})} />
+                  </div>
+                </>}
               </div>
-            ))}
+              );
+            })}
             {!stdTypes.length&&<span style={{fontSize:12,color:C.textMuted,fontStyle:'italic'}}>No types defined yet</span>}
             <div style={{display:'flex',gap:6,marginTop:8}}>
               <input style={{...S.input,flex:1}} placeholder="New type name (e.g. IAC Qualifier)" id="newStdTypeName" onKeyDown={e=>{if(e.key==='Enter'){const v=e.target.value.trim();if(v){save({...data,qualifyingStandardTypes:[...stdTypes,{id:uid(),name:v,subtypes:[]}]});e.target.value='';}}}} />

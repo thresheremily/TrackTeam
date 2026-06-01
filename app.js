@@ -9070,29 +9070,20 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
           const lvl = levelById(n.levelId);
           const childLvl = childLevelOf(n.levelId);
           const kids = childrenOf(n.id);
-          const opps = opponentsAtNode(n.id);
+          const oppCount = opponentsAtNode(n.id).length;
           const collapsed = !!collapsedNodes[n.id];
-          const hasContent = kids.length>0 || opps.length>0;
+          const hasContent = kids.length>0;
           return (
             <div key={n.id} style={{marginLeft:depth*16,marginBottom:4}}>
               <div style={{display:'flex',alignItems:'center',gap:6,padding:'6px 10px',background:C.surface,border:`1px solid ${C.borderLight}`,borderRadius:5}}>
                 <button onClick={()=>toggleCollapse(n.id)} style={{background:'none',border:'none',cursor:hasContent?'pointer':'default',fontSize:11,color:hasContent?C.textSecondary:C.borderLight,width:14,padding:0}}>{hasContent?(collapsed?'▶':'▼'):'·'}</button>
                 <span style={{fontSize:10,fontWeight:700,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.04em',minWidth:50}}>{lvl?lvl.name:'?'}</span>
                 <span style={{fontSize:13,fontWeight:600,color:C.text,flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{n.name}</span>
-                {opps.length>0 && <span style={{fontSize:10,color:C.textMuted}}>{opps.length} opp{opps.length===1?'':'s'}</span>}
+                {oppCount>0 && <span style={{fontSize:10,color:C.textMuted}}>{oppCount} opp{oppCount===1?'':'s'}</span>}
                 {childLvl && <button onClick={()=>openAddNode(childLvl.id, n.id)} style={{...S.btn,fontSize:10,padding:'2px 8px',background:'transparent',color:C.accent,border:`1px solid ${C.accent}`}}>+ {childLvl.name}</button>}
                 <button onClick={()=>openEditNode(n)} style={{background:'none',border:'none',color:C.textMuted,cursor:'pointer',fontSize:11,padding:'0 4px'}} title="Edit">✏️</button>
                 <button onClick={()=>setDelNodeId(n.id)} style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12,padding:'0 4px'}} title="Delete">✕</button>
               </div>
-              {!collapsed && opps.length>0 && opps.map(o=>(
-                <div key={'op_'+o.id} style={{marginLeft:(depth+1)*16+18,padding:'3px 10px',fontSize:12,color:C.textSecondary,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                  <span>• {o.name}</span>
-                  <div style={{display:'flex',gap:4}}>
-                    <button style={{...S.btn,...S.btnSecondary,fontSize:10,padding:'2px 8px'}} onClick={()=>{setOppForm({name:o.name,nodeId:o.nodeId||''});setEditOppId(o.id);setShowAddOpp(true);}}>Edit</button>
-                    <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12}} onClick={()=>setDelOppId(o.id)}>✕</button>
-                  </div>
-                </div>
-              ))}
               {!collapsed && kids.map(k=>renderNode(k,depth+1))}
             </div>
           );
@@ -9115,8 +9106,9 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
         walk(null, 0);
 
         return (<div>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6,gap:8,flexWrap:'wrap'}}>
             <h2 style={{...S.h2,margin:0}}>Opponents</h2>
+            <button style={{...S.btn,...S.btnPrimary}} onClick={()=>{setOppForm({name:'',nodeId:''});setEditOppId(null);setShowAddOpp(true);}}>+ Add Opponent</button>
           </div>
           <p style={{fontSize:12,color:C.textMuted,marginBottom:14}}>Build a hierarchy that fits your state — name your own levels (e.g. Section → Class → League → Division). Each opponent is placed in one node; membership at every higher level is implied. The End-of-Season report can then group team scores at any level.</p>
 
@@ -9154,29 +9146,30 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
             ) : topNodes.map(n=>renderNode(n,0))}
           </div>}
 
-          {/* Opponents list */}
+          {/* Opponents list (all) */}
           <div style={{...S.card,padding:'12px 14px'}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-              <div style={{fontSize:12,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',letterSpacing:'0.05em'}}>Opponents{unplacedOpps.length>0?` · ${unplacedOpps.length} unplaced`:''}</div>
-              <button style={{...S.btn,...S.btnPrimary,fontSize:11,padding:'4px 12px'}} onClick={()=>{setOppForm({name:'',nodeId:''});setEditOppId(null);setShowAddOpp(true);}}>+ Add Opponent</button>
+              <div style={{fontSize:12,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',letterSpacing:'0.05em'}}>Opponents{opponents.length>0?` (${opponents.length})`:''}{unplacedOpps.length>0?` · ${unplacedOpps.length} unplaced`:''}</div>
             </div>
             {opponents.length===0 ? (
-              <div style={{fontSize:12,color:C.textMuted,textAlign:'center',padding:14,fontStyle:'italic'}}>No opponents yet.</div>
+              <div style={{fontSize:12,color:C.textMuted,textAlign:'center',padding:14,fontStyle:'italic'}}>No opponents yet. Use "+ Add Opponent" at the top to add one.</div>
             ) : (
               <div>
-                {unplacedOpps.length>0 && <div style={{marginBottom:10}}>
-                  <div style={{fontSize:10,fontWeight:700,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:4}}>Unplaced</div>
-                  {unplacedOpps.sort((a,b)=>a.name.localeCompare(b.name)).map(o=>(
-                    <div key={o.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 10px',background:C.bg,borderRadius:5,marginBottom:4}}>
-                      <span style={{fontSize:13,fontWeight:600}}>{o.name}</span>
+                {[...opponents].sort((a,b)=>a.name.localeCompare(b.name)).map(o=>{
+                  const path = o.nodeId ? getOpponentPathLabel(o.id, opponents, nodes) : '';
+                  return (
+                    <div key={o.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'8px 10px',borderBottom:`1px solid ${C.borderLight}`}}>
+                      <div style={{minWidth:0,flex:1}}>
+                        <div style={{fontSize:13,fontWeight:600,color:C.text}}>{o.name}</div>
+                        <div style={{fontSize:11,color:path?C.textMuted:C.danger,marginTop:2,fontStyle:path?'normal':'italic'}}>{path || 'Unplaced'}</div>
+                      </div>
                       <div style={{display:'flex',gap:4}}>
-                        <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'2px 8px'}} onClick={()=>{setOppForm({name:o.name,nodeId:o.nodeId||''});setEditOppId(o.id);setShowAddOpp(true);}}>Edit</button>
+                        <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'3px 10px'}} onClick={()=>{setOppForm({name:o.name,nodeId:o.nodeId||''});setEditOppId(o.id);setShowAddOpp(true);}}>Edit</button>
                         <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12}} onClick={()=>setDelOppId(o.id)}>✕</button>
                       </div>
                     </div>
-                  ))}
-                </div>}
-                <div style={{fontSize:10,color:C.textMuted,fontStyle:'italic'}}>Placed opponents appear under their node in the hierarchy above.</div>
+                  );
+                })}
               </div>
             )}
           </div>

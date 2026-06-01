@@ -114,6 +114,23 @@ const getEventLabel = (evt) => {
   const g = evt.gender === 'Boy' ? '(B)' : evt.gender === 'Girl' ? '(G)' : '(Mixed)';
   return `${evt.name} ${g}`;
 };
+const OPPONENT_CATEGORIES = ['League', 'Non-league', 'Division'];
+const getOpponentLabel = (opponentId, opponents, team) => {
+  if(!opponentId) return '';
+  if(opponentId === 'self') return (team && (team.school||team.name)) || 'Our Team';
+  const o = (opponents||[]).find(x=>x.id===opponentId);
+  return o ? o.name : '(removed)';
+};
+const getOpponentCategory = (opponentId, opponents) => {
+  if(!opponentId || opponentId === 'self') return null;
+  const o = (opponents||[]).find(x=>x.id===opponentId);
+  return o ? (o.category||'League') : null;
+};
+const getOpponentDivision = (opponentId, opponents) => {
+  if(!opponentId || opponentId === 'self') return null;
+  const o = (opponents||[]).find(x=>x.id===opponentId);
+  return o ? (o.division||'') : null;
+};
 const TRACK_DISTANCES = {
   '55m':55,'100m':100,'200m':200,'400m':400,'800m':800,'1000m':1000,
   '1500m':1500,'1600m':1600,'3000m':3000,'3200m':3200,
@@ -1157,7 +1174,7 @@ function App() {
     dailyPractice: () => <DailyPracticeView data={data} nav={nav} date={pageParams.date} />,
     meets: () => <MeetsPage data={data} save={save} nav={nav} events={events} />,
     seasonResults: () => <SeasonResultsPage data={data} save={save} nav={nav} events={events} getAthletePR={getAthletePR} season={season} team={team} />,
-    meetSub: () => <MeetSubPage data={data} save={save} nav={nav} meetId={pageParams.meetId} events={events} getAthletePR={getAthletePR} checkQualifying={checkQualifying} />,
+    meetSub: () => <MeetSubPage data={data} save={save} nav={nav} meetId={pageParams.meetId} events={events} getAthletePR={getAthletePR} checkQualifying={checkQualifying} team={team} />,
     athletes: () => <AthletesPage data={data} save={save} nav={nav} />,
     athleteSub: () => <AthleteSubPage data={data} save={save} nav={nav} athleteId={pageParams.athleteId} athFilter={pageParams.athFilter} events={events} getAthletePR={getAthletePR} checkRecord={checkRecord} checkQualifying={checkQualifying} season={season} team={team} />,
     eventsPage: () => <EventsPage data={data} save={save} nav={nav} />,
@@ -1981,7 +1998,7 @@ function MeetsPage({ data, save, nav, events }) {
     </div>
   );
 }
-function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQualifying }) {
+function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQualifying, team }) {
   const [filter, setFilter] = useState('');
   const [genderFilter, setGenderFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
@@ -2156,6 +2173,23 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
   const saveEventOrder = (newOrder) => {
     save({...data, meets:data.meets.map(m=>m.id===meetId?{...m, eventOrder:newOrder}:m)});
   };
+  const allSortedMeetEvents = (() => {
+    const list = [...meetEvents].sort((a,b)=>{
+      const idxA = eventOrder.indexOf(a.eventId);
+      const idxB = eventOrder.indexOf(b.eventId);
+      if(idxA >= 0 && idxB >= 0) return idxA - idxB;
+      if(idxA >= 0) return -1;
+      if(idxB >= 0) return 1;
+      const dA = getDefaultOrder(a.evt, data, meet);
+      const dB = getDefaultOrder(b.evt, data, meet);
+      if(dA !== dB) return dA - dB;
+      return a.evt.name.localeCompare(b.evt.name);
+    });
+    if(meetDayCount > 1) list.sort((a,b)=>(a.day||1)-(b.day||1));
+    return list;
+  })();
+  const buildReorderRows = () => allSortedMeetEvents.map(me=>({eventId:me.eventId, round:normalizeRound(me.round), day:me.day||1}));
+  const dedupeEventIds = (rows) => { const seen=new Set(); const out=[]; rows.forEach(r=>{if(!seen.has(r.eventId)){seen.add(r.eventId);out.push(r.eventId);}}); return out; };
   const handleDrop = (fromIdx, toIdx) => {
     if(fromIdx===toIdx) return;
     const ids = filtered.map(me=>me.eventId);
@@ -2545,19 +2579,21 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
         );
       })()}
       <div style={{display:'flex',gap:0,marginBottom:0,borderBottom:`2px solid ${C.border}`,alignItems:'center'}}>
-        {[['entries','Entries'],['results','Results']].map(([t,label])=>(
+        {[['entries','Entries'],['results','Results'],['scores','Team Scores']].map(([t,label])=>(
           <button key={t} style={{padding:'10px 24px',fontSize:14,fontWeight:700,border:'none',borderBottom:meetTab===t?`3px solid ${C.accent}`:'3px solid transparent',background:'none',color:meetTab===t?C.accent:C.textMuted,cursor:'pointer',textTransform:'uppercase',letterSpacing:'0.05em'}} onClick={()=>setMeetTab(t)}>{label}</button>
         ))}
         <button style={{marginLeft:'auto',background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 14px',fontSize:12,fontWeight:600,color:C.textSecondary,cursor:'pointer'}} onClick={()=>setShowManageEvents(true)}>Manage Events</button>
         <button style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 14px',fontSize:12,fontWeight:600,color:C.textSecondary,cursor:'pointer'}} onClick={()=>printMeet(meetTab==='entries'?(meetSubTab==='event'?'events':'athletes'):'results')}>Print</button>
       </div>
+      {meetTab!=='scores' && (
       <div style={{display:'flex',gap:6,marginBottom:12,marginTop:10,flexWrap:'wrap',alignItems:'center'}}>
         {[['event','By Event'],['athlete','By Athlete']].map(([k,label])=>{
           const on = meetSubTab===k;
           return (<button key={k} style={{padding:'6px 14px',fontSize:11,fontWeight:700,color:on?'#fff':C.textMuted,background:on?(meetTab==='results'?C.accent:'#2b6cb0'):C.surface2,border:`1px solid ${on?(meetTab==='results'?C.accent:'#2b6cb0'):C.border}`,borderRadius:18,cursor:'pointer',textTransform:'uppercase',letterSpacing:'0.04em'}} onClick={()=>setMeetSubTab(k)}>{label}</button>);
         })}
       </div>
-      {(meet.maxEventsPerAthlete||meet.maxEntriesPerEvent||meet.maxRelayEntries)&&(athletesOverLimit.length>0||eventsOverLimit.length>0)&&(
+      )}
+      {meetTab!=='scores' && (meet.maxEventsPerAthlete||meet.maxEntriesPerEvent||meet.maxRelayEntries)&&(athletesOverLimit.length>0||eventsOverLimit.length>0)&&(
         <div style={{padding:'10px 14px',marginBottom:12,borderRadius:8,background:C.dangerMuted,border:`1px solid ${C.danger}`,fontSize:12}}>
           <div style={{fontWeight:700,color:C.danger,marginBottom:4}}>Entry Limit Violations</div>
           {athletesOverLimit.length>0&&<div style={{color:C.danger,marginBottom:2}}>Over max events ({maxEventsPerAthlete}): {athletesOverLimit.map(id=>{const a=data.athletes.find(at=>at.id===id);return a?`${athDisplay(a)} (${athleteEventCounts[id]})`:'';}).filter(Boolean).join(', ')}</div>}
@@ -2577,7 +2613,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
           <option value="">Individual & Relay</option><option value="Individual">Individual</option><option value="Relay">Relay</option>
         </select>
         {meetTab==='results' && <button style={{...S.btn,fontSize:11,padding:'4px 10px',background:onlyWithResults?C.accent:C.surface2,color:onlyWithResults?'#fff':C.textSecondary,border:`1px solid ${onlyWithResults?C.accent:C.border}`}} onClick={()=>setOnlyWithResults(v=>!v)} title="Hide event cards that don't have any saved results yet">{onlyWithResults?'✓ Only with results':'Only with results'}</button>}
-        <button style={{...S.btn,...S.btnPrimary,fontSize:11,padding:'4px 10px'}} onClick={()=>{setReorderList(filtered.map(me=>me.eventId));setReorderDragIdx(null);setReorderDragOver(null);setShowReorderModal(true);}}>↕ Reorder events</button>
+        <button style={{...S.btn,...S.btnPrimary,fontSize:11,padding:'4px 10px'}} onClick={()=>{setReorderList(buildReorderRows());setReorderDragIdx(null);setReorderDragOver(null);setShowReorderModal(true);}}>↕ Reorder events</button>
       </div>
       {meetDayCount > 1 && (
         <div style={{display:'flex',gap:6,marginBottom:10,flexWrap:'wrap',alignItems:'center'}}>
@@ -3402,6 +3438,96 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
           })}
         </div>);
       })()}
+      {meetTab==='scores' && (()=>{
+        const opponents = data.opponents || [];
+        const scores = meet.teamScores || { mode: 'split', boys: [], girls: [], combined: [] };
+        const mode = scores.mode || 'split';
+        const updateScores = (next) => save({...data, meets:data.meets.map(m=>m.id===meetId?{...m, teamScores:next}:m)});
+        const setMode = (newMode) => updateScores({...scores, mode:newMode});
+        const sectionRows = (key) => scores[key] || [];
+        const setRows = (key, rows) => updateScores({...scores, [key]:rows});
+        const addRow = (key) => setRows(key, [...sectionRows(key), {id:uid(), opponentId:'', points:'', place:''}]);
+        const updateRow = (key, idx, patch) => setRows(key, sectionRows(key).map((r,i)=>i===idx?{...r,...patch}:r));
+        const removeRow = (key, idx) => setRows(key, sectionRows(key).filter((_,i)=>i!==idx));
+        const renderTable = (key, label, accentColor) => {
+          const rows = sectionRows(key);
+          const selfRow = rows.find(r=>r.opponentId==='self');
+          const summary = selfRow && selfRow.place ? `${(team&&(team.school||team.name))||'Our Team'}: ${selfRow.place}${selfRow.place===1?'st':selfRow.place===2?'nd':selfRow.place===3?'rd':'th'} of ${rows.length}${selfRow.points!==''&&selfRow.points!=null?` (${selfRow.points} pts)`:''}` : null;
+          return (
+            <div style={{...S.card, padding:'12px 14px', marginBottom:14, borderLeft:`4px solid ${accentColor}`}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8,gap:8,flexWrap:'wrap'}}>
+                <div>
+                  <h3 style={{margin:0,fontSize:14,color:accentColor,textTransform:'uppercase',letterSpacing:'0.05em'}}>{label}</h3>
+                  {summary && <div style={{fontSize:11,color:C.textSecondary,marginTop:2,fontWeight:600}}>{summary}</div>}
+                </div>
+                <div style={{display:'flex',gap:6}}>
+                  {rows.length>1 && <button style={{...S.btn,fontSize:11,padding:'4px 10px',background:'transparent',color:C.textMuted,border:`1px solid ${C.border}`}} onClick={()=>{const sorted=[...rows].sort((a,b)=>{const pa=parseInt(a.place)||999,pb=parseInt(b.place)||999;return pa-pb;});setRows(key, sorted);}} title="Reorder rows so place 1 is on top">Sort by place</button>}
+                  <button style={{...S.btn,...S.btnPrimary,fontSize:11,padding:'4px 10px'}} onClick={()=>addRow(key)}>+ Add team</button>
+                </div>
+              </div>
+              {rows.length===0 ? (
+                <div style={{padding:'14px',textAlign:'center',color:C.textMuted,fontSize:12,fontStyle:'italic',border:`1px dashed ${C.border}`,borderRadius:6}}>No team scores yet. Click "+ Add team" to start.</div>
+              ) : (
+                <table style={{width:'100%',borderCollapse:'collapse'}}>
+                  <thead>
+                    <tr>
+                      <th style={{...S.th,textAlign:'left'}}>Team</th>
+                      <th style={{...S.th,textAlign:'left',width:140}}>Category</th>
+                      <th style={{...S.th,textAlign:'right',width:90}}>Points</th>
+                      <th style={{...S.th,textAlign:'right',width:70}}>Place</th>
+                      <th style={{...S.th,width:36}}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r,idx)=>{
+                      const isSelf = r.opponentId === 'self';
+                      const cat = isSelf ? '' : getOpponentCategory(r.opponentId, opponents);
+                      const div = isSelf ? '' : getOpponentDivision(r.opponentId, opponents);
+                      return (
+                        <tr key={r.id||idx} style={{background:isSelf?C.accentMuted:'transparent'}}>
+                          <td style={{...S.td,padding:'4px 6px'}}>
+                            <select style={{...S.select,fontSize:12,fontWeight:isSelf?700:500,width:'100%'}} value={r.opponentId||''} onChange={e=>updateRow(key,idx,{opponentId:e.target.value})}>
+                              <option value="">(pick a team)</option>
+                              <option value="self">{(team&&(team.school||team.name))||'Our Team'} (us)</option>
+                              {opponents.map(o=><option key={o.id} value={o.id}>{o.name}{o.category?` — ${o.category}`:''}</option>)}
+                            </select>
+                          </td>
+                          <td style={{...S.td,padding:'4px 6px',color:C.textMuted,fontSize:11}}>{cat ? cat + (div?` · ${div}`:'') : (isSelf?'—':'')}</td>
+                          <td style={{...S.td,padding:'4px 6px',textAlign:'right'}}><input style={{...S.input,fontSize:12,textAlign:'right',padding:'4px 8px'}} type="number" step="0.5" value={r.points==null?'':r.points} onChange={e=>updateRow(key,idx,{points:e.target.value===''?'':parseFloat(e.target.value)})} /></td>
+                          <td style={{...S.td,padding:'4px 6px',textAlign:'right'}}><input style={{...S.input,fontSize:12,textAlign:'right',padding:'4px 8px'}} type="number" min="1" value={r.place==null?'':r.place} onChange={e=>updateRow(key,idx,{place:e.target.value===''?'':parseInt(e.target.value)})} /></td>
+                          <td style={{...S.td,padding:'4px 6px',textAlign:'center'}}><button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:14}} onClick={()=>removeRow(key,idx)} title="Remove team">✕</button></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          );
+        };
+        return (
+          <div>
+            <div style={{...S.card,padding:'12px 14px',marginBottom:14}}>
+              <div style={{display:'flex',gap:14,alignItems:'center',flexWrap:'wrap'}}>
+                <span style={{fontSize:11,fontWeight:700,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.05em'}}>Scoring</span>
+                {[['split','Split Boys & Girls'],['combined','Combined']].map(([k,lbl])=>(
+                  <label key={k} style={{display:'flex',alignItems:'center',gap:5,fontSize:12,cursor:'pointer'}}>
+                    <input type="radio" name={`scoresMode-${meetId}`} checked={mode===k} onChange={()=>setMode(k)} />
+                    <span>{lbl}</span>
+                  </label>
+                ))}
+                {opponents.length===0 && <span style={{marginLeft:'auto',fontSize:11,color:C.textMuted,fontStyle:'italic'}}>Tip: add opponent schools in Settings → Opponents for league/division labels.</span>}
+              </div>
+            </div>
+            {mode==='split' ? (<>
+              {renderTable('boys','Boys', '#2b6cb0')}
+              {renderTable('girls','Girls', '#c53030')}
+            </>) : (
+              renderTable('combined','Combined', C.accent)
+            )}
+          </div>
+        );
+      })()}
       <Modal open={showManageEvents} onClose={()=>setShowManageEvents(false)} width={640}>
         <h2 style={S.h2}>Manage Events for this Meet</h2>
         <p style={{fontSize:12,color:C.textMuted,marginTop:4,marginBottom:12}}>Uncheck events to hide them. Add meet-specific events (they'll be saved to the library but won't appear in other meets unless added).</p>
@@ -3484,47 +3610,61 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
           <button style={{...S.btn,...S.btnSecondary}} onClick={()=>setShowManageEvents(false)}>Done</button>
         </div>
       </Modal>
-      <Modal open={showReorderModal} onClose={()=>setShowReorderModal(false)} width={520}>
+      <Modal open={showReorderModal} onClose={()=>setShowReorderModal(false)} width={560}>
         <h2 style={S.h2}>Reorder Events</h2>
-        <p style={{fontSize:12,color:C.textMuted,marginTop:4,marginBottom:10}}>Drag a row by its handle, or use the up/down buttons. Save to apply.</p>
+        <p style={{fontSize:12,color:C.textMuted,marginTop:4,marginBottom:10}}>Drag a row by its handle, or use the up/down buttons. Save to apply.{meetDayCount>1?' Day groups are shown for reference — events keep their assigned day after reordering.':''}</p>
         <div style={{maxHeight:'60vh',overflowY:'auto',border:`1px solid ${C.borderLight}`,borderRadius:6}}>
           {reorderList.length === 0 && <div style={{padding:20,textAlign:'center',color:C.textMuted,fontSize:12}}>No events to reorder.</div>}
-          {reorderList.map((eid, idx) => {
-            const evt = events.find(e=>e.id===eid);
+          {(()=>{ let lastDay=null; return reorderList.map((row, idx) => {
+            const evt = events.find(e=>e.id===row.eventId);
             if(!evt) return null;
             const isOver = reorderDragOver===idx && reorderDragIdx!==idx && reorderDragIdx!==null;
             const isDragging = reorderDragIdx===idx;
+            const r = normalizeRound(row.round);
+            const sameEventRoundCount = reorderList.filter(x=>x.eventId===row.eventId).length;
+            const showRoundBadge = r!=='Open' || sameEventRoundCount>1;
+            const roundClr = ROUND_COLOR[r]||C.textMuted;
+            const showDayHeader = meetDayCount>1 && row.day!==lastDay;
+            lastDay = row.day;
+            const rowKey = `${row.eventId}::${r}::${row.day}::${idx}`;
             return (
-              <div key={eid}
-                draggable
-                onDragStart={e=>{setReorderDragIdx(idx);try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',String(idx));}catch(_){}}}
-                onDragOver={e=>{e.preventDefault();if(reorderDragOver!==idx)setReorderDragOver(idx);}}
-                onDragLeave={()=>{if(reorderDragOver===idx)setReorderDragOver(null);}}
-                onDrop={e=>{e.preventDefault();if(reorderDragIdx===null||reorderDragIdx===idx){setReorderDragIdx(null);setReorderDragOver(null);return;}const next=[...reorderList];const [moved]=next.splice(reorderDragIdx,1);next.splice(idx,0,moved);setReorderList(next);setReorderDragIdx(null);setReorderDragOver(null);}}
-                onDragEnd={()=>{setReorderDragIdx(null);setReorderDragOver(null);}}
-                style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',borderBottom:`1px solid ${C.borderLight}`,background:isDragging?C.surface2:(isOver?C.accentMuted:C.surface),borderTop:isOver?`2px solid ${C.accent}`:'2px solid transparent',cursor:'grab',userSelect:'none'}}>
-                <span style={{fontSize:18,color:C.textMuted,minWidth:18,textAlign:'center',cursor:'grab'}} title="Drag to reorder">⋮⋮</span>
-                <span style={{fontSize:11,color:C.textMuted,minWidth:24,textAlign:'right'}}>{idx+1}.</span>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{getEventLabel(evt)}</div>
-                  <div style={{fontSize:10,color:C.textMuted}}>{evt.eventType} · {evt.entryType}{evt.gender?` · ${evt.gender==='Boy'?'Boys':evt.gender==='Girl'?'Girls':evt.gender}`:''}</div>
+              <React.Fragment key={rowKey}>
+                {showDayHeader && <div style={{fontSize:11,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',letterSpacing:'0.05em',padding:'8px 12px 4px',borderBottom:`2px solid ${C.border}`,background:C.surface2,position:'sticky',top:0,zIndex:1}}>Day {row.day}</div>}
+                <div
+                  draggable
+                  onDragStart={e=>{setReorderDragIdx(idx);try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',String(idx));}catch(_){}}}
+                  onDragOver={e=>{e.preventDefault();if(reorderDragOver!==idx)setReorderDragOver(idx);}}
+                  onDragLeave={()=>{if(reorderDragOver===idx)setReorderDragOver(null);}}
+                  onDrop={e=>{e.preventDefault();if(reorderDragIdx===null||reorderDragIdx===idx){setReorderDragIdx(null);setReorderDragOver(null);return;}const next=[...reorderList];const [moved]=next.splice(reorderDragIdx,1);next.splice(idx,0,moved);setReorderList(next);setReorderDragIdx(null);setReorderDragOver(null);}}
+                  onDragEnd={()=>{setReorderDragIdx(null);setReorderDragOver(null);}}
+                  style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',borderBottom:`1px solid ${C.borderLight}`,background:isDragging?C.surface2:(isOver?C.accentMuted:C.surface),borderTop:isOver?`2px solid ${C.accent}`:'2px solid transparent',cursor:'grab',userSelect:'none'}}>
+                  <span style={{fontSize:18,color:C.textMuted,minWidth:18,textAlign:'center',cursor:'grab'}} title="Drag to reorder">⋮⋮</span>
+                  <span style={{fontSize:11,color:C.textMuted,minWidth:24,textAlign:'right'}}>{idx+1}.</span>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
+                      <span style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{getEventLabel(evt)}</span>
+                      {showRoundBadge && <span style={{fontSize:9,fontWeight:700,padding:'2px 7px',borderRadius:9,background:r==='Final'?roundClr:'transparent',color:r==='Final'?'#fff':roundClr,border:`1px solid ${roundClr}`,textTransform:'uppercase',letterSpacing:'0.05em'}}>{r}</span>}
+                    </div>
+                    <div style={{fontSize:10,color:C.textMuted}}>{evt.eventType} · {evt.entryType}{evt.gender?` · ${evt.gender==='Boy'?'Boys':evt.gender==='Girl'?'Girls':evt.gender}`:''}</div>
+                  </div>
+                  <div style={{display:'flex',gap:2}}>
+                    <button style={{background:'none',border:`1px solid ${C.borderLight}`,borderRadius:4,padding:'4px 8px',cursor:idx===0?'default':'pointer',opacity:idx===0?0.3:1,fontSize:12}} disabled={idx===0} title="Move up" onClick={()=>{if(idx===0)return;const next=[...reorderList];const [m]=next.splice(idx,1);next.splice(idx-1,0,m);setReorderList(next);}}>↑</button>
+                    <button style={{background:'none',border:`1px solid ${C.borderLight}`,borderRadius:4,padding:'4px 8px',cursor:idx>=reorderList.length-1?'default':'pointer',opacity:idx>=reorderList.length-1?0.3:1,fontSize:12}} disabled={idx>=reorderList.length-1} title="Move down" onClick={()=>{if(idx>=reorderList.length-1)return;const next=[...reorderList];const [m]=next.splice(idx,1);next.splice(idx+1,0,m);setReorderList(next);}}>↓</button>
+                  </div>
                 </div>
-                <div style={{display:'flex',gap:2}}>
-                  <button style={{background:'none',border:`1px solid ${C.borderLight}`,borderRadius:4,padding:'4px 8px',cursor:idx===0?'default':'pointer',opacity:idx===0?0.3:1,fontSize:12}} disabled={idx===0} title="Move up" onClick={()=>{if(idx===0)return;const next=[...reorderList];const [m]=next.splice(idx,1);next.splice(idx-1,0,m);setReorderList(next);}}>↑</button>
-                  <button style={{background:'none',border:`1px solid ${C.borderLight}`,borderRadius:4,padding:'4px 8px',cursor:idx>=reorderList.length-1?'default':'pointer',opacity:idx>=reorderList.length-1?0.3:1,fontSize:12}} disabled={idx>=reorderList.length-1} title="Move down" onClick={()=>{if(idx>=reorderList.length-1)return;const next=[...reorderList];const [m]=next.splice(idx,1);next.splice(idx+1,0,m);setReorderList(next);}}>↓</button>
-                </div>
-              </div>
+              </React.Fragment>
             );
-          })}
+          }); })()}
         </div>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginTop:14,flexWrap:'wrap'}}>
           <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-            <button style={{...S.btn,fontSize:11,padding:'6px 10px',background:'transparent',color:C.textMuted,border:`1px solid ${C.border}`}} onClick={()=>setReorderList(filtered.map(me=>me.eventId))}>Reset (filtered order)</button>
+            <button style={{...S.btn,fontSize:11,padding:'6px 10px',background:'transparent',color:C.textMuted,border:`1px solid ${C.border}`}} onClick={()=>setReorderList(buildReorderRows())}>Reset to current order</button>
             {eventOrder.length > 0 && <button style={{...S.btn,fontSize:11,padding:'6px 10px',background:'transparent',color:C.danger,border:`1px solid ${C.danger}`}} onClick={()=>{if(!window.confirm('Clear the custom order for this meet and fall back to the template default?')) return; saveEventOrder([]); setShowReorderModal(false);}} title="Clear this meet's custom order and fall back to the template default">Reset to template default</button>}
             <button style={{...S.btn,fontSize:11,padding:'6px 10px',background:'transparent',color:C.accent,border:`1px solid ${C.accent}`}} onClick={()=>{
               const name = window.prompt('Save current order as a new template — name it:', `Order from ${meet.name||'this meet'}`);
               if(!name) return;
-              const entries = reorderList.map(eid=>{const e=events.find(ev=>ev.id===eid); return e?{name:e.name, gender:e.gender}:null;}).filter(Boolean);
+              const uniqIds = dedupeEventIds(reorderList);
+              const entries = uniqIds.map(eid=>{const e=events.find(ev=>ev.id===eid); return e?{name:e.name, gender:e.gender}:null;}).filter(Boolean);
               if(!entries.length) { alert('No events to save.'); return; }
               const newTemplate = { id:uid(), name:name.trim(), isDefault:false, entries };
               const templates = [...(data.eventOrderTemplates||[]), newTemplate];
@@ -3534,7 +3674,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
           </div>
           <div style={{display:'flex',gap:8}}>
             <button style={{...S.btn,...S.btnSecondary}} onClick={()=>setShowReorderModal(false)}>Cancel</button>
-            <button style={{...S.btn,...S.btnPrimary}} onClick={()=>{saveEventOrder(reorderList);setShowReorderModal(false);}}>Save Order</button>
+            <button style={{...S.btn,...S.btnPrimary}} onClick={()=>{saveEventOrder(dedupeEventIds(reorderList));setShowReorderModal(false);}}>Save Order</button>
           </div>
         </div>
       </Modal>
@@ -7031,6 +7171,8 @@ const DEFAULT_REPORT_OPTIONS = {
   includeTopPRs: true,
   includeTeamRankings: true,
   rankingsTopN: 5,
+  includeTeamScores: false,
+  teamScoresGroupByCategory: true,
   includeAthletePages: true,
   includeAthleteSummary: true,
   includeEventTable: true,
@@ -7362,6 +7504,16 @@ const buildSeasonReportHTML = (data, events, season, team, athletes, options, fe
     .toppr-name{font-size:13px;font-weight:700;color:#1a1f2b}
     .toppr-sub{font-size:10px;color:#5b6577}
     .toppr-pct{font-size:18px;font-weight:800;color:${primary};white-space:nowrap}
+    .ts-cat{font-size:13px;font-weight:800;color:${primary};margin:14px 0 6px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid ${primary}40;padding-bottom:3px}
+    .ts-meet{margin-bottom:12px;border:1px solid #e0e4ea;border-radius:8px;overflow:hidden;page-break-inside:avoid;box-shadow:0 1px 2px rgba(0,0,0,0.03)}
+    .ts-meet-h{background:${primary};color:#fff;padding:5px 12px;font-size:11px;font-weight:700;display:flex;justify-content:space-between;align-items:center;border-left:5px solid ${secondary}}
+    .ts-meet-name{font-weight:800;font-size:12px}
+    .ts-meet-date{font-size:10px;opacity:0.85}
+    .ts-side{padding:0}
+    .ts-side + .ts-side{border-top:1px solid #e0e4ea}
+    .ts-side-h{padding:5px 12px;background:#f4f6fa;font-size:10px;font-weight:700;color:#2a3242;text-transform:uppercase;letter-spacing:0.05em;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+    .ts-self{font-size:10px;font-weight:700;color:${primary};text-transform:none;letter-spacing:0}
+    .ts-self-row td{background:#fff8e0!important;font-weight:700}
     @media print{body{margin:0}}
   </style>`;
 
@@ -7518,7 +7670,82 @@ const buildSeasonReportHTML = (data, events, season, team, athletes, options, fe
     }
   };
 
-  const hasTeamSection = options.includeTeamSummary||options.includeTeamQualifiers||options.includeTopPRs||options.includeTeamRankings;
+  const renderTeamScoresSection = () => {
+    const meetsAll = (data.meets||[]).filter(m => {
+      const ts = m.teamScores;
+      if(!ts) return false;
+      const hasAny = ((ts.boys||[]).length || (ts.girls||[]).length || (ts.combined||[]).length);
+      if(!hasAny) return false;
+      const d = m.startDate || m.date;
+      if(start && d && d < start) return false;
+      if(end && d && d > end) return false;
+      return true;
+    });
+    if(!meetsAll.length) return;
+    const opponents = data.opponents || [];
+    const oppLabel = (id) => {
+      if(id === 'self') return (team && (team.school||team.name)) || 'Our Team';
+      const o = opponents.find(x=>x.id===id);
+      return o ? o.name : '(removed)';
+    };
+    const oppCat = (id) => {
+      if(id === 'self' || !id) return null;
+      const o = opponents.find(x=>x.id===id);
+      return o ? (o.category||'League') : null;
+    };
+    const ordinal = (n) => { if(!n||isNaN(n)) return ''; const s=['th','st','nd','rd'],v=n%100; return n+(s[(v-20)%10]||s[v]||s[0]); };
+    const meetCategory = (m) => {
+      const rows = [...((m.teamScores||{}).boys||[]),...((m.teamScores||{}).girls||[]),...((m.teamScores||{}).combined||[])];
+      const counts = {};
+      rows.forEach(r => { const c = oppCat(r.opponentId); if(c) counts[c]=(counts[c]||0)+1; });
+      const sorted = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+      return sorted.length ? sorted[0][0] : 'Other';
+    };
+    const renderMeetBlock = (m) => {
+      const ts = m.teamScores || {};
+      const mode = ts.mode || 'split';
+      const sides = [];
+      if(mode === 'split') {
+        if((ts.boys||[]).length) sides.push({label:'Boys', rows:ts.boys});
+        if((ts.girls||[]).length) sides.push({label:'Girls', rows:ts.girls});
+      } else {
+        if((ts.combined||[]).length) sides.push({label:'Combined', rows:ts.combined});
+      }
+      if(!sides.length) return '';
+      let html = '<div class="ts-meet">';
+      html += `<div class="ts-meet-h"><span class="ts-meet-name">${esc(m.name||'(unnamed meet)')}</span><span class="ts-meet-date">${esc(m.startDate||m.date||'')}</span></div>`;
+      sides.forEach(({label, rows}) => {
+        const sorted = [...rows].sort((a,b)=>{const pa=parseInt(a.place)||999,pb=parseInt(b.place)||999;return pa-pb;});
+        const selfRow = sorted.find(r=>r.opponentId==='self');
+        const total = sorted.length;
+        const selfSummary = selfRow && selfRow.place ? `<span class="ts-self">${esc((team&&(team.school||team.name))||'Our Team')}: ${ordinal(parseInt(selfRow.place))} of ${total}${selfRow.points!==''&&selfRow.points!=null?` (${selfRow.points} pts)`:''}</span>` : '';
+        html += `<div class="ts-side"><div class="ts-side-h"><span>${esc(label)}</span>${selfSummary}</div>`;
+        html += '<table><thead><tr><th class="rk" style="width:30px;text-align:center">#</th><th>Team</th><th style="text-align:right;width:80px">Points</th></tr></thead><tbody>';
+        sorted.forEach(r => {
+          const isSelf = r.opponentId === 'self';
+          html += `<tr${isSelf?' class="ts-self-row"':''}><td class="rk" style="text-align:center">${r.place||'-'}</td><td>${esc(oppLabel(r.opponentId))}</td><td style="text-align:right;font-weight:700">${r.points!==''&&r.points!=null?esc(String(r.points)):'-'}</td></tr>`;
+        });
+        html += '</tbody></table></div>';
+      });
+      html += '</div>';
+      return html;
+    };
+    body += '<h2>Team Scores</h2>';
+    if(options.teamScoresGroupByCategory) {
+      const groups = {};
+      meetsAll.forEach(m => { const c = meetCategory(m); (groups[c] = groups[c] || []).push(m); });
+      const ordered = [...OPPONENT_CATEGORIES, ...Object.keys(groups).filter(k=>!OPPONENT_CATEGORIES.includes(k))];
+      ordered.filter(k => groups[k] && groups[k].length).forEach(k => {
+        body += `<div class="ts-cat">${esc(k)}</div>`;
+        groups[k].sort((a,b)=>(a.startDate||'').localeCompare(b.startDate||''));
+        groups[k].forEach(m => { body += renderMeetBlock(m); });
+      });
+    } else {
+      [...meetsAll].sort((a,b)=>(a.startDate||'').localeCompare(b.startDate||'')).forEach(m => { body += renderMeetBlock(m); });
+    }
+  };
+
+  const hasTeamSection = options.includeTeamSummary||options.includeTeamQualifiers||options.includeTopPRs||options.includeTeamRankings||options.includeTeamScores;
   if(hasTeamSection) {
     body += '<div class="team-page">';
     const gm = options.genderMode || 'all';
@@ -7532,6 +7759,7 @@ const buildSeasonReportHTML = (data, events, season, team, athletes, options, fe
     } else {
       renderTeamSection(athletes, '');
     }
+    if(options.includeTeamScores) renderTeamScoresSection();
     body += '</div>';
   }
 
@@ -7786,6 +8014,14 @@ function ReportBuilderModal({ open, onClose, data, save, events, season, team, p
               Top
               <input style={{...S.input,width:46,fontSize:11,padding:'3px 4px',textAlign:'center'}} type="text" inputMode="numeric" value={(opts.rankingsTopN||5)+''} onChange={e=>{const v=Math.max(1,Math.min(50,parseInt(e.target.value)||5));dirtyRef.current=true;setSaveStatus('dirty');setOpts(o=>({...o,rankingsTopN:v}));}} disabled={!opts.includeTeamRankings} />
             </span>
+          </label>
+          <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,padding:'3px 0',cursor:'pointer'}}>
+            <input type="checkbox" checked={!!opts.includeTeamScores} onChange={()=>toggle('includeTeamScores')} />
+            <span>Team scores & places by meet</span>
+            <label style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:4,fontSize:11,color:C.textMuted,cursor:'pointer'}} title="Group meets by opponent category (League / Non-league / Division)">
+              <input type="checkbox" checked={!!opts.teamScoresGroupByCategory} onChange={()=>toggle('teamScoresGroupByCategory')} disabled={!opts.includeTeamScores} />
+              Group by category
+            </label>
           </label>
           <div style={{fontSize:10,color:C.textMuted,textTransform:'uppercase',fontWeight:600,marginTop:8,marginBottom:2}}>Per-athlete pages</div>
           {sectionToggle('includeAthletePages','Per-athlete pages')}
@@ -8459,6 +8695,10 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
   const [mtForm, setMtForm] = useState({ name:'', qualifying:false });
   const [editMTId, setEditMTId] = useState(null);
   const [delMTId, setDelMTId] = useState(null);
+  const [showAddOpp, setShowAddOpp] = useState(false);
+  const [oppForm, setOppForm] = useState({ name:'', category:'League', division:'' });
+  const [editOppId, setEditOppId] = useState(null);
+  const [delOppId, setDelOppId] = useState(null);
   useEffect(() => { setTeamName((team||{}).name||''); setSchool((team||{}).school||''); setPrimaryColor(((team||{}).colors||{}).primary||'#c96a1f'); setSecondaryColor(((team||{}).colors||{}).secondary||'#2b6cb0'); }, [team]);
   const handleSaveBranding = async () => {
     await updateTeam(team.id, { name:teamName.trim(), school:school.trim(), colors:{primary:primaryColor,secondary:secondaryColor} });
@@ -8500,7 +8740,7 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
   return (
     <div>
       <div style={{display:'flex',gap:4,marginBottom:16,flexWrap:'wrap'}}>
-        {[['seasons','Seasons'],['branding','Branding'],['meetTypes','Meet Types'],['eventOrder','Event Order'],['qualifying','Qualifying'],['records','Records'],['team','Team'],['data','Data']].map(([k,l])=>(
+        {[['seasons','Seasons'],['branding','Branding'],['meetTypes','Meet Types'],['opponents','Opponents'],['eventOrder','Event Order'],['qualifying','Qualifying'],['records','Records'],['team','Team'],['data','Data']].map(([k,l])=>(
           <button key={k} style={S.pill(tab===k)} onClick={()=>setTab(k)}>{l}</button>
         ))}
       </div>
@@ -8630,6 +8870,56 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
         </Modal>
         <ConfirmModal open={!!delMTId} onClose={()=>setDelMTId(null)} onConfirm={deleteMT} message="Delete this meet type?" />
       </div>)}
+
+      {tab==='opponents' && (()=>{
+        const opponents = data.opponents || [];
+        const saveOpp = () => {
+          if(!oppForm.name.trim()) return;
+          const clean = { name:oppForm.name.trim(), category:oppForm.category||'League', division:(oppForm.division||'').trim() };
+          if(editOppId) save({...data, opponents:opponents.map(o=>o.id===editOppId?{...o,...clean}:o)});
+          else save({...data, opponents:[...opponents,{id:uid(),...clean}]});
+          setShowAddOpp(false); setEditOppId(null); setOppForm({name:'',category:'League',division:''});
+        };
+        const deleteOpp = () => { save({...data, opponents:opponents.filter(o=>o.id!==delOppId)}); setDelOppId(null); };
+        const grouped = {};
+        opponents.forEach(o=>{const k=o.category||'League';(grouped[k]=grouped[k]||[]).push(o);});
+        const groupOrder = [...OPPONENT_CATEGORIES, ...Object.keys(grouped).filter(k=>!OPPONENT_CATEGORIES.includes(k))];
+        return (<div>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+            <h2 style={{...S.h2,margin:0}}>Opponents</h2>
+            <button style={{...S.btn,...S.btnPrimary}} onClick={()=>{setOppForm({name:'',category:'League',division:''});setEditOppId(null);setShowAddOpp(true);}}>+ Add Opponent</button>
+          </div>
+          <p style={{fontSize:12,color:C.textMuted,marginBottom:12}}>Schools you compete against. Tag each as League, Non-league, or Division so the End-of-Season report can group team scores by category.</p>
+          {opponents.length===0 && <div style={{...S.card,textAlign:'center',color:C.textMuted,padding:20}}>No opponents yet. Add the schools your team competes against to enable team scoring on each meet.</div>}
+          {groupOrder.filter(k=>(grouped[k]||[]).length>0).map(cat=>(
+            <div key={cat} style={{marginBottom:14}}>
+              <div style={{fontSize:11,fontWeight:700,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:4}}>{cat}</div>
+              {(grouped[cat]||[]).slice().sort((a,b)=>a.name.localeCompare(b.name)).map(o=>(
+                <div key={o.id} style={{...S.card,display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 14px',marginBottom:6}}>
+                  <div>
+                    <div style={{fontWeight:600,fontSize:13}}>{o.name}</div>
+                    {o.division && <div style={{fontSize:11,color:C.textMuted,marginTop:2}}>{o.division}</div>}
+                  </div>
+                  <div style={{display:'flex',gap:6}}>
+                    <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'3px 10px'}} onClick={()=>{setOppForm({name:o.name,category:o.category||'League',division:o.division||''});setEditOppId(o.id);setShowAddOpp(true);}}>Edit</button>
+                    <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12}} onClick={()=>setDelOppId(o.id)}>✕</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ))}
+          <Modal open={showAddOpp} onClose={()=>{setShowAddOpp(false);setEditOppId(null);}} width={420}>
+            <h2 style={S.h2}>{editOppId?'Edit':'Add'} Opponent</h2>
+            <div style={{display:'flex',flexDirection:'column',gap:12,marginTop:16}}>
+              <div><label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>School Name</label><input style={S.input} placeholder="e.g. Lincoln High School" value={oppForm.name} onChange={e=>setOppForm({...oppForm,name:e.target.value})} /></div>
+              <div><label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Category</label><select style={{...S.select,width:'100%'}} value={oppForm.category} onChange={e=>setOppForm({...oppForm,category:e.target.value})}>{OPPONENT_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}</select></div>
+              <div><label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Division (optional)</label><input style={S.input} placeholder="e.g. Division III, Class A" value={oppForm.division} onChange={e=>setOppForm({...oppForm,division:e.target.value})} /></div>
+              <button style={{...S.btn,...S.btnPrimary}} onClick={saveOpp}>{editOppId?'Save':'Add Opponent'}</button>
+            </div>
+          </Modal>
+          <ConfirmModal open={!!delOppId} onClose={()=>setDelOppId(null)} onConfirm={deleteOpp} message="Delete this opponent? Existing meet scores referencing this opponent will show as (removed)." />
+        </div>);
+      })()}
 
       {tab==='eventOrder' && (()=>{
         const templates = data.eventOrderTemplates || [];

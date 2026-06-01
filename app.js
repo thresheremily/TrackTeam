@@ -9046,8 +9046,16 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
           Object.entries(oppForm.dimensionValues||{}).forEach(([k,v])=>{ if(v) cleanDV[k]=v; });
           const clean = { name:oppForm.name.trim(), dimensionValues:cleanDV };
           const rawOpponents = data.opponents || [];
-          if(editOppId) save({...data, opponents:rawOpponents.map(o=>o.id===editOppId?{...o,...clean,nodeId:undefined,isLeague:undefined,tags:undefined,category:undefined,division:undefined}:o)});
-          else save({...data, opponents:[...rawOpponents,{id:uid(),...clean}]});
+          if(editOppId) {
+            const next = rawOpponents.map(o => {
+              if(o.id !== editOppId) return o;
+              const { nodeId, isLeague, tags, category, division, ...rest } = o;
+              return { ...rest, ...clean };
+            });
+            save({...data, opponents:next});
+          } else {
+            save({...data, opponents:[...rawOpponents,{id:uid(),...clean}]});
+          }
           setShowAddOpp(false); setEditOppId(null); setOppForm({name:'',dimensionValues:{}});
         };
         const deleteOpp = () => { save({...data, opponents:(data.opponents||[]).filter(o=>o.id!==delOppId)}); setDelOppId(null); };

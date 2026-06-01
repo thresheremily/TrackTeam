@@ -9148,8 +9148,9 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
                     {editDimensionId===d.id ? (
                       <input style={{...S.input,fontSize:13,padding:'4px 8px',flex:1,fontWeight:600}} value={dimensionDraft} autoFocus onChange={e=>setDimensionDraft(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')renameDimension(d.id);else if(e.key==='Escape'){setEditDimensionId(null);setDimensionDraft('');}}} onBlur={()=>renameDimension(d.id)} />
                     ) : (
-                      <span style={{fontSize:13,fontWeight:700,color:C.text,flex:1,cursor:'pointer'}} onClick={()=>{setEditDimensionId(d.id);setDimensionDraft(d.name);}}>{d.name}</span>
+                      <span style={{fontSize:13,fontWeight:700,color:C.text,flex:1,cursor:'pointer'}} onClick={()=>{setEditDimensionId(d.id);setDimensionDraft(d.name);}} title="Click to rename">{d.name}</span>
                     )}
+                    <button onClick={()=>{setEditDimensionId(d.id);setDimensionDraft(d.name);}} style={{background:'none',border:'none',color:C.textMuted,cursor:'pointer',fontSize:11,padding:'0 4px'}} title="Edit name">✏️</button>
                     <span style={{fontSize:10,color:C.textMuted}}>{values.length} value{values.length===1?'':'s'}</span>
                     <button onClick={()=>moveDimension(d.id,-1)} disabled={i===0} style={{background:'none',border:`1px solid ${C.borderLight}`,borderRadius:4,padding:'2px 7px',cursor:i===0?'default':'pointer',opacity:i===0?0.3:1,fontSize:11}}>↑</button>
                     <button onClick={()=>moveDimension(d.id,1)} disabled={i===dimensions.length-1} style={{background:'none',border:`1px solid ${C.borderLight}`,borderRadius:4,padding:'2px 7px',cursor:i===dimensions.length-1?'default':'pointer',opacity:i===dimensions.length-1?0.3:1,fontSize:11}}>↓</button>
@@ -9164,8 +9165,9 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
                         {editValueKey && editValueKey.dimId===d.id && editValueKey.valueId===v.id ? (
                           <input style={{...S.input,fontSize:12,padding:'3px 8px',flex:1}} value={valueDraft} autoFocus onChange={e=>setValueDraft(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')saveValueEdit();else if(e.key==='Escape'){setEditValueKey(null);setValueDraft('');}}} onBlur={saveValueEdit} />
                         ) : (
-                          <span style={{fontSize:12,color:C.text,flex:1,cursor:'pointer'}} onClick={()=>{setEditValueKey({dimId:d.id,valueId:v.id});setValueDraft(v.name);}}>{v.name}</span>
+                          <span style={{fontSize:12,color:C.text,flex:1,cursor:'pointer'}} onClick={()=>{setEditValueKey({dimId:d.id,valueId:v.id});setValueDraft(v.name);}} title="Click to rename">{v.name}</span>
                         )}
+                        <button onClick={()=>{setEditValueKey({dimId:d.id,valueId:v.id});setValueDraft(v.name);}} style={{background:'none',border:'none',color:C.textMuted,cursor:'pointer',fontSize:11,padding:'0 4px'}} title="Edit name">✏️</button>
                         <button onClick={()=>setDelValueKey({dimId:d.id,valueId:v.id})} style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:11,padding:'0 4px'}}>✕</button>
                       </div>
                     ))}

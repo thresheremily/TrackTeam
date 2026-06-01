@@ -117,19 +117,45 @@ const getEventLabel = (evt) => {
 const OPPONENT_CATEGORIES = ['League', 'Non-league', 'Division']; // legacy, kept for migration only
 const normalizeOpponent = (o) => {
   if(!o) return o;
+  if(o.nodeId !== undefined) return o;
   if(typeof o.isLeague === 'boolean' || Array.isArray(o.tags)) {
-    return { ...o, isLeague: !!o.isLeague, tags: Array.isArray(o.tags) ? o.tags.filter(Boolean) : [] };
+    return { ...o, nodeId: o.nodeId || null };
   }
-  const cat = o.category || 'League';
-  const tags = [];
-  if(o.division && o.division.trim()) tags.push(o.division.trim());
-  if(cat === 'Division' && !tags.includes('Division')) tags.push('Division');
-  return { ...o, isLeague: cat === 'League', tags };
+  return { ...o, nodeId: null };
 };
 const getOpponents = (data) => ((data&&data.opponents)||[]).map(normalizeOpponent);
+const getOpponentLevels = (data) => (((data&&data.opponentLevels)||[]).slice()).sort((a,b)=>(a.order||0)-(b.order||0));
+const getOpponentNodes = (data) => (data&&data.opponentNodes)||[];
+const getNodeAncestry = (nodeId, nodes) => {
+  const out = [];
+  const seen = new Set();
+  let cur = nodes.find(n=>n.id===nodeId);
+  while(cur && !seen.has(cur.id)) {
+    seen.add(cur.id);
+    out.unshift(cur);
+    cur = cur.parentId ? nodes.find(n=>n.id===cur.parentId) : null;
+  }
+  return out;
+};
+const getOpponentNode = (opponentId, opponents, nodes) => {
+  if(!opponentId || opponentId === 'self') return null;
+  const o = opponents.find(x=>x.id===opponentId);
+  if(!o || !o.nodeId) return null;
+  return nodes.find(n=>n.id===o.nodeId) || null;
+};
+const getOpponentPathLabel = (opponentId, opponents, nodes) => {
+  const o = opponents.find(x=>x.id===opponentId);
+  if(!o || !o.nodeId) return '';
+  return getNodeAncestry(o.nodeId, nodes).map(n=>n.name).join(' / ');
+};
+const opponentInLevelNode = (opponentId, levelNodeId, opponents, nodes) => {
+  if(!opponentId || opponentId === 'self') return false;
+  const o = opponents.find(x=>x.id===opponentId);
+  if(!o || !o.nodeId) return false;
+  return getNodeAncestry(o.nodeId, nodes).some(n => n.id === levelNodeId);
+};
 const collectKnownTags = (data) => {
   const set = new Set();
-  getOpponents(data).forEach(o => (o.tags||[]).forEach(t => set.add(t)));
   ((data&&data.meets)||[]).forEach(m => (m.tags||[]).forEach(t => set.add(t)));
   return Array.from(set).sort((a,b)=>a.localeCompare(b));
 };
@@ -138,28 +164,6 @@ const getOpponentLabel = (opponentId, opponents, team) => {
   if(opponentId === 'self') return (team && (team.school||team.name)) || 'Our Team';
   const o = (opponents||[]).find(x=>x.id===opponentId);
   return o ? o.name : '(removed)';
-};
-const getOpponentIsLeague = (opponentId, opponents) => {
-  if(!opponentId || opponentId === 'self') return null;
-  const o = (opponents||[]).find(x=>x.id===opponentId);
-  if(!o) return null;
-  const n = normalizeOpponent(o);
-  return n.isLeague;
-};
-const getOpponentTags = (opponentId, opponents) => {
-  if(!opponentId || opponentId === 'self') return [];
-  const o = (opponents||[]).find(x=>x.id===opponentId);
-  if(!o) return [];
-  return normalizeOpponent(o).tags || [];
-};
-const getOpponentCategory = (opponentId, opponents) => {
-  const lg = getOpponentIsLeague(opponentId, opponents);
-  if(lg === null) return null;
-  return lg ? 'League' : 'Non-league';
-};
-const getOpponentDivision = (opponentId, opponents) => {
-  const tags = getOpponentTags(opponentId, opponents);
-  return tags.length ? tags.join(', ') : '';
 };
 const TRACK_DISTANCES = {
   '55m':55,'100m':100,'200m':200,'400m':400,'800m':800,'1000m':1000,
@@ -3504,6 +3508,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
       })()}
       {meetTab==='scores' && (()=>{
         const opponents = getOpponents(data);
+        const nodes = getOpponentNodes(data);
         const scores = meet.teamScores || { mode: 'split', boys: [], girls: [], combined: [] };
         const mode = scores.mode || 'split';
         const updateScores = (next) => save({...data, meets:data.meets.map(m=>m.id===meetId?{...m, teamScores:next}:m)});
@@ -3536,7 +3541,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                   <thead>
                     <tr>
                       <th style={{...S.th,textAlign:'left'}}>Team</th>
-                      <th style={{...S.th,textAlign:'left',width:180}}>League / Tags</th>
+                      <th style={{...S.th,textAlign:'left',width:220}}>Hierarchy</th>
                       <th style={{...S.th,textAlign:'right',width:90}}>Points</th>
                       <th style={{...S.th,textAlign:'right',width:70}}>Place</th>
                       <th style={{...S.th,width:36}}></th>
@@ -3545,18 +3550,17 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                   <tbody>
                     {rows.map((r,idx)=>{
                       const isSelf = r.opponentId === 'self';
-                      const isLeague = isSelf ? null : getOpponentIsLeague(r.opponentId, opponents);
-                      const tags = isSelf ? [] : getOpponentTags(r.opponentId, opponents);
+                      const pathLabel = isSelf ? '' : getOpponentPathLabel(r.opponentId, opponents, nodes);
                       return (
                         <tr key={r.id||idx} style={{background:isSelf?C.accentMuted:'transparent'}}>
                           <td style={{...S.td,padding:'4px 6px'}}>
                             <select style={{...S.select,fontSize:12,fontWeight:isSelf?700:500,width:'100%'}} value={r.opponentId||''} onChange={e=>updateRow(key,idx,{opponentId:e.target.value})}>
                               <option value="">(pick a team)</option>
                               <option value="self">{(team&&(team.school||team.name))||'Our Team'} (us)</option>
-                              {opponents.map(o=><option key={o.id} value={o.id}>{o.name}{o.isLeague?' — League':' — Non-league'}</option>)}
+                              {opponents.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}
                             </select>
                           </td>
-                          <td style={{...S.td,padding:'4px 6px',color:C.textMuted,fontSize:11}}>{isSelf?'—':(isLeague===null?'':<span style={{display:'inline-flex',flexWrap:'wrap',gap:4,alignItems:'center'}}><span style={{fontWeight:600,color:isLeague?C.accent:C.textSecondary}}>{isLeague?'League':'Non-league'}</span>{tags.map(t=><span key={t} style={{fontSize:10,padding:'1px 6px',borderRadius:8,background:C.surface2,color:C.textSecondary,border:`1px solid ${C.borderLight}`}}>{t}</span>)}</span>)}</td>
+                          <td style={{...S.td,padding:'4px 6px',color:C.textMuted,fontSize:11}}>{isSelf?'—':(pathLabel||<span style={{fontStyle:'italic',color:C.textMuted}}>(unplaced)</span>)}</td>
                           <td style={{...S.td,padding:'4px 6px',textAlign:'right'}}><input style={{...S.input,fontSize:12,textAlign:'right',padding:'4px 8px'}} type="number" step="0.5" value={r.points==null?'':r.points} onChange={e=>updateRow(key,idx,{points:e.target.value===''?'':parseFloat(e.target.value)})} /></td>
                           <td style={{...S.td,padding:'4px 6px',textAlign:'right'}}><input style={{...S.input,fontSize:12,textAlign:'right',padding:'4px 8px'}} type="number" min="1" value={r.place==null?'':r.place} onChange={e=>updateRow(key,idx,{place:e.target.value===''?'':parseInt(e.target.value)})} /></td>
                           <td style={{...S.td,padding:'4px 6px',textAlign:'center'}}><button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:14}} onClick={()=>removeRow(key,idx)} title="Remove team">✕</button></td>
@@ -7754,18 +7758,22 @@ const buildSeasonReportHTML = (data, events, season, team, athletes, options, fe
       return o ? o.name : '(removed)';
     };
     const ordinal = (n) => { if(!n||isNaN(n)) return ''; const s=['th','st','nd','rd'],v=n%100; return n+(s[(v-20)%10]||s[v]||s[0]); };
+    const levels = getOpponentLevels(data);
+    const nodes = getOpponentNodes(data);
     const meetAllRows = (m) => [...((m.teamScores||{}).boys||[]),...((m.teamScores||{}).girls||[]),...((m.teamScores||{}).combined||[])];
-    const meetLeagueGroup = (m) => {
-      const counts = { League:0, 'Non-league':0 };
-      meetAllRows(m).forEach(r => { const lg = getOpponentIsLeague(r.opponentId, opponents); if(lg===true) counts.League++; else if(lg===false) counts['Non-league']++; });
-      if(!counts.League && !counts['Non-league']) return 'Other';
-      return counts.League >= counts['Non-league'] ? 'League' : 'Non-league';
+    const meetNodesAtLevel = (m, levelId) => {
+      const seen = new Set();
+      const out = [];
+      meetAllRows(m).forEach(r => {
+        if(!r.opponentId || r.opponentId === 'self') return;
+        const o = opponents.find(x=>x.id===r.opponentId);
+        if(!o || !o.nodeId) return;
+        const anc = getNodeAncestry(o.nodeId, nodes).find(n=>n.levelId===levelId);
+        if(anc && !seen.has(anc.id)) { seen.add(anc.id); out.push(anc); }
+      });
+      return out;
     };
-    const meetGroupsByTag = (m) => {
-      const tagSet = new Set((m.tags||[]).filter(Boolean));
-      meetAllRows(m).forEach(r => getOpponentTags(r.opponentId, opponents).forEach(t => tagSet.add(t)));
-      return Array.from(tagSet);
-    };
+    const meetGroupsByTag = (m) => Array.from(new Set((m.tags||[]).filter(Boolean)));
     const renderMeetBlock = (m) => {
       const ts = m.teamScores || {};
       const mode = ts.mode || 'split';
@@ -7797,16 +7805,28 @@ const buildSeasonReportHTML = (data, events, season, team, athletes, options, fe
       return html;
     };
     body += '<h2>Team Scores</h2>';
-    const groupAxis = options.teamScoresGroupByCategory ? (options.teamScoresGroupBy || 'leagueFlag') : null;
+    const groupAxis = options.teamScoresGroupByCategory ? (options.teamScoresGroupBy || 'tag') : null;
     const byDate = (a,b) => (a.startDate||'').localeCompare(b.startDate||'');
-    if(groupAxis === 'leagueFlag') {
-      const groups = { League:[], 'Non-league':[], Other:[] };
-      meetsAll.forEach(m => { (groups[meetLeagueGroup(m)] = groups[meetLeagueGroup(m)] || []).push(m); });
-      ['League','Non-league','Other'].filter(k => (groups[k]||[]).length).forEach(k => {
-        body += `<div class="ts-cat">${esc(k)}</div>`;
-        groups[k].sort(byDate);
-        groups[k].forEach(m => { body += renderMeetBlock(m); });
+    const levelById = (lid) => levels.find(l=>l.id===lid);
+    if(groupAxis && groupAxis !== 'tag' && levelById(groupAxis)) {
+      const lvl = levelById(groupAxis);
+      const groups = {};
+      const ungrouped = [];
+      meetsAll.forEach(m => {
+        const ns = meetNodesAtLevel(m, lvl.id);
+        if(!ns.length) { ungrouped.push(m); return; }
+        ns.forEach(n => { (groups[n.id] = groups[n.id] || {node:n, meets:[]}).meets.push(m); });
       });
+      Object.values(groups).sort((a,b)=>a.node.name.localeCompare(b.node.name)).forEach(({node, meets}) => {
+        body += `<div class="ts-cat">${esc(lvl.name)}: ${esc(node.name)}</div>`;
+        meets.sort(byDate);
+        meets.forEach(m => { body += renderMeetBlock(m); });
+      });
+      if(ungrouped.length) {
+        body += `<div class="ts-cat">No ${esc(lvl.name)}</div>`;
+        ungrouped.sort(byDate);
+        ungrouped.forEach(m => { body += renderMeetBlock(m); });
+      }
     } else if(groupAxis === 'tag') {
       const groups = {};
       const untagged = [];
@@ -8103,12 +8123,12 @@ function ReportBuilderModal({ open, onClose, data, save, events, season, team, p
           <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,padding:'3px 0',cursor:'pointer'}}>
             <input type="checkbox" checked={!!opts.includeTeamScores} onChange={()=>toggle('includeTeamScores')} />
             <span>Team scores & places by meet</span>
-            <label style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:4,fontSize:11,color:C.textMuted,cursor:'pointer'}} title="Group meets by League / Non-league or by a tag">
+            <label style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:4,fontSize:11,color:C.textMuted,cursor:'pointer'}} title="Group meets by a hierarchy level or by tag">
               <input type="checkbox" checked={!!opts.teamScoresGroupByCategory} onChange={()=>toggle('teamScoresGroupByCategory')} disabled={!opts.includeTeamScores} />
               Group by
-              <select value={opts.teamScoresGroupBy||'leagueFlag'} onChange={e=>{dirtyRef.current=true;setSaveStatus('dirty');setOpts(o=>({...o,teamScoresGroupBy:e.target.value}));}} disabled={!opts.includeTeamScores||!opts.teamScoresGroupByCategory} style={{fontSize:11,padding:'1px 4px',marginLeft:2}}>
-                <option value="leagueFlag">League / Non-league</option>
-                <option value="tag">Tag</option>
+              <select value={opts.teamScoresGroupBy||'tag'} onChange={e=>{dirtyRef.current=true;setSaveStatus('dirty');setOpts(o=>({...o,teamScoresGroupBy:e.target.value}));}} disabled={!opts.includeTeamScores||!opts.teamScoresGroupByCategory} style={{fontSize:11,padding:'1px 4px',marginLeft:2}}>
+                {getOpponentLevels(data).map(l=><option key={l.id} value={l.id}>{l.name}</option>)}
+                <option value="tag">Meet tag</option>
               </select>
             </label>
           </label>
@@ -8785,9 +8805,17 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
   const [editMTId, setEditMTId] = useState(null);
   const [delMTId, setDelMTId] = useState(null);
   const [showAddOpp, setShowAddOpp] = useState(false);
-  const [oppForm, setOppForm] = useState({ name:'', isLeague:true, tags:[] });
+  const [oppForm, setOppForm] = useState({ name:'', nodeId:'' });
   const [editOppId, setEditOppId] = useState(null);
   const [delOppId, setDelOppId] = useState(null);
+  const [editLevelId, setEditLevelId] = useState(null);
+  const [levelDraft, setLevelDraft] = useState('');
+  const [showAddNode, setShowAddNode] = useState(null);
+  const [nodeForm, setNodeForm] = useState({ name:'', levelId:'', parentId:null });
+  const [editNodeId, setEditNodeId] = useState(null);
+  const [delNodeId, setDelNodeId] = useState(null);
+  const [delLevelId, setDelLevelId] = useState(null);
+  const [collapsedNodes, setCollapsedNodes] = useState({});
   useEffect(() => { setTeamName((team||{}).name||''); setSchool((team||{}).school||''); setPrimaryColor(((team||{}).colors||{}).primary||'#c96a1f'); setSecondaryColor(((team||{}).colors||{}).secondary||'#2b6cb0'); }, [team]);
   const handleSaveBranding = async () => {
     await updateTeam(team.id, { name:teamName.trim(), school:school.trim(), colors:{primary:primaryColor,secondary:secondaryColor} });
@@ -8962,61 +8990,226 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
 
       {tab==='opponents' && (()=>{
         const opponents = getOpponents(data);
-        const knownTags = collectKnownTags(data);
+        const levels = getOpponentLevels(data);
+        const nodes = getOpponentNodes(data);
+        const nodeById = (id) => nodes.find(n=>n.id===id) || null;
+        const levelById = (id) => levels.find(l=>l.id===id) || null;
+        const childrenOf = (parentId, levelId) => nodes.filter(n => n.parentId===parentId && (!levelId || n.levelId===levelId)).sort((a,b)=>a.name.localeCompare(b.name));
+        const opponentsAtNode = (nodeId) => opponents.filter(o => o.nodeId === nodeId).sort((a,b)=>a.name.localeCompare(b.name));
+
         const saveOpp = () => {
           if(!oppForm.name.trim()) return;
-          const clean = { name:oppForm.name.trim(), isLeague:!!oppForm.isLeague, tags:(oppForm.tags||[]).map(t=>t.trim()).filter(Boolean) };
+          const clean = { name:oppForm.name.trim(), nodeId:oppForm.nodeId||null };
           const rawOpponents = data.opponents || [];
-          if(editOppId) save({...data, opponents:rawOpponents.map(o=>o.id===editOppId?{...o,...clean,category:undefined,division:undefined}:o)});
+          if(editOppId) save({...data, opponents:rawOpponents.map(o=>o.id===editOppId?{...o,...clean,isLeague:undefined,tags:undefined,category:undefined,division:undefined}:o)});
           else save({...data, opponents:[...rawOpponents,{id:uid(),...clean}]});
-          setShowAddOpp(false); setEditOppId(null); setOppForm({name:'',isLeague:true,tags:[]});
+          setShowAddOpp(false); setEditOppId(null); setOppForm({name:'',nodeId:''});
         };
         const deleteOpp = () => { save({...data, opponents:(data.opponents||[]).filter(o=>o.id!==delOppId)}); setDelOppId(null); };
-        const league = opponents.filter(o=>o.isLeague).sort((a,b)=>a.name.localeCompare(b.name));
-        const nonLeague = opponents.filter(o=>!o.isLeague).sort((a,b)=>a.name.localeCompare(b.name));
-        const renderOpp = (o) => (
-          <div key={o.id} style={{...S.card,display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 14px',marginBottom:6}}>
-            <div style={{minWidth:0,flex:1}}>
-              <div style={{fontWeight:600,fontSize:13}}>{o.name}</div>
-              {(o.tags||[]).length>0 && <div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:4}}>{o.tags.map(t=><span key={t} style={{fontSize:10,fontWeight:600,padding:'2px 7px',borderRadius:10,background:C.surface2,color:C.textSecondary,border:`1px solid ${C.borderLight}`}}>{t}</span>)}</div>}
+
+        const addLevel = () => {
+          const name = window.prompt('Name this level (e.g. Section, Class, League, Division):', '');
+          if(!name||!name.trim()) return;
+          const next = [...levels, { id:uid(), name:name.trim(), order:levels.length }];
+          save({...data, opponentLevels:next});
+        };
+        const renameLevel = (lid) => {
+          if(!levelDraft.trim()) { setEditLevelId(null); return; }
+          save({...data, opponentLevels:levels.map(l=>l.id===lid?{...l,name:levelDraft.trim()}:l)});
+          setEditLevelId(null); setLevelDraft('');
+        };
+        const moveLevel = (lid, dir) => {
+          const ord = [...levels].sort((a,b)=>(a.order||0)-(b.order||0));
+          const i = ord.findIndex(l=>l.id===lid);
+          if(i<0) return;
+          const j = i + dir;
+          if(j<0||j>=ord.length) return;
+          [ord[i], ord[j]] = [ord[j], ord[i]];
+          save({...data, opponentLevels:ord.map((l,idx)=>({...l,order:idx}))});
+        };
+        const deleteLevel = (lid) => {
+          const removedNodeIds = new Set(nodes.filter(n=>n.levelId===lid).map(n=>n.id));
+          const nextNodes = nodes.filter(n=>!removedNodeIds.has(n.id)).map(n => removedNodeIds.has(n.parentId) ? {...n,parentId:null} : n);
+          const nextOpp = (data.opponents||[]).map(o => removedNodeIds.has(o.nodeId) ? {...o,nodeId:null} : o);
+          save({...data, opponentLevels:levels.filter(l=>l.id!==lid).map((l,idx)=>({...l,order:idx})), opponentNodes:nextNodes, opponents:nextOpp});
+          setDelLevelId(null);
+        };
+        const openAddNode = (levelId, parentId) => {
+          setNodeForm({name:'',levelId,parentId:parentId||null});
+          setEditNodeId(null);
+          setShowAddNode({levelId,parentId});
+        };
+        const openEditNode = (n) => {
+          setNodeForm({name:n.name,levelId:n.levelId,parentId:n.parentId||null});
+          setEditNodeId(n.id);
+          setShowAddNode({levelId:n.levelId,parentId:n.parentId});
+        };
+        const saveNode = () => {
+          if(!nodeForm.name.trim()||!nodeForm.levelId) return;
+          const clean = { name:nodeForm.name.trim(), levelId:nodeForm.levelId, parentId:nodeForm.parentId||null };
+          if(editNodeId) save({...data, opponentNodes:nodes.map(n=>n.id===editNodeId?{...n,...clean}:n)});
+          else save({...data, opponentNodes:[...nodes,{id:uid(),...clean}]});
+          setShowAddNode(null); setEditNodeId(null); setNodeForm({name:'',levelId:'',parentId:null});
+        };
+        const deleteNode = () => {
+          const target = nodeById(delNodeId);
+          if(!target) { setDelNodeId(null); return; }
+          const reparent = target.parentId || null;
+          const nextNodes = nodes.filter(n=>n.id!==delNodeId).map(n => n.parentId===delNodeId ? {...n,parentId:reparent} : n);
+          const nextOpp = (data.opponents||[]).map(o => o.nodeId===delNodeId ? {...o,nodeId:reparent} : o);
+          save({...data, opponentNodes:nextNodes, opponents:nextOpp});
+          setDelNodeId(null);
+        };
+        const toggleCollapse = (nid) => setCollapsedNodes(c=>({...c,[nid]:!c[nid]}));
+
+        const childLevelOf = (levelId) => {
+          const i = levels.findIndex(l=>l.id===levelId);
+          return i>=0 && i<levels.length-1 ? levels[i+1] : null;
+        };
+        const renderNode = (n, depth) => {
+          const lvl = levelById(n.levelId);
+          const childLvl = childLevelOf(n.levelId);
+          const kids = childrenOf(n.id);
+          const opps = opponentsAtNode(n.id);
+          const collapsed = !!collapsedNodes[n.id];
+          const hasContent = kids.length>0 || opps.length>0;
+          return (
+            <div key={n.id} style={{marginLeft:depth*16,marginBottom:4}}>
+              <div style={{display:'flex',alignItems:'center',gap:6,padding:'6px 10px',background:C.surface,border:`1px solid ${C.borderLight}`,borderRadius:5}}>
+                <button onClick={()=>toggleCollapse(n.id)} style={{background:'none',border:'none',cursor:hasContent?'pointer':'default',fontSize:11,color:hasContent?C.textSecondary:C.borderLight,width:14,padding:0}}>{hasContent?(collapsed?'▶':'▼'):'·'}</button>
+                <span style={{fontSize:10,fontWeight:700,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.04em',minWidth:50}}>{lvl?lvl.name:'?'}</span>
+                <span style={{fontSize:13,fontWeight:600,color:C.text,flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{n.name}</span>
+                {opps.length>0 && <span style={{fontSize:10,color:C.textMuted}}>{opps.length} opp{opps.length===1?'':'s'}</span>}
+                {childLvl && <button onClick={()=>openAddNode(childLvl.id, n.id)} style={{...S.btn,fontSize:10,padding:'2px 8px',background:'transparent',color:C.accent,border:`1px solid ${C.accent}`}}>+ {childLvl.name}</button>}
+                <button onClick={()=>openEditNode(n)} style={{background:'none',border:'none',color:C.textMuted,cursor:'pointer',fontSize:11,padding:'0 4px'}} title="Edit">✏️</button>
+                <button onClick={()=>setDelNodeId(n.id)} style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12,padding:'0 4px'}} title="Delete">✕</button>
+              </div>
+              {!collapsed && opps.length>0 && opps.map(o=>(
+                <div key={'op_'+o.id} style={{marginLeft:(depth+1)*16+18,padding:'3px 10px',fontSize:12,color:C.textSecondary,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                  <span>• {o.name}</span>
+                  <div style={{display:'flex',gap:4}}>
+                    <button style={{...S.btn,...S.btnSecondary,fontSize:10,padding:'2px 8px'}} onClick={()=>{setOppForm({name:o.name,nodeId:o.nodeId||''});setEditOppId(o.id);setShowAddOpp(true);}}>Edit</button>
+                    <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12}} onClick={()=>setDelOppId(o.id)}>✕</button>
+                  </div>
+                </div>
+              ))}
+              {!collapsed && kids.map(k=>renderNode(k,depth+1))}
             </div>
-            <div style={{display:'flex',gap:6,marginLeft:8}}>
-              <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'3px 10px'}} onClick={()=>{setOppForm({name:o.name,isLeague:!!o.isLeague,tags:[...(o.tags||[])]});setEditOppId(o.id);setShowAddOpp(true);}}>Edit</button>
-              <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12}} onClick={()=>setDelOppId(o.id)}>✕</button>
-            </div>
-          </div>
-        );
+          );
+        };
+
+        const unplacedOpps = opponents.filter(o => !o.nodeId);
+        const topLevel = levels[0];
+        const topNodes = topLevel ? childrenOf(null, topLevel.id) : [];
+
+        const nodeOptions = []; // for opponent picker: [{label, value}]
+        nodeOptions.push({label:'(no hierarchy assignment)', value:''});
+        const walk = (parentId, depth) => {
+          levels.forEach(lvl => {
+            childrenOf(parentId, lvl.id).forEach(n => {
+              nodeOptions.push({label:'  '.repeat(depth)+(lvl.name?lvl.name+': ':'')+n.name, value:n.id});
+              walk(n.id, depth+1);
+            });
+          });
+        };
+        walk(null, 0);
+
         return (<div>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
             <h2 style={{...S.h2,margin:0}}>Opponents</h2>
-            <button style={{...S.btn,...S.btnPrimary}} onClick={()=>{setOppForm({name:'',isLeague:true,tags:[]});setEditOppId(null);setShowAddOpp(true);}}>+ Add Opponent</button>
           </div>
-          <p style={{fontSize:12,color:C.textMuted,marginBottom:12}}>Schools you compete against. Mark whether each is in your league and add free-form tags (Conference name, Division, Class, etc.) — the End-of-Season report can group team scores by League / Non-league or by any tag.</p>
-          {opponents.length===0 && <div style={{...S.card,textAlign:'center',color:C.textMuted,padding:20}}>No opponents yet. Add the schools your team competes against to enable team scoring on each meet.</div>}
-          {league.length>0 && <div style={{marginBottom:14}}>
-            <div style={{fontSize:11,fontWeight:700,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:4}}>League</div>
-            {league.map(renderOpp)}
+          <p style={{fontSize:12,color:C.textMuted,marginBottom:14}}>Build a hierarchy that fits your state — name your own levels (e.g. Section → Class → League → Division). Each opponent is placed in one node; membership at every higher level is implied. The End-of-Season report can then group team scores at any level.</p>
+
+          {/* Levels editor */}
+          <div style={{...S.card,padding:'12px 14px',marginBottom:14}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+              <div style={{fontSize:12,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',letterSpacing:'0.05em'}}>Levels (top → bottom)</div>
+              <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'3px 10px'}} onClick={addLevel}>+ Add Level</button>
+            </div>
+            {levels.length===0 ? (
+              <div style={{fontSize:11,color:C.textMuted,fontStyle:'italic',padding:'4px 0'}}>No levels yet. Add one to start building your hierarchy.</div>
+            ) : levels.map((l,i)=>(
+              <div key={l.id} style={{display:'flex',alignItems:'center',gap:6,padding:'4px 0'}}>
+                <span style={{fontSize:11,color:C.textMuted,minWidth:22,textAlign:'right'}}>{i+1}.</span>
+                {editLevelId===l.id ? (
+                  <input style={{...S.input,fontSize:12,padding:'4px 8px',flex:1}} value={levelDraft} autoFocus onChange={e=>setLevelDraft(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')renameLevel(l.id);else if(e.key==='Escape'){setEditLevelId(null);setLevelDraft('');}}} onBlur={()=>renameLevel(l.id)} />
+                ) : (
+                  <span style={{fontSize:13,fontWeight:600,color:C.text,flex:1,cursor:'pointer'}} onClick={()=>{setEditLevelId(l.id);setLevelDraft(l.name);}}>{l.name}</span>
+                )}
+                <button onClick={()=>moveLevel(l.id,-1)} disabled={i===0} style={{background:'none',border:`1px solid ${C.borderLight}`,borderRadius:4,padding:'2px 7px',cursor:i===0?'default':'pointer',opacity:i===0?0.3:1,fontSize:11}}>↑</button>
+                <button onClick={()=>moveLevel(l.id,1)} disabled={i===levels.length-1} style={{background:'none',border:`1px solid ${C.borderLight}`,borderRadius:4,padding:'2px 7px',cursor:i===levels.length-1?'default':'pointer',opacity:i===levels.length-1?0.3:1,fontSize:11}}>↓</button>
+                <button onClick={()=>setDelLevelId(l.id)} style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12,padding:'0 4px'}}>✕</button>
+              </div>
+            ))}
+          </div>
+
+          {/* Hierarchy tree */}
+          {levels.length>0 && <div style={{...S.card,padding:'12px 14px',marginBottom:14}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+              <div style={{fontSize:12,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',letterSpacing:'0.05em'}}>Hierarchy</div>
+              <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'3px 10px'}} onClick={()=>openAddNode(topLevel.id, null)}>+ Add {topLevel.name}</button>
+            </div>
+            {topNodes.length===0 ? (
+              <div style={{fontSize:11,color:C.textMuted,fontStyle:'italic',padding:'4px 0'}}>No {topLevel.name.toLowerCase()}s yet. Add the first one to start.</div>
+            ) : topNodes.map(n=>renderNode(n,0))}
           </div>}
-          {nonLeague.length>0 && <div style={{marginBottom:14}}>
-            <div style={{fontSize:11,fontWeight:700,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:4}}>Non-league</div>
-            {nonLeague.map(renderOpp)}
-          </div>}
-          <Modal open={showAddOpp} onClose={()=>{setShowAddOpp(false);setEditOppId(null);}} width={440}>
+
+          {/* Opponents list */}
+          <div style={{...S.card,padding:'12px 14px'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+              <div style={{fontSize:12,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',letterSpacing:'0.05em'}}>Opponents{unplacedOpps.length>0?` · ${unplacedOpps.length} unplaced`:''}</div>
+              <button style={{...S.btn,...S.btnPrimary,fontSize:11,padding:'4px 12px'}} onClick={()=>{setOppForm({name:'',nodeId:''});setEditOppId(null);setShowAddOpp(true);}}>+ Add Opponent</button>
+            </div>
+            {opponents.length===0 ? (
+              <div style={{fontSize:12,color:C.textMuted,textAlign:'center',padding:14,fontStyle:'italic'}}>No opponents yet.</div>
+            ) : (
+              <div>
+                {unplacedOpps.length>0 && <div style={{marginBottom:10}}>
+                  <div style={{fontSize:10,fontWeight:700,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:4}}>Unplaced</div>
+                  {unplacedOpps.sort((a,b)=>a.name.localeCompare(b.name)).map(o=>(
+                    <div key={o.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 10px',background:C.bg,borderRadius:5,marginBottom:4}}>
+                      <span style={{fontSize:13,fontWeight:600}}>{o.name}</span>
+                      <div style={{display:'flex',gap:4}}>
+                        <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'2px 8px'}} onClick={()=>{setOppForm({name:o.name,nodeId:o.nodeId||''});setEditOppId(o.id);setShowAddOpp(true);}}>Edit</button>
+                        <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12}} onClick={()=>setDelOppId(o.id)}>✕</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>}
+                <div style={{fontSize:10,color:C.textMuted,fontStyle:'italic'}}>Placed opponents appear under their node in the hierarchy above.</div>
+              </div>
+            )}
+          </div>
+
+          {/* Opponent add/edit */}
+          <Modal open={showAddOpp} onClose={()=>{setShowAddOpp(false);setEditOppId(null);}} width={480}>
             <h2 style={S.h2}>{editOppId?'Edit':'Add'} Opponent</h2>
             <div style={{display:'flex',flexDirection:'column',gap:12,marginTop:16}}>
               <div><label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>School Name</label><input style={S.input} placeholder="e.g. Lincoln High School" value={oppForm.name} onChange={e=>setOppForm({...oppForm,name:e.target.value})} /></div>
-              <label style={{display:'flex',alignItems:'center',gap:8,fontSize:13,color:C.text,cursor:'pointer',padding:'8px 12px',background:C.bg,borderRadius:6,border:`1px solid ${C.borderLight}`}}>
-                <input type="checkbox" checked={!!oppForm.isLeague} onChange={e=>setOppForm({...oppForm,isLeague:e.target.checked})} />
-                In our league
-              </label>
               <div>
-                <label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Tags <span style={{color:C.textMuted,fontWeight:400}}>(optional — e.g. Division III, MAC Conference, Rival)</span></label>
-                <TagInput value={oppForm.tags} onChange={tags=>setOppForm({...oppForm,tags})} suggestions={knownTags} placeholder="Type a tag and press Enter" />
+                <label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Hierarchy placement</label>
+                <select style={{...S.select,width:'100%'}} value={oppForm.nodeId||''} onChange={e=>setOppForm({...oppForm,nodeId:e.target.value})}>
+                  {nodeOptions.map(opt=><option key={opt.value||'_none'} value={opt.value}>{opt.label}</option>)}
+                </select>
+                <div style={{fontSize:10,color:C.textMuted,marginTop:3}}>Pick the deepest node where this school fits. Membership at every level above is implied.</div>
               </div>
               <button style={{...S.btn,...S.btnPrimary}} onClick={saveOpp}>{editOppId?'Save':'Add Opponent'}</button>
             </div>
           </Modal>
+
+          {/* Node add/edit */}
+          <Modal open={!!showAddNode} onClose={()=>{setShowAddNode(null);setEditNodeId(null);}} width={440}>
+            <h2 style={S.h2}>{editNodeId?'Edit':'Add'} {levelById(nodeForm.levelId)?.name||'Node'}</h2>
+            <div style={{display:'flex',flexDirection:'column',gap:12,marginTop:16}}>
+              <div><label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Name</label><input style={S.input} placeholder={`e.g. ${levelById(nodeForm.levelId)?.name||''} name`} value={nodeForm.name} autoFocus onChange={e=>setNodeForm({...nodeForm,name:e.target.value})} onKeyDown={e=>{if(e.key==='Enter')saveNode();}} /></div>
+              {nodeForm.parentId && (()=>{const p=nodeById(nodeForm.parentId);return p?<div style={{fontSize:11,color:C.textMuted,padding:'4px 8px',background:C.bg,borderRadius:4}}>Parent: <strong>{p.name}</strong> ({levelById(p.levelId)?.name||''})</div>:null;})()}
+              <button style={{...S.btn,...S.btnPrimary}} onClick={saveNode}>{editNodeId?'Save':'Add'}</button>
+            </div>
+          </Modal>
+
           <ConfirmModal open={!!delOppId} onClose={()=>setDelOppId(null)} onConfirm={deleteOpp} message="Delete this opponent? Existing meet scores referencing this opponent will show as (removed)." />
+          <ConfirmModal open={!!delNodeId} onClose={()=>setDelNodeId(null)} onConfirm={deleteNode} message={(()=>{const n=nodeById(delNodeId);if(!n)return'';const kids=nodes.filter(x=>x.parentId===n.id).length;const opps=opponents.filter(o=>o.nodeId===n.id).length;const parts=[`Delete "${n.name}"?`];if(kids)parts.push(`Its ${kids} child node(s) will be re-parented.`);if(opps)parts.push(`Its ${opps} opponent(s) will be re-parented.`);return parts.join(' ');})()} />
+          <ConfirmModal open={!!delLevelId} onClose={()=>setDelLevelId(null)} onConfirm={()=>deleteLevel(delLevelId)} message={(()=>{const l=levelById(delLevelId);if(!l)return'';const n=nodes.filter(x=>x.levelId===l.id).length;return `Delete the "${l.name}" level? ${n} node(s) at this level will be removed; any children get re-parented.`;})()} />
         </div>);
       })()}
 

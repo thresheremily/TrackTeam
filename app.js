@@ -7336,13 +7336,19 @@ const DEFAULT_REPORT_OPTIONS = {
   genderMode: 'all',
 };
 const getReportStdLabels = (data) => {
-  const labels = [];
+  const set = new Set();
   (data.qualifyingStandardTypes||[]).forEach(t=>{
     const subs = t.subtypes||[];
-    if(subs.length===0) labels.push(t.name);
-    else subs.forEach(s=>labels.push(`${t.name} - ${s}`));
+    if(subs.length===0) set.add(t.name);
+    else {
+      set.add(t.name); // include bare type name too — events may use it
+      subs.forEach(s=>set.add(`${t.name} - ${s}`));
+    }
   });
-  return labels;
+  (data.events||[]).forEach(evt=>{
+    (evt.qualifyingStandards||[]).forEach(s=>{ if(s && s.name) set.add(s.name.trim()); });
+  });
+  return Array.from(set).filter(Boolean).sort((a,b)=>a.localeCompare(b));
 };
 const resolveStdLabel = (data, stdName) => {
   const sn = (stdName||'').trim().toLowerCase();
@@ -7375,13 +7381,24 @@ const stdEnabled = (data, stdName, enabledMap) => {
   if(!enabledMap) return true;
   const keys = Object.keys(enabledMap);
   if(keys.length===0) return true;
-  const label = resolveStdLabel(data, stdName);
-  if(label===null) return true;
-  if(enabledMap[label] === false) return false;
-  if(enabledMap[label] === true) return true;
-  const target = label.trim().toLowerCase();
+  const raw = (stdName||'').trim();
+  if(!raw) return true;
+  // 1. Direct match on the raw name as saved on the event
+  if(enabledMap[raw] === false) return false;
+  if(enabledMap[raw] === true) return true;
+  const target = raw.toLowerCase();
   for(const [k, v] of Object.entries(enabledMap)) {
     if((k||'').trim().toLowerCase()===target) return v !== false;
+  }
+  // 2. Fuzzy resolve to a canonical type+subtype label
+  const label = resolveStdLabel(data, stdName);
+  if(label && enabledMap[label] === false) return false;
+  if(label && enabledMap[label] === true) return true;
+  if(label) {
+    const lt = label.trim().toLowerCase();
+    for(const [k, v] of Object.entries(enabledMap)) {
+      if((k||'').trim().toLowerCase()===lt) return v !== false;
+    }
   }
   return true;
 };

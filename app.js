@@ -117,42 +117,27 @@ const getEventLabel = (evt) => {
 const OPPONENT_CATEGORIES = ['League', 'Non-league', 'Division']; // legacy, kept for migration only
 const normalizeOpponent = (o) => {
   if(!o) return o;
-  if(o.nodeId !== undefined) return o;
-  if(typeof o.isLeague === 'boolean' || Array.isArray(o.tags)) {
-    return { ...o, nodeId: o.nodeId || null };
-  }
-  return { ...o, nodeId: null };
+  return { ...o, dimensionValues: (o.dimensionValues && typeof o.dimensionValues === 'object') ? o.dimensionValues : {} };
 };
 const getOpponents = (data) => ((data&&data.opponents)||[]).map(normalizeOpponent);
-const getOpponentLevels = (data) => (((data&&data.opponentLevels)||[]).slice()).sort((a,b)=>(a.order||0)-(b.order||0));
-const getOpponentNodes = (data) => (data&&data.opponentNodes)||[];
-const getNodeAncestry = (nodeId, nodes) => {
-  const out = [];
-  const seen = new Set();
-  let cur = nodes.find(n=>n.id===nodeId);
-  while(cur && !seen.has(cur.id)) {
-    seen.add(cur.id);
-    out.unshift(cur);
-    cur = cur.parentId ? nodes.find(n=>n.id===cur.parentId) : null;
-  }
-  return out;
+const getOpponentDimensions = (data) => (((data&&data.opponentDimensions)||[]).slice()).sort((a,b)=>(a.order||0)-(b.order||0));
+const getDimensionValues = (dim) => ((dim&&dim.values)||[]).slice().sort((a,b)=>a.name.localeCompare(b.name));
+const getOpponentValueName = (opponent, dimensionId, dimensions) => {
+  if(!opponent || !opponent.dimensionValues) return '';
+  const dim = dimensions.find(d=>d.id===dimensionId);
+  if(!dim) return '';
+  const v = (dim.values||[]).find(x=>x.id===opponent.dimensionValues[dimensionId]);
+  return v ? v.name : '';
 };
-const getOpponentNode = (opponentId, opponents, nodes) => {
-  if(!opponentId || opponentId === 'self') return null;
+const getOpponentDimensionsLabel = (opponentId, opponents, dimensions) => {
+  if(!opponentId || opponentId === 'self') return '';
   const o = opponents.find(x=>x.id===opponentId);
-  if(!o || !o.nodeId) return null;
-  return nodes.find(n=>n.id===o.nodeId) || null;
-};
-const getOpponentPathLabel = (opponentId, opponents, nodes) => {
-  const o = opponents.find(x=>x.id===opponentId);
-  if(!o || !o.nodeId) return '';
-  return getNodeAncestry(o.nodeId, nodes).map(n=>n.name).join(' / ');
-};
-const opponentInLevelNode = (opponentId, levelNodeId, opponents, nodes) => {
-  if(!opponentId || opponentId === 'self') return false;
-  const o = opponents.find(x=>x.id===opponentId);
-  if(!o || !o.nodeId) return false;
-  return getNodeAncestry(o.nodeId, nodes).some(n => n.id === levelNodeId);
+  if(!o) return '';
+  const parts = dimensions.map(d => {
+    const name = getOpponentValueName(o, d.id, dimensions);
+    return name ? name : '—';
+  });
+  return parts.length ? parts.join(' · ') : '';
 };
 const collectKnownTags = (data) => {
   const set = new Set();
@@ -3508,7 +3493,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
       })()}
       {meetTab==='scores' && (()=>{
         const opponents = getOpponents(data);
-        const nodes = getOpponentNodes(data);
+        const dimensions = getOpponentDimensions(data);
         const scores = meet.teamScores || { mode: 'split', boys: [], girls: [], combined: [] };
         const mode = scores.mode || 'split';
         const updateScores = (next) => save({...data, meets:data.meets.map(m=>m.id===meetId?{...m, teamScores:next}:m)});
@@ -3541,7 +3526,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                   <thead>
                     <tr>
                       <th style={{...S.th,textAlign:'left'}}>Team</th>
-                      <th style={{...S.th,textAlign:'left',width:220}}>Hierarchy</th>
+                      <th style={{...S.th,textAlign:'left',width:240}}>Categories</th>
                       <th style={{...S.th,textAlign:'right',width:90}}>Points</th>
                       <th style={{...S.th,textAlign:'right',width:70}}>Place</th>
                       <th style={{...S.th,width:36}}></th>
@@ -3550,7 +3535,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                   <tbody>
                     {rows.map((r,idx)=>{
                       const isSelf = r.opponentId === 'self';
-                      const pathLabel = isSelf ? '' : getOpponentPathLabel(r.opponentId, opponents, nodes);
+                      const dimLabel = isSelf ? '' : getOpponentDimensionsLabel(r.opponentId, opponents, dimensions);
                       return (
                         <tr key={r.id||idx} style={{background:isSelf?C.accentMuted:'transparent'}}>
                           <td style={{...S.td,padding:'4px 6px'}}>
@@ -3560,7 +3545,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                               {opponents.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}
                             </select>
                           </td>
-                          <td style={{...S.td,padding:'4px 6px',color:C.textMuted,fontSize:11}}>{isSelf?'—':(pathLabel||<span style={{fontStyle:'italic',color:C.textMuted}}>(unplaced)</span>)}</td>
+                          <td style={{...S.td,padding:'4px 6px',color:C.textMuted,fontSize:11}}>{isSelf?'—':(dimLabel||<span style={{fontStyle:'italic',color:C.textMuted}}>(no categories)</span>)}</td>
                           <td style={{...S.td,padding:'4px 6px',textAlign:'right'}}><input style={{...S.input,fontSize:12,textAlign:'right',padding:'4px 8px'}} type="number" step="0.5" value={r.points==null?'':r.points} onChange={e=>updateRow(key,idx,{points:e.target.value===''?'':parseFloat(e.target.value)})} /></td>
                           <td style={{...S.td,padding:'4px 6px',textAlign:'right'}}><input style={{...S.input,fontSize:12,textAlign:'right',padding:'4px 8px'}} type="number" min="1" value={r.place==null?'':r.place} onChange={e=>updateRow(key,idx,{place:e.target.value===''?'':parseInt(e.target.value)})} /></td>
                           <td style={{...S.td,padding:'4px 6px',textAlign:'center'}}><button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:14}} onClick={()=>removeRow(key,idx)} title="Remove team">✕</button></td>
@@ -7758,18 +7743,19 @@ const buildSeasonReportHTML = (data, events, season, team, athletes, options, fe
       return o ? o.name : '(removed)';
     };
     const ordinal = (n) => { if(!n||isNaN(n)) return ''; const s=['th','st','nd','rd'],v=n%100; return n+(s[(v-20)%10]||s[v]||s[0]); };
-    const levels = getOpponentLevels(data);
-    const nodes = getOpponentNodes(data);
+    const dimensions = getOpponentDimensions(data);
     const meetAllRows = (m) => [...((m.teamScores||{}).boys||[]),...((m.teamScores||{}).girls||[]),...((m.teamScores||{}).combined||[])];
-    const meetNodesAtLevel = (m, levelId) => {
+    const meetValuesInDimension = (m, dimension) => {
       const seen = new Set();
       const out = [];
       meetAllRows(m).forEach(r => {
         if(!r.opponentId || r.opponentId === 'self') return;
         const o = opponents.find(x=>x.id===r.opponentId);
-        if(!o || !o.nodeId) return;
-        const anc = getNodeAncestry(o.nodeId, nodes).find(n=>n.levelId===levelId);
-        if(anc && !seen.has(anc.id)) { seen.add(anc.id); out.push(anc); }
+        if(!o || !o.dimensionValues) return;
+        const vid = o.dimensionValues[dimension.id];
+        if(!vid || seen.has(vid)) return;
+        const v = (dimension.values||[]).find(x=>x.id===vid);
+        if(v) { seen.add(vid); out.push(v); }
       });
       return out;
     };
@@ -7807,23 +7793,23 @@ const buildSeasonReportHTML = (data, events, season, team, athletes, options, fe
     body += '<h2>Team Scores</h2>';
     const groupAxis = options.teamScoresGroupByCategory ? (options.teamScoresGroupBy || 'tag') : null;
     const byDate = (a,b) => (a.startDate||'').localeCompare(b.startDate||'');
-    const levelById = (lid) => levels.find(l=>l.id===lid);
-    if(groupAxis && groupAxis !== 'tag' && levelById(groupAxis)) {
-      const lvl = levelById(groupAxis);
+    const dimById = (did) => dimensions.find(d=>d.id===did);
+    if(groupAxis && groupAxis !== 'tag' && dimById(groupAxis)) {
+      const dim = dimById(groupAxis);
       const groups = {};
       const ungrouped = [];
       meetsAll.forEach(m => {
-        const ns = meetNodesAtLevel(m, lvl.id);
-        if(!ns.length) { ungrouped.push(m); return; }
-        ns.forEach(n => { (groups[n.id] = groups[n.id] || {node:n, meets:[]}).meets.push(m); });
+        const vs = meetValuesInDimension(m, dim);
+        if(!vs.length) { ungrouped.push(m); return; }
+        vs.forEach(v => { (groups[v.id] = groups[v.id] || {value:v, meets:[]}).meets.push(m); });
       });
-      Object.values(groups).sort((a,b)=>a.node.name.localeCompare(b.node.name)).forEach(({node, meets}) => {
-        body += `<div class="ts-cat">${esc(lvl.name)}: ${esc(node.name)}</div>`;
+      Object.values(groups).sort((a,b)=>a.value.name.localeCompare(b.value.name)).forEach(({value, meets}) => {
+        body += `<div class="ts-cat">${esc(dim.name)}: ${esc(value.name)}</div>`;
         meets.sort(byDate);
         meets.forEach(m => { body += renderMeetBlock(m); });
       });
       if(ungrouped.length) {
-        body += `<div class="ts-cat">No ${esc(lvl.name)}</div>`;
+        body += `<div class="ts-cat">No ${esc(dim.name)}</div>`;
         ungrouped.sort(byDate);
         ungrouped.forEach(m => { body += renderMeetBlock(m); });
       }
@@ -8127,7 +8113,7 @@ function ReportBuilderModal({ open, onClose, data, save, events, season, team, p
               <input type="checkbox" checked={!!opts.teamScoresGroupByCategory} onChange={()=>toggle('teamScoresGroupByCategory')} disabled={!opts.includeTeamScores} />
               Group by
               <select value={opts.teamScoresGroupBy||'tag'} onChange={e=>{dirtyRef.current=true;setSaveStatus('dirty');setOpts(o=>({...o,teamScoresGroupBy:e.target.value}));}} disabled={!opts.includeTeamScores||!opts.teamScoresGroupByCategory} style={{fontSize:11,padding:'1px 4px',marginLeft:2}}>
-                {getOpponentLevels(data).map(l=><option key={l.id} value={l.id}>{l.name}</option>)}
+                {getOpponentDimensions(data).map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
                 <option value="tag">Meet tag</option>
               </select>
             </label>
@@ -8805,17 +8791,16 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
   const [editMTId, setEditMTId] = useState(null);
   const [delMTId, setDelMTId] = useState(null);
   const [showAddOpp, setShowAddOpp] = useState(false);
-  const [oppForm, setOppForm] = useState({ name:'', nodeId:'' });
+  const [oppForm, setOppForm] = useState({ name:'', dimensionValues:{} });
   const [editOppId, setEditOppId] = useState(null);
   const [delOppId, setDelOppId] = useState(null);
-  const [editLevelId, setEditLevelId] = useState(null);
-  const [levelDraft, setLevelDraft] = useState('');
-  const [showAddNode, setShowAddNode] = useState(null);
-  const [nodeForm, setNodeForm] = useState({ name:'', levelId:'', parentId:null });
-  const [editNodeId, setEditNodeId] = useState(null);
-  const [delNodeId, setDelNodeId] = useState(null);
-  const [delLevelId, setDelLevelId] = useState(null);
-  const [collapsedNodes, setCollapsedNodes] = useState({});
+  const [editDimensionId, setEditDimensionId] = useState(null);
+  const [dimensionDraft, setDimensionDraft] = useState('');
+  const [delDimensionId, setDelDimensionId] = useState(null);
+  const [editValueKey, setEditValueKey] = useState(null); // {dimId, valueId}
+  const [valueDraft, setValueDraft] = useState('');
+  const [delValueKey, setDelValueKey] = useState(null);
+  const [collapsedDimensions, setCollapsedDimensions] = useState({});
   useEffect(() => { setTeamName((team||{}).name||''); setSchool((team||{}).school||''); setPrimaryColor(((team||{}).colors||{}).primary||'#c96a1f'); setSecondaryColor(((team||{}).colors||{}).secondary||'#2b6cb0'); }, [team]);
   const handleSaveBranding = async () => {
     await updateTeam(team.id, { name:teamName.trim(), school:school.trim(), colors:{primary:primaryColor,secondary:secondaryColor} });
@@ -8990,181 +8975,158 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
 
       {tab==='opponents' && (()=>{
         const opponents = getOpponents(data);
-        const levels = getOpponentLevels(data);
-        const nodes = getOpponentNodes(data);
-        const nodeById = (id) => nodes.find(n=>n.id===id) || null;
-        const levelById = (id) => levels.find(l=>l.id===id) || null;
-        const childrenOf = (parentId, levelId) => nodes.filter(n => n.parentId===parentId && (!levelId || n.levelId===levelId)).sort((a,b)=>a.name.localeCompare(b.name));
-        const opponentsAtNode = (nodeId) => opponents.filter(o => o.nodeId === nodeId).sort((a,b)=>a.name.localeCompare(b.name));
+        const dimensions = getOpponentDimensions(data);
+        const dimById = (id) => dimensions.find(d=>d.id===id) || null;
+        const valueById = (dim, vid) => (dim && (dim.values||[]).find(v=>v.id===vid)) || null;
+        const unplacedCount = opponents.filter(o => !Object.values(o.dimensionValues||{}).some(Boolean)).length;
 
-        const saveOpp = () => {
-          if(!oppForm.name.trim()) return;
-          const clean = { name:oppForm.name.trim(), nodeId:oppForm.nodeId||null };
-          const rawOpponents = data.opponents || [];
-          if(editOppId) save({...data, opponents:rawOpponents.map(o=>o.id===editOppId?{...o,...clean,isLeague:undefined,tags:undefined,category:undefined,division:undefined}:o)});
-          else save({...data, opponents:[...rawOpponents,{id:uid(),...clean}]});
-          setShowAddOpp(false); setEditOppId(null); setOppForm({name:'',nodeId:''});
-        };
-        const deleteOpp = () => { save({...data, opponents:(data.opponents||[]).filter(o=>o.id!==delOppId)}); setDelOppId(null); };
-
-        const addLevel = () => {
-          const name = window.prompt('Name this level (e.g. Section, Class, League, Division):', '');
+        const saveDimensions = (next) => save({...data, opponentDimensions:next});
+        const updateDimension = (dimId, patch) => saveDimensions(dimensions.map(d=>d.id===dimId?{...d,...patch}:d));
+        const addDimension = () => {
+          const name = window.prompt('Name this dimension (e.g. Section, Class, League, Division):', '');
           if(!name||!name.trim()) return;
-          const next = [...levels, { id:uid(), name:name.trim(), order:levels.length }];
-          save({...data, opponentLevels:next});
+          saveDimensions([...dimensions, { id:uid(), name:name.trim(), order:dimensions.length, values:[] }]);
         };
-        const renameLevel = (lid) => {
-          if(!levelDraft.trim()) { setEditLevelId(null); return; }
-          save({...data, opponentLevels:levels.map(l=>l.id===lid?{...l,name:levelDraft.trim()}:l)});
-          setEditLevelId(null); setLevelDraft('');
+        const renameDimension = (did) => {
+          if(!dimensionDraft.trim()) { setEditDimensionId(null); return; }
+          updateDimension(did, {name:dimensionDraft.trim()});
+          setEditDimensionId(null); setDimensionDraft('');
         };
-        const moveLevel = (lid, dir) => {
-          const ord = [...levels].sort((a,b)=>(a.order||0)-(b.order||0));
-          const i = ord.findIndex(l=>l.id===lid);
+        const moveDimension = (did, dir) => {
+          const ord = [...dimensions].sort((a,b)=>(a.order||0)-(b.order||0));
+          const i = ord.findIndex(d=>d.id===did);
           if(i<0) return;
           const j = i + dir;
           if(j<0||j>=ord.length) return;
           [ord[i], ord[j]] = [ord[j], ord[i]];
-          save({...data, opponentLevels:ord.map((l,idx)=>({...l,order:idx}))});
+          saveDimensions(ord.map((d,idx)=>({...d,order:idx})));
         };
-        const deleteLevel = (lid) => {
-          const removedNodeIds = new Set(nodes.filter(n=>n.levelId===lid).map(n=>n.id));
-          const nextNodes = nodes.filter(n=>!removedNodeIds.has(n.id)).map(n => removedNodeIds.has(n.parentId) ? {...n,parentId:null} : n);
-          const nextOpp = (data.opponents||[]).map(o => removedNodeIds.has(o.nodeId) ? {...o,nodeId:null} : o);
-          save({...data, opponentLevels:levels.filter(l=>l.id!==lid).map((l,idx)=>({...l,order:idx})), opponentNodes:nextNodes, opponents:nextOpp});
-          setDelLevelId(null);
-        };
-        const openAddNode = (levelId, parentId) => {
-          setNodeForm({name:'',levelId,parentId:parentId||null});
-          setEditNodeId(null);
-          setShowAddNode({levelId,parentId});
-        };
-        const openEditNode = (n) => {
-          setNodeForm({name:n.name,levelId:n.levelId,parentId:n.parentId||null});
-          setEditNodeId(n.id);
-          setShowAddNode({levelId:n.levelId,parentId:n.parentId});
-        };
-        const saveNode = () => {
-          if(!nodeForm.name.trim()||!nodeForm.levelId) return;
-          const clean = { name:nodeForm.name.trim(), levelId:nodeForm.levelId, parentId:nodeForm.parentId||null };
-          if(editNodeId) save({...data, opponentNodes:nodes.map(n=>n.id===editNodeId?{...n,...clean}:n)});
-          else save({...data, opponentNodes:[...nodes,{id:uid(),...clean}]});
-          setShowAddNode(null); setEditNodeId(null); setNodeForm({name:'',levelId:'',parentId:null});
-        };
-        const deleteNode = () => {
-          const target = nodeById(delNodeId);
-          if(!target) { setDelNodeId(null); return; }
-          const reparent = target.parentId || null;
-          const nextNodes = nodes.filter(n=>n.id!==delNodeId).map(n => n.parentId===delNodeId ? {...n,parentId:reparent} : n);
-          const nextOpp = (data.opponents||[]).map(o => o.nodeId===delNodeId ? {...o,nodeId:reparent} : o);
-          save({...data, opponentNodes:nextNodes, opponents:nextOpp});
-          setDelNodeId(null);
-        };
-        const toggleCollapse = (nid) => setCollapsedNodes(c=>({...c,[nid]:!c[nid]}));
-
-        const childLevelOf = (levelId) => {
-          const i = levels.findIndex(l=>l.id===levelId);
-          return i>=0 && i<levels.length-1 ? levels[i+1] : null;
-        };
-        const renderNode = (n, depth) => {
-          const lvl = levelById(n.levelId);
-          const childLvl = childLevelOf(n.levelId);
-          const kids = childrenOf(n.id);
-          const oppCount = opponentsAtNode(n.id).length;
-          const collapsed = !!collapsedNodes[n.id];
-          const hasContent = kids.length>0;
-          return (
-            <div key={n.id} style={{marginLeft:depth*16,marginBottom:4}}>
-              <div style={{display:'flex',alignItems:'center',gap:6,padding:'6px 10px',background:C.surface,border:`1px solid ${C.borderLight}`,borderRadius:5}}>
-                <button onClick={()=>toggleCollapse(n.id)} style={{background:'none',border:'none',cursor:hasContent?'pointer':'default',fontSize:11,color:hasContent?C.textSecondary:C.borderLight,width:14,padding:0}}>{hasContent?(collapsed?'▶':'▼'):'·'}</button>
-                <span style={{fontSize:10,fontWeight:700,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.04em',minWidth:50}}>{lvl?lvl.name:'?'}</span>
-                <span style={{fontSize:13,fontWeight:600,color:C.text,flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{n.name}</span>
-                {oppCount>0 && <span style={{fontSize:10,color:C.textMuted}}>{oppCount} opp{oppCount===1?'':'s'}</span>}
-                {childLvl && <button onClick={()=>openAddNode(childLvl.id, n.id)} style={{...S.btn,fontSize:10,padding:'2px 8px',background:'transparent',color:C.accent,border:`1px solid ${C.accent}`}}>+ {childLvl.name}</button>}
-                <button onClick={()=>openEditNode(n)} style={{background:'none',border:'none',color:C.textMuted,cursor:'pointer',fontSize:11,padding:'0 4px'}} title="Edit">✏️</button>
-                <button onClick={()=>setDelNodeId(n.id)} style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12,padding:'0 4px'}} title="Delete">✕</button>
-              </div>
-              {!collapsed && kids.map(k=>renderNode(k,depth+1))}
-            </div>
-          );
-        };
-
-        const unplacedOpps = opponents.filter(o => !o.nodeId);
-        const topLevel = levels[0];
-        const topNodes = topLevel ? childrenOf(null, topLevel.id) : [];
-
-        const nodeOptions = []; // for opponent picker: [{label, value}]
-        nodeOptions.push({label:'(no hierarchy assignment)', value:''});
-        const walk = (parentId, depth) => {
-          levels.forEach(lvl => {
-            childrenOf(parentId, lvl.id).forEach(n => {
-              nodeOptions.push({label:'  '.repeat(depth)+(lvl.name?lvl.name+': ':'')+n.name, value:n.id});
-              walk(n.id, depth+1);
-            });
+        const deleteDimension = () => {
+          if(!delDimensionId) return;
+          const nextDims = dimensions.filter(d=>d.id!==delDimensionId).map((d,idx)=>({...d,order:idx}));
+          const nextOpp = (data.opponents||[]).map(o => {
+            if(!o.dimensionValues || !o.dimensionValues[delDimensionId]) return o;
+            const dv = {...o.dimensionValues}; delete dv[delDimensionId];
+            return {...o, dimensionValues:dv};
           });
+          save({...data, opponentDimensions:nextDims, opponents:nextOpp});
+          setDelDimensionId(null);
         };
-        walk(null, 0);
+
+        const addValue = (dim) => {
+          const name = window.prompt(`Add a value to "${dim.name}":`, '');
+          if(!name||!name.trim()) return;
+          updateDimension(dim.id, {values:[...(dim.values||[]), {id:uid(), name:name.trim()}]});
+        };
+        const saveValueEdit = () => {
+          if(!editValueKey) return;
+          const dim = dimById(editValueKey.dimId);
+          if(!dim) { setEditValueKey(null); setValueDraft(''); return; }
+          if(!valueDraft.trim()) { setEditValueKey(null); setValueDraft(''); return; }
+          updateDimension(dim.id, {values:(dim.values||[]).map(v=>v.id===editValueKey.valueId?{...v,name:valueDraft.trim()}:v)});
+          setEditValueKey(null); setValueDraft('');
+        };
+        const deleteValue = () => {
+          if(!delValueKey) return;
+          const dim = dimById(delValueKey.dimId);
+          if(!dim) { setDelValueKey(null); return; }
+          const nextDim = {...dim, values:(dim.values||[]).filter(v=>v.id!==delValueKey.valueId)};
+          const nextOpp = (data.opponents||[]).map(o => {
+            if(!o.dimensionValues || o.dimensionValues[delValueKey.dimId] !== delValueKey.valueId) return o;
+            const dv = {...o.dimensionValues}; delete dv[delValueKey.dimId];
+            return {...o, dimensionValues:dv};
+          });
+          save({...data, opponentDimensions:dimensions.map(d=>d.id===dim.id?nextDim:d), opponents:nextOpp});
+          setDelValueKey(null);
+        };
+
+        const saveOpp = () => {
+          if(!oppForm.name.trim()) return;
+          const cleanDV = {};
+          Object.entries(oppForm.dimensionValues||{}).forEach(([k,v])=>{ if(v) cleanDV[k]=v; });
+          const clean = { name:oppForm.name.trim(), dimensionValues:cleanDV };
+          const rawOpponents = data.opponents || [];
+          if(editOppId) save({...data, opponents:rawOpponents.map(o=>o.id===editOppId?{...o,...clean,nodeId:undefined,isLeague:undefined,tags:undefined,category:undefined,division:undefined}:o)});
+          else save({...data, opponents:[...rawOpponents,{id:uid(),...clean}]});
+          setShowAddOpp(false); setEditOppId(null); setOppForm({name:'',dimensionValues:{}});
+        };
+        const deleteOpp = () => { save({...data, opponents:(data.opponents||[]).filter(o=>o.id!==delOppId)}); setDelOppId(null); };
+
+        const toggleCollapseDim = (did) => setCollapsedDimensions(c=>({...c,[did]:!c[did]}));
 
         return (<div>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6,gap:8,flexWrap:'wrap'}}>
             <h2 style={{...S.h2,margin:0}}>Opponents</h2>
-            <button style={{...S.btn,...S.btnPrimary}} onClick={()=>{setOppForm({name:'',nodeId:''});setEditOppId(null);setShowAddOpp(true);}}>+ Add Opponent</button>
+            <button style={{...S.btn,...S.btnPrimary}} onClick={()=>{setOppForm({name:'',dimensionValues:{}});setEditOppId(null);setShowAddOpp(true);}}>+ Add Opponent</button>
           </div>
-          <p style={{fontSize:12,color:C.textMuted,marginBottom:14}}>Build a hierarchy that fits your state — name your own levels (e.g. Section → Class → League → Division). Each opponent is placed in one node; membership at every higher level is implied. The End-of-Season report can then group team scores at any level.</p>
+          <p style={{fontSize:12,color:C.textMuted,marginBottom:14}}>Set up the categories your state uses (Section, Class, League, Division — name them whatever you want). Each one is independent, so a school can be in any combination. The End-of-Season report can group team scores by any dimension.</p>
 
-          {/* Levels editor */}
+          {/* Dimensions editor */}
           <div style={{...S.card,padding:'12px 14px',marginBottom:14}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-              <div style={{fontSize:12,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',letterSpacing:'0.05em'}}>Levels (top → bottom)</div>
-              <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'3px 10px'}} onClick={addLevel}>+ Add Level</button>
+              <div style={{fontSize:12,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',letterSpacing:'0.05em'}}>Dimensions</div>
+              <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'3px 10px'}} onClick={addDimension}>+ Add Dimension</button>
             </div>
-            {levels.length===0 ? (
-              <div style={{fontSize:11,color:C.textMuted,fontStyle:'italic',padding:'4px 0'}}>No levels yet. Add one to start building your hierarchy.</div>
-            ) : levels.map((l,i)=>(
-              <div key={l.id} style={{display:'flex',alignItems:'center',gap:6,padding:'4px 0'}}>
-                <span style={{fontSize:11,color:C.textMuted,minWidth:22,textAlign:'right'}}>{i+1}.</span>
-                {editLevelId===l.id ? (
-                  <input style={{...S.input,fontSize:12,padding:'4px 8px',flex:1}} value={levelDraft} autoFocus onChange={e=>setLevelDraft(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')renameLevel(l.id);else if(e.key==='Escape'){setEditLevelId(null);setLevelDraft('');}}} onBlur={()=>renameLevel(l.id)} />
-                ) : (
-                  <span style={{fontSize:13,fontWeight:600,color:C.text,flex:1,cursor:'pointer'}} onClick={()=>{setEditLevelId(l.id);setLevelDraft(l.name);}}>{l.name}</span>
-                )}
-                <button onClick={()=>moveLevel(l.id,-1)} disabled={i===0} style={{background:'none',border:`1px solid ${C.borderLight}`,borderRadius:4,padding:'2px 7px',cursor:i===0?'default':'pointer',opacity:i===0?0.3:1,fontSize:11}}>↑</button>
-                <button onClick={()=>moveLevel(l.id,1)} disabled={i===levels.length-1} style={{background:'none',border:`1px solid ${C.borderLight}`,borderRadius:4,padding:'2px 7px',cursor:i===levels.length-1?'default':'pointer',opacity:i===levels.length-1?0.3:1,fontSize:11}}>↓</button>
-                <button onClick={()=>setDelLevelId(l.id)} style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12,padding:'0 4px'}}>✕</button>
-              </div>
-            ))}
+            {dimensions.length===0 ? (
+              <div style={{fontSize:11,color:C.textMuted,fontStyle:'italic',padding:'4px 0'}}>No dimensions yet. Add one (e.g. "Section") to start.</div>
+            ) : dimensions.map((d,i)=>{
+              const collapsed = !!collapsedDimensions[d.id];
+              const values = getDimensionValues(d);
+              return (
+                <div key={d.id} style={{marginBottom:6,border:`1px solid ${C.borderLight}`,borderRadius:5,background:C.surface}}>
+                  <div style={{display:'flex',alignItems:'center',gap:6,padding:'6px 10px'}}>
+                    <button onClick={()=>toggleCollapseDim(d.id)} style={{background:'none',border:'none',cursor:'pointer',fontSize:11,color:C.textSecondary,width:14,padding:0}}>{collapsed?'▶':'▼'}</button>
+                    {editDimensionId===d.id ? (
+                      <input style={{...S.input,fontSize:13,padding:'4px 8px',flex:1,fontWeight:600}} value={dimensionDraft} autoFocus onChange={e=>setDimensionDraft(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')renameDimension(d.id);else if(e.key==='Escape'){setEditDimensionId(null);setDimensionDraft('');}}} onBlur={()=>renameDimension(d.id)} />
+                    ) : (
+                      <span style={{fontSize:13,fontWeight:700,color:C.text,flex:1,cursor:'pointer'}} onClick={()=>{setEditDimensionId(d.id);setDimensionDraft(d.name);}}>{d.name}</span>
+                    )}
+                    <span style={{fontSize:10,color:C.textMuted}}>{values.length} value{values.length===1?'':'s'}</span>
+                    <button onClick={()=>moveDimension(d.id,-1)} disabled={i===0} style={{background:'none',border:`1px solid ${C.borderLight}`,borderRadius:4,padding:'2px 7px',cursor:i===0?'default':'pointer',opacity:i===0?0.3:1,fontSize:11}}>↑</button>
+                    <button onClick={()=>moveDimension(d.id,1)} disabled={i===dimensions.length-1} style={{background:'none',border:`1px solid ${C.borderLight}`,borderRadius:4,padding:'2px 7px',cursor:i===dimensions.length-1?'default':'pointer',opacity:i===dimensions.length-1?0.3:1,fontSize:11}}>↓</button>
+                    <button onClick={()=>setDelDimensionId(d.id)} style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12,padding:'0 4px'}} title="Delete dimension">✕</button>
+                  </div>
+                  {!collapsed && <div style={{padding:'4px 14px 8px 30px',background:C.bg}}>
+                    {values.length===0 ? (
+                      <div style={{fontSize:11,color:C.textMuted,fontStyle:'italic',padding:'4px 0'}}>No values yet.</div>
+                    ) : values.map(v=>(
+                      <div key={v.id} style={{display:'flex',alignItems:'center',gap:6,padding:'3px 0'}}>
+                        <span style={{color:C.textMuted,fontSize:11}}>•</span>
+                        {editValueKey && editValueKey.dimId===d.id && editValueKey.valueId===v.id ? (
+                          <input style={{...S.input,fontSize:12,padding:'3px 8px',flex:1}} value={valueDraft} autoFocus onChange={e=>setValueDraft(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')saveValueEdit();else if(e.key==='Escape'){setEditValueKey(null);setValueDraft('');}}} onBlur={saveValueEdit} />
+                        ) : (
+                          <span style={{fontSize:12,color:C.text,flex:1,cursor:'pointer'}} onClick={()=>{setEditValueKey({dimId:d.id,valueId:v.id});setValueDraft(v.name);}}>{v.name}</span>
+                        )}
+                        <button onClick={()=>setDelValueKey({dimId:d.id,valueId:v.id})} style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:11,padding:'0 4px'}}>✕</button>
+                      </div>
+                    ))}
+                    <button style={{...S.btn,fontSize:10,padding:'3px 10px',marginTop:6,background:'transparent',color:C.accent,border:`1px solid ${C.accent}`}} onClick={()=>addValue(d)}>+ Add value</button>
+                  </div>}
+                </div>
+              );
+            })}
           </div>
 
-          {/* Hierarchy tree */}
-          {levels.length>0 && <div style={{...S.card,padding:'12px 14px',marginBottom:14}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-              <div style={{fontSize:12,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',letterSpacing:'0.05em'}}>Hierarchy</div>
-              <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'3px 10px'}} onClick={()=>openAddNode(topLevel.id, null)}>+ Add {topLevel.name}</button>
-            </div>
-            {topNodes.length===0 ? (
-              <div style={{fontSize:11,color:C.textMuted,fontStyle:'italic',padding:'4px 0'}}>No {topLevel.name.toLowerCase()}s yet. Add the first one to start.</div>
-            ) : topNodes.map(n=>renderNode(n,0))}
-          </div>}
-
-          {/* Opponents list (all) */}
+          {/* Opponents list */}
           <div style={{...S.card,padding:'12px 14px'}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-              <div style={{fontSize:12,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',letterSpacing:'0.05em'}}>Opponents{opponents.length>0?` (${opponents.length})`:''}{unplacedOpps.length>0?` · ${unplacedOpps.length} unplaced`:''}</div>
+              <div style={{fontSize:12,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',letterSpacing:'0.05em'}}>Opponents{opponents.length>0?` (${opponents.length})`:''}{unplacedCount>0?` · ${unplacedCount} uncategorized`:''}</div>
             </div>
             {opponents.length===0 ? (
               <div style={{fontSize:12,color:C.textMuted,textAlign:'center',padding:14,fontStyle:'italic'}}>No opponents yet. Use "+ Add Opponent" at the top to add one.</div>
             ) : (
               <div>
                 {[...opponents].sort((a,b)=>a.name.localeCompare(b.name)).map(o=>{
-                  const path = o.nodeId ? getOpponentPathLabel(o.id, opponents, nodes) : '';
+                  const label = getOpponentDimensionsLabel(o.id, opponents, dimensions);
+                  const anyAssigned = Object.values(o.dimensionValues||{}).some(Boolean);
                   return (
                     <div key={o.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'8px 10px',borderBottom:`1px solid ${C.borderLight}`}}>
                       <div style={{minWidth:0,flex:1}}>
                         <div style={{fontSize:13,fontWeight:600,color:C.text}}>{o.name}</div>
-                        <div style={{fontSize:11,color:path?C.textMuted:C.danger,marginTop:2,fontStyle:path?'normal':'italic'}}>{path || 'Unplaced'}</div>
+                        <div style={{fontSize:11,color:anyAssigned?C.textMuted:C.danger,marginTop:2,fontStyle:anyAssigned?'normal':'italic'}}>{anyAssigned?label:'Uncategorized'}</div>
                       </div>
                       <div style={{display:'flex',gap:4}}>
-                        <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'3px 10px'}} onClick={()=>{setOppForm({name:o.name,nodeId:o.nodeId||''});setEditOppId(o.id);setShowAddOpp(true);}}>Edit</button>
+                        <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'3px 10px'}} onClick={()=>{setOppForm({name:o.name,dimensionValues:{...(o.dimensionValues||{})}});setEditOppId(o.id);setShowAddOpp(true);}}>Edit</button>
                         <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12}} onClick={()=>setDelOppId(o.id)}>✕</button>
                       </div>
                     </div>
@@ -9175,34 +9137,31 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
           </div>
 
           {/* Opponent add/edit */}
-          <Modal open={showAddOpp} onClose={()=>{setShowAddOpp(false);setEditOppId(null);}} width={480}>
+          <Modal open={showAddOpp} onClose={()=>{setShowAddOpp(false);setEditOppId(null);}} width={500}>
             <h2 style={S.h2}>{editOppId?'Edit':'Add'} Opponent</h2>
             <div style={{display:'flex',flexDirection:'column',gap:12,marginTop:16}}>
               <div><label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>School Name</label><input style={S.input} placeholder="e.g. Lincoln High School" value={oppForm.name} onChange={e=>setOppForm({...oppForm,name:e.target.value})} /></div>
-              <div>
-                <label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Hierarchy placement</label>
-                <select style={{...S.select,width:'100%'}} value={oppForm.nodeId||''} onChange={e=>setOppForm({...oppForm,nodeId:e.target.value})}>
-                  {nodeOptions.map(opt=><option key={opt.value||'_none'} value={opt.value}>{opt.label}</option>)}
-                </select>
-                <div style={{fontSize:10,color:C.textMuted,marginTop:3}}>Pick the deepest node where this school fits. Membership at every level above is implied.</div>
-              </div>
+              {dimensions.length === 0 ? (
+                <div style={{fontSize:11,color:C.textMuted,fontStyle:'italic',padding:'6px 10px',background:C.bg,borderRadius:4}}>No dimensions defined yet. Add some above to categorize this school.</div>
+              ) : dimensions.map(d=>{
+                const values = getDimensionValues(d);
+                return (
+                  <div key={d.id}>
+                    <label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>{d.name}</label>
+                    <select style={{...S.select,width:'100%'}} value={(oppForm.dimensionValues||{})[d.id]||''} onChange={e=>setOppForm(f=>({...f,dimensionValues:{...(f.dimensionValues||{}),[d.id]:e.target.value}}))}>
+                      <option value="">— (no {d.name.toLowerCase()})</option>
+                      {values.map(v=><option key={v.id} value={v.id}>{v.name}</option>)}
+                    </select>
+                  </div>
+                );
+              })}
               <button style={{...S.btn,...S.btnPrimary}} onClick={saveOpp}>{editOppId?'Save':'Add Opponent'}</button>
             </div>
           </Modal>
 
-          {/* Node add/edit */}
-          <Modal open={!!showAddNode} onClose={()=>{setShowAddNode(null);setEditNodeId(null);}} width={440}>
-            <h2 style={S.h2}>{editNodeId?'Edit':'Add'} {levelById(nodeForm.levelId)?.name||'Node'}</h2>
-            <div style={{display:'flex',flexDirection:'column',gap:12,marginTop:16}}>
-              <div><label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Name</label><input style={S.input} placeholder={`e.g. ${levelById(nodeForm.levelId)?.name||''} name`} value={nodeForm.name} autoFocus onChange={e=>setNodeForm({...nodeForm,name:e.target.value})} onKeyDown={e=>{if(e.key==='Enter')saveNode();}} /></div>
-              {nodeForm.parentId && (()=>{const p=nodeById(nodeForm.parentId);return p?<div style={{fontSize:11,color:C.textMuted,padding:'4px 8px',background:C.bg,borderRadius:4}}>Parent: <strong>{p.name}</strong> ({levelById(p.levelId)?.name||''})</div>:null;})()}
-              <button style={{...S.btn,...S.btnPrimary}} onClick={saveNode}>{editNodeId?'Save':'Add'}</button>
-            </div>
-          </Modal>
-
           <ConfirmModal open={!!delOppId} onClose={()=>setDelOppId(null)} onConfirm={deleteOpp} message="Delete this opponent? Existing meet scores referencing this opponent will show as (removed)." />
-          <ConfirmModal open={!!delNodeId} onClose={()=>setDelNodeId(null)} onConfirm={deleteNode} message={(()=>{const n=nodeById(delNodeId);if(!n)return'';const kids=nodes.filter(x=>x.parentId===n.id).length;const opps=opponents.filter(o=>o.nodeId===n.id).length;const parts=[`Delete "${n.name}"?`];if(kids)parts.push(`Its ${kids} child node(s) will be re-parented.`);if(opps)parts.push(`Its ${opps} opponent(s) will be re-parented.`);return parts.join(' ');})()} />
-          <ConfirmModal open={!!delLevelId} onClose={()=>setDelLevelId(null)} onConfirm={()=>deleteLevel(delLevelId)} message={(()=>{const l=levelById(delLevelId);if(!l)return'';const n=nodes.filter(x=>x.levelId===l.id).length;return `Delete the "${l.name}" level? ${n} node(s) at this level will be removed; any children get re-parented.`;})()} />
+          <ConfirmModal open={!!delDimensionId} onClose={()=>setDelDimensionId(null)} onConfirm={deleteDimension} message={(()=>{const d=dimById(delDimensionId);if(!d)return'';const vc=(d.values||[]).length;const oc=opponents.filter(o=>(o.dimensionValues||{})[d.id]).length;return `Delete the "${d.name}" dimension? ${vc} value(s) will be removed and ${oc} opponent(s) will lose this categorization.`;})()} />
+          <ConfirmModal open={!!delValueKey} onClose={()=>setDelValueKey(null)} onConfirm={deleteValue} message={(()=>{if(!delValueKey)return'';const d=dimById(delValueKey.dimId);const v=valueById(d, delValueKey.valueId);if(!v)return'';const oc=opponents.filter(o=>(o.dimensionValues||{})[d.id]===v.id).length;return `Delete "${v.name}"? ${oc} opponent(s) currently use this value.`;})()} />
         </div>);
       })()}
 

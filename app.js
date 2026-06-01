@@ -2098,6 +2098,8 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
   const [teamPickerFilters, setTeamPickerFilters] = useState({});
   const [teamPickerSort, setTeamPickerSort] = useState('asc');
   const [teamPickerSelected, setTeamPickerSelected] = useState([]);
+  const [pickerNewName, setPickerNewName] = useState('');
+  const [pickerAdding, setPickerAdding] = useState(false);
   const saveEditResult = () => {
     if(!editResultId) return;
     const r = (data.results||[]).find(x=>x.id===editResultId);
@@ -3526,7 +3528,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                 </div>
                 <div style={{display:'flex',gap:6}}>
                   {rows.length>1 && <button style={{...S.btn,fontSize:11,padding:'4px 10px',background:'transparent',color:C.textMuted,border:`1px solid ${C.border}`}} onClick={()=>{const sorted=[...rows].sort((a,b)=>{const pa=parseInt(a.place)||999,pb=parseInt(b.place)||999;return pa-pb;});setRows(key, sorted);}} title="Reorder rows so place 1 is on top">Sort by place</button>}
-                  <button style={{...S.btn,...S.btnPrimary,fontSize:11,padding:'4px 10px'}} onClick={()=>{setTeamPickerTarget({key,idx:null});setTeamPickerSearch('');setTeamPickerSelected([]);}}>+ Add team</button>
+                  <button style={{...S.btn,...S.btnPrimary,fontSize:11,padding:'4px 10px'}} onClick={()=>{setTeamPickerTarget({key,idx:null});setTeamPickerSearch('');setTeamPickerSelected([]);setPickerNewName('');setPickerAdding(false);}}>+ Add team</button>
                 </div>
               </div>
               {rows.length===0 ? (
@@ -3549,7 +3551,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                       return (
                         <tr key={r.id||idx} style={{background:isSelf?C.accentMuted:'transparent'}}>
                           <td style={{...S.td,padding:'4px 6px'}}>
-                            <button type="button" onClick={()=>{setTeamPickerTarget({key,idx});setTeamPickerSearch('');setTeamPickerSelected([]);}} style={{...S.btn,fontSize:12,fontWeight:isSelf?700:500,width:'100%',textAlign:'left',padding:'5px 10px',background:r.opponentId?C.surface:C.bg,color:r.opponentId?(isSelf?C.accent:C.text):C.textMuted,border:`1px solid ${r.opponentId?C.border:C.borderLight}`,display:'flex',justifyContent:'space-between',alignItems:'center',gap:6}}>
+                            <button type="button" onClick={()=>{setTeamPickerTarget({key,idx});setTeamPickerSearch('');setTeamPickerSelected([]);setPickerNewName('');setPickerAdding(false);}} style={{...S.btn,fontSize:12,fontWeight:isSelf?700:500,width:'100%',textAlign:'left',padding:'5px 10px',background:r.opponentId?C.surface:C.bg,color:r.opponentId?(isSelf?C.accent:C.text):C.textMuted,border:`1px solid ${r.opponentId?C.border:C.borderLight}`,display:'flex',justifyContent:'space-between',alignItems:'center',gap:6}}>
                               <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{isSelf?`${(team&&(team.school||team.name))||'Our Team'} (us)`:(r.opponentId?(opponents.find(o=>o.id===r.opponentId)?.name||'(removed)'):'(pick a team)')}</span>
                               <span style={{fontSize:10,color:C.textMuted,flexShrink:0}}>▾</span>
                             </button>
@@ -3626,6 +3628,30 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                   setRows(tgt.key, [...(scores[tgt.key]||[]), ...newRows]);
                   setTeamPickerTarget(null); setTeamPickerSelected([]);
                 };
+                const selectableIds = filtered.filter(o => !usedIds.has(o.id)).map(o=>o.id);
+                const allFilteredSelected = selectableIds.length>0 && selectableIds.every(id => teamPickerSelected.includes(id));
+                const toggleSelectAll = () => {
+                  if(allFilteredSelected) {
+                    setTeamPickerSelected(sel => sel.filter(id => !selectableIds.includes(id)));
+                  } else {
+                    setTeamPickerSelected(sel => Array.from(new Set([...sel, ...selectableIds])));
+                  }
+                };
+                const addNewOpponent = () => {
+                  const name = pickerNewName.trim();
+                  if(!name) return;
+                  const dupe = (data.opponents||[]).find(o=>(o.name||'').trim().toLowerCase()===name.toLowerCase());
+                  if(dupe) {
+                    if(isAddMode && !usedIds.has(dupe.id) && !teamPickerSelected.includes(dupe.id)) setTeamPickerSelected(sel=>[...sel,dupe.id]);
+                    setPickerNewName(''); setPickerAdding(false);
+                    return;
+                  }
+                  const newOpp = { id:uid(), name, dimensionValues:{} };
+                  save({...data, opponents:[...(data.opponents||[]), newOpp]});
+                  if(isAddMode) setTeamPickerSelected(sel=>[...sel, newOpp.id]);
+                  else pick(newOpp.id);
+                  setPickerNewName(''); setPickerAdding(false);
+                };
                 const activeFilterCount = Object.values(teamPickerFilters).filter(v=>v).length;
                 return (
                   <div>
@@ -3639,8 +3665,21 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                         </select>
                       ))}
                       <button onClick={()=>setTeamPickerSort(d=>d==='asc'?'desc':'asc')} style={{...S.btn,fontSize:11,padding:'4px 10px',background:'transparent',color:C.textSecondary,border:`1px solid ${C.border}`}}>Name {teamPickerSort==='asc'?'↑':'↓'}</button>
-                      {(activeFilterCount>0||teamPickerSearch) && <button onClick={()=>{setTeamPickerFilters({});setTeamPickerSearch('');setTeamPickerSelected([]);}} style={{...S.btn,fontSize:11,padding:'4px 10px',background:'transparent',color:C.danger,border:`1px solid ${C.danger}`}}>Clear</button>}
+                      {(activeFilterCount>0||teamPickerSearch) && <button onClick={()=>{setTeamPickerFilters({});setTeamPickerSearch('');}} style={{...S.btn,fontSize:11,padding:'4px 10px',background:'transparent',color:C.danger,border:`1px solid ${C.danger}`}}>Clear</button>}
+                      {isAddMode && selectableIds.length>0 && <button onClick={toggleSelectAll} style={{...S.btn,fontSize:11,padding:'4px 10px',background:allFilteredSelected?C.accent:'transparent',color:allFilteredSelected?'#fff':C.accent,border:`1px solid ${C.accent}`}}>{allFilteredSelected?`Deselect ${selectableIds.length}`:`Select all (${selectableIds.length})`}</button>}
                     </div>
+                    {pickerAdding ? (
+                      <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:10,padding:'8px 10px',background:C.accentMuted,borderRadius:6,border:`1px solid ${C.accent}`}}>
+                        <input style={{...S.input,fontSize:12,padding:'5px 8px',flex:1}} placeholder="New opponent name (e.g. Lincoln HS)" value={pickerNewName} autoFocus onChange={e=>setPickerNewName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')addNewOpponent();else if(e.key==='Escape'){setPickerAdding(false);setPickerNewName('');}}} />
+                        <button onClick={addNewOpponent} style={{...S.btn,...S.btnPrimary,fontSize:11,padding:'4px 12px'}} disabled={!pickerNewName.trim()}>Add</button>
+                        <button onClick={()=>{setPickerAdding(false);setPickerNewName('');}} style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'4px 10px'}}>Cancel</button>
+                      </div>
+                    ) : (
+                      <div style={{marginBottom:8,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                        <button onClick={()=>setPickerAdding(true)} style={{...S.btn,fontSize:11,padding:'4px 10px',background:'transparent',color:C.accent,border:`1px dashed ${C.accent}`}}>+ Add new opponent</button>
+                        <span style={{fontSize:10,color:C.textMuted,fontStyle:'italic'}}>Categorize later under Settings → Opponents.</span>
+                      </div>
+                    )}
                     <div style={{maxHeight:'52vh',overflowY:'auto',border:`1px solid ${C.borderLight}`,borderRadius:6}}>
                       {filtered.length===0 ? (
                         <div style={{padding:18,textAlign:'center',color:C.textMuted,fontSize:12,fontStyle:'italic'}}>No teams match these filters.</div>

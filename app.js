@@ -3525,7 +3525,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                 </div>
                 <div style={{display:'flex',gap:6}}>
                   {rows.length>1 && <button style={{...S.btn,fontSize:11,padding:'4px 10px',background:'transparent',color:C.textMuted,border:`1px solid ${C.border}`}} onClick={()=>{const sorted=[...rows].sort((a,b)=>{const pa=parseInt(a.place)||999,pb=parseInt(b.place)||999;return pa-pb;});setRows(key, sorted);}} title="Reorder rows so place 1 is on top">Sort by place</button>}
-                  <button style={{...S.btn,...S.btnPrimary,fontSize:11,padding:'4px 10px'}} onClick={()=>addRow(key)}>+ Add team</button>
+                  <button style={{...S.btn,...S.btnPrimary,fontSize:11,padding:'4px 10px'}} onClick={()=>{setTeamPickerTarget({key,idx:null});setTeamPickerSearch('');}}>+ Add team</button>
                 </div>
               </div>
               {rows.length===0 ? (
@@ -3587,11 +3587,12 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
               renderTable('combined','Combined', C.accent)
             )}
             <Modal open={!!teamPickerTarget} onClose={()=>setTeamPickerTarget(null)} width={520}>
-              <h2 style={S.h2}>Pick a team</h2>
+              <h2 style={S.h2}>{teamPickerTarget && teamPickerTarget.idx===null ? 'Add a team' : 'Pick a team'}</h2>
               {(()=>{
                 const tgt = teamPickerTarget || {};
-                const currentId = tgt.key && tgt.idx!=null ? ((scores[tgt.key]||[])[tgt.idx]||{}).opponentId : null;
-                const usedIds = new Set((tgt.key?scores[tgt.key]||[]:[]).map((r,i)=>i===tgt.idx?null:r.opponentId).filter(Boolean));
+                const isAddMode = tgt.idx === null;
+                const currentId = !isAddMode && tgt.key && tgt.idx!=null ? ((scores[tgt.key]||[])[tgt.idx]||{}).opponentId : null;
+                const usedIds = new Set((tgt.key?scores[tgt.key]||[]:[]).map((r,i)=>(!isAddMode && i===tgt.idx)?null:r.opponentId).filter(Boolean));
                 const selfLabel = (team&&(team.school||team.name))||'Our Team';
                 const ourDV = getOurTeamDimensionValues(data);
                 const selfMatch = {id:'self', name:`${selfLabel} (us)`, dimensionValues:ourDV};
@@ -3611,7 +3612,11 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                 });
                 const pick = (opponentId) => {
                   if(!tgt.key) return;
-                  setRows(tgt.key, (scores[tgt.key]||[]).map((r,i)=>i===tgt.idx?{...r,opponentId}:r));
+                  if(isAddMode) {
+                    setRows(tgt.key, [...(scores[tgt.key]||[]), {id:uid(), opponentId, points:'', place:''}]);
+                  } else {
+                    setRows(tgt.key, (scores[tgt.key]||[]).map((r,i)=>i===tgt.idx?{...r,opponentId}:r));
+                  }
                   setTeamPickerTarget(null);
                 };
                 const activeFilterCount = Object.values(teamPickerFilters).filter(v=>v).length;

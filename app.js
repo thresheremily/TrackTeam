@@ -2093,6 +2093,10 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
   const [editResultForm, setEditResultForm] = useState({min:'',sec:'',ft:'',inch:'',qtr:'',place:''});
   const [splitsOpen, setSplitsOpen] = useState({});
   const [showRawMeetRows, setShowRawMeetRows] = useState(false);
+  const [teamPickerTarget, setTeamPickerTarget] = useState(null);
+  const [teamPickerSearch, setTeamPickerSearch] = useState('');
+  const [teamPickerFilters, setTeamPickerFilters] = useState({});
+  const [teamPickerSort, setTeamPickerSort] = useState('asc');
   const saveEditResult = () => {
     if(!editResultId) return;
     const r = (data.results||[]).find(x=>x.id===editResultId);
@@ -3544,11 +3548,10 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                       return (
                         <tr key={r.id||idx} style={{background:isSelf?C.accentMuted:'transparent'}}>
                           <td style={{...S.td,padding:'4px 6px'}}>
-                            <select style={{...S.select,fontSize:12,fontWeight:isSelf?700:500,width:'100%'}} value={r.opponentId||''} onChange={e=>updateRow(key,idx,{opponentId:e.target.value})}>
-                              <option value="">(pick a team)</option>
-                              <option value="self">{(team&&(team.school||team.name))||'Our Team'} (us)</option>
-                              {opponents.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}
-                            </select>
+                            <button type="button" onClick={()=>{setTeamPickerTarget({key,idx});setTeamPickerSearch('');}} style={{...S.btn,fontSize:12,fontWeight:isSelf?700:500,width:'100%',textAlign:'left',padding:'5px 10px',background:r.opponentId?C.surface:C.bg,color:r.opponentId?(isSelf?C.accent:C.text):C.textMuted,border:`1px solid ${r.opponentId?C.border:C.borderLight}`,display:'flex',justifyContent:'space-between',alignItems:'center',gap:6}}>
+                              <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{isSelf?`${(team&&(team.school||team.name))||'Our Team'} (us)`:(r.opponentId?(opponents.find(o=>o.id===r.opponentId)?.name||'(removed)'):'(pick a team)')}</span>
+                              <span style={{fontSize:10,color:C.textMuted,flexShrink:0}}>▾</span>
+                            </button>
                           </td>
                           <td style={{...S.td,padding:'4px 6px',color:C.textMuted,fontSize:11}}>{dimLabel||<span style={{fontStyle:'italic',color:C.textMuted}}>{isSelf?'(set under Settings → Opponents)':'(no categories)'}</span>}</td>
                           <td style={{...S.td,padding:'4px 6px',textAlign:'right'}}><input style={{...S.input,fontSize:12,textAlign:'right',padding:'4px 8px'}} type="number" step="0.5" value={r.points==null?'':r.points} onChange={e=>updateRow(key,idx,{points:e.target.value===''?'':parseFloat(e.target.value)})} /></td>
@@ -3583,6 +3586,80 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
             </>) : (
               renderTable('combined','Combined', C.accent)
             )}
+            <Modal open={!!teamPickerTarget} onClose={()=>setTeamPickerTarget(null)} width={520}>
+              <h2 style={S.h2}>Pick a team</h2>
+              {(()=>{
+                const tgt = teamPickerTarget || {};
+                const currentId = tgt.key && tgt.idx!=null ? ((scores[tgt.key]||[])[tgt.idx]||{}).opponentId : null;
+                const usedIds = new Set((tgt.key?scores[tgt.key]||[]:[]).map((r,i)=>i===tgt.idx?null:r.opponentId).filter(Boolean));
+                const selfLabel = (team&&(team.school||team.name))||'Our Team';
+                const ourDV = getOurTeamDimensionValues(data);
+                const selfMatch = {id:'self', name:`${selfLabel} (us)`, dimensionValues:ourDV};
+                const filtered = [selfMatch, ...opponents].filter(o=>{
+                  if(teamPickerSearch.trim() && !o.name.toLowerCase().includes(teamPickerSearch.toLowerCase())) return false;
+                  for(const [dimId, valueId] of Object.entries(teamPickerFilters)) {
+                    if(!valueId) continue;
+                    const assigned = (o.dimensionValues||{})[dimId];
+                    if(valueId === '__none') { if(assigned) return false; }
+                    else if(assigned !== valueId) return false;
+                  }
+                  return true;
+                }).sort((a,b)=>{
+                  if(a.id==='self') return -1;
+                  if(b.id==='self') return 1;
+                  return teamPickerSort==='asc'?a.name.localeCompare(b.name):b.name.localeCompare(a.name);
+                });
+                const pick = (opponentId) => {
+                  if(!tgt.key) return;
+                  setRows(tgt.key, (scores[tgt.key]||[]).map((r,i)=>i===tgt.idx?{...r,opponentId}:r));
+                  setTeamPickerTarget(null);
+                };
+                const activeFilterCount = Object.values(teamPickerFilters).filter(v=>v).length;
+                return (
+                  <div>
+                    <div style={{display:'flex',flexWrap:'wrap',gap:6,alignItems:'center',marginBottom:10,padding:'8px 10px',background:C.bg,borderRadius:6}}>
+                      <input style={{...S.input,fontSize:12,padding:'4px 8px',flex:'1 1 160px',minWidth:120}} placeholder="Search by name…" value={teamPickerSearch} autoFocus onChange={e=>setTeamPickerSearch(e.target.value)} />
+                      {dimensions.map(d=>(
+                        <select key={d.id} style={{...S.select,fontSize:11,padding:'3px 6px'}} value={teamPickerFilters[d.id]||''} onChange={e=>setTeamPickerFilters(f=>({...f,[d.id]:e.target.value}))} title={`Filter by ${d.name}`}>
+                          <option value="">All {d.name}</option>
+                          <option value="__none">— No {d.name}</option>
+                          {getDimensionValues(d).map(v=><option key={v.id} value={v.id}>{v.name}</option>)}
+                        </select>
+                      ))}
+                      <button onClick={()=>setTeamPickerSort(d=>d==='asc'?'desc':'asc')} style={{...S.btn,fontSize:11,padding:'4px 10px',background:'transparent',color:C.textSecondary,border:`1px solid ${C.border}`}}>Name {teamPickerSort==='asc'?'↑':'↓'}</button>
+                      {(activeFilterCount>0||teamPickerSearch) && <button onClick={()=>{setTeamPickerFilters({});setTeamPickerSearch('');}} style={{...S.btn,fontSize:11,padding:'4px 10px',background:'transparent',color:C.danger,border:`1px solid ${C.danger}`}}>Clear</button>}
+                    </div>
+                    <div style={{maxHeight:'52vh',overflowY:'auto',border:`1px solid ${C.borderLight}`,borderRadius:6}}>
+                      {filtered.length===0 ? (
+                        <div style={{padding:18,textAlign:'center',color:C.textMuted,fontSize:12,fontStyle:'italic'}}>No teams match these filters.</div>
+                      ) : filtered.map(o=>{
+                        const isOurSelf = o.id==='self';
+                        const isCurrent = o.id===currentId;
+                        const isUsed = !isOurSelf && usedIds.has(o.id);
+                        const label = isOurSelf ? getDimensionsLabelForValues(ourDV, dimensions) : getOpponentDimensionsLabel(o.id, opponents, dimensions, data);
+                        const anyAssigned = isOurSelf ? Object.values(ourDV||{}).some(Boolean) : Object.values(o.dimensionValues||{}).some(Boolean);
+                        return (
+                          <div key={o.id} onClick={()=>pick(o.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'8px 12px',borderBottom:`1px solid ${C.borderLight}`,cursor:'pointer',background:isCurrent?C.accentMuted:(isUsed?C.bg:'transparent')}}>
+                            <div style={{minWidth:0,flex:1}}>
+                              <div style={{fontSize:13,fontWeight:isOurSelf?700:600,color:isOurSelf?C.accent:C.text}}>{o.name}{isUsed&&<span style={{fontSize:10,color:C.textMuted,marginLeft:6,fontWeight:500}}>(already used)</span>}</div>
+                              <div style={{fontSize:11,color:anyAssigned?C.textMuted:C.textMuted,marginTop:2,fontStyle:anyAssigned?'normal':'italic'}}>{anyAssigned?label:'(no categories)'}</div>
+                            </div>
+                            {isCurrent && <span style={{fontSize:11,fontWeight:700,color:C.accent}}>Current</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:12,gap:8,flexWrap:'wrap'}}>
+                      <div style={{fontSize:11,color:C.textMuted}}>{(activeFilterCount>0||teamPickerSearch)?`Showing ${filtered.length} of ${opponents.length+1}`:`${filtered.length} team${filtered.length===1?'':'s'}`}</div>
+                      <div style={{display:'flex',gap:6}}>
+                        {currentId && <button style={{...S.btn,fontSize:11,padding:'4px 10px',background:'transparent',color:C.danger,border:`1px solid ${C.danger}`}} onClick={()=>pick('')}>Clear selection</button>}
+                        <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'5px 14px'}} onClick={()=>setTeamPickerTarget(null)}>Cancel</button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </Modal>
           </div>
         );
       })()}

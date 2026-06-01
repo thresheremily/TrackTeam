@@ -2097,6 +2097,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
   const [teamPickerSearch, setTeamPickerSearch] = useState('');
   const [teamPickerFilters, setTeamPickerFilters] = useState({});
   const [teamPickerSort, setTeamPickerSort] = useState('asc');
+  const [teamPickerSelected, setTeamPickerSelected] = useState([]);
   const saveEditResult = () => {
     if(!editResultId) return;
     const r = (data.results||[]).find(x=>x.id===editResultId);
@@ -3525,7 +3526,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                 </div>
                 <div style={{display:'flex',gap:6}}>
                   {rows.length>1 && <button style={{...S.btn,fontSize:11,padding:'4px 10px',background:'transparent',color:C.textMuted,border:`1px solid ${C.border}`}} onClick={()=>{const sorted=[...rows].sort((a,b)=>{const pa=parseInt(a.place)||999,pb=parseInt(b.place)||999;return pa-pb;});setRows(key, sorted);}} title="Reorder rows so place 1 is on top">Sort by place</button>}
-                  <button style={{...S.btn,...S.btnPrimary,fontSize:11,padding:'4px 10px'}} onClick={()=>{setTeamPickerTarget({key,idx:null});setTeamPickerSearch('');}}>+ Add team</button>
+                  <button style={{...S.btn,...S.btnPrimary,fontSize:11,padding:'4px 10px'}} onClick={()=>{setTeamPickerTarget({key,idx:null});setTeamPickerSearch('');setTeamPickerSelected([]);}}>+ Add team</button>
                 </div>
               </div>
               {rows.length===0 ? (
@@ -3548,7 +3549,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                       return (
                         <tr key={r.id||idx} style={{background:isSelf?C.accentMuted:'transparent'}}>
                           <td style={{...S.td,padding:'4px 6px'}}>
-                            <button type="button" onClick={()=>{setTeamPickerTarget({key,idx});setTeamPickerSearch('');}} style={{...S.btn,fontSize:12,fontWeight:isSelf?700:500,width:'100%',textAlign:'left',padding:'5px 10px',background:r.opponentId?C.surface:C.bg,color:r.opponentId?(isSelf?C.accent:C.text):C.textMuted,border:`1px solid ${r.opponentId?C.border:C.borderLight}`,display:'flex',justifyContent:'space-between',alignItems:'center',gap:6}}>
+                            <button type="button" onClick={()=>{setTeamPickerTarget({key,idx});setTeamPickerSearch('');setTeamPickerSelected([]);}} style={{...S.btn,fontSize:12,fontWeight:isSelf?700:500,width:'100%',textAlign:'left',padding:'5px 10px',background:r.opponentId?C.surface:C.bg,color:r.opponentId?(isSelf?C.accent:C.text):C.textMuted,border:`1px solid ${r.opponentId?C.border:C.borderLight}`,display:'flex',justifyContent:'space-between',alignItems:'center',gap:6}}>
                               <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{isSelf?`${(team&&(team.school||team.name))||'Our Team'} (us)`:(r.opponentId?(opponents.find(o=>o.id===r.opponentId)?.name||'(removed)'):'(pick a team)')}</span>
                               <span style={{fontSize:10,color:C.textMuted,flexShrink:0}}>▾</span>
                             </button>
@@ -3612,12 +3613,18 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                 });
                 const pick = (opponentId) => {
                   if(!tgt.key) return;
-                  if(isAddMode) {
-                    setRows(tgt.key, [...(scores[tgt.key]||[]), {id:uid(), opponentId, points:'', place:''}]);
-                  } else {
-                    setRows(tgt.key, (scores[tgt.key]||[]).map((r,i)=>i===tgt.idx?{...r,opponentId}:r));
-                  }
+                  setRows(tgt.key, (scores[tgt.key]||[]).map((r,i)=>i===tgt.idx?{...r,opponentId}:r));
                   setTeamPickerTarget(null);
+                };
+                const toggleSelected = (oppId) => {
+                  if(usedIds.has(oppId)) return;
+                  setTeamPickerSelected(sel => sel.includes(oppId) ? sel.filter(x=>x!==oppId) : [...sel, oppId]);
+                };
+                const addSelected = () => {
+                  if(!tgt.key || !teamPickerSelected.length) return;
+                  const newRows = teamPickerSelected.map(opponentId => ({id:uid(), opponentId, points:'', place:''}));
+                  setRows(tgt.key, [...(scores[tgt.key]||[]), ...newRows]);
+                  setTeamPickerTarget(null); setTeamPickerSelected([]);
                 };
                 const activeFilterCount = Object.values(teamPickerFilters).filter(v=>v).length;
                 return (
@@ -3632,7 +3639,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                         </select>
                       ))}
                       <button onClick={()=>setTeamPickerSort(d=>d==='asc'?'desc':'asc')} style={{...S.btn,fontSize:11,padding:'4px 10px',background:'transparent',color:C.textSecondary,border:`1px solid ${C.border}`}}>Name {teamPickerSort==='asc'?'↑':'↓'}</button>
-                      {(activeFilterCount>0||teamPickerSearch) && <button onClick={()=>{setTeamPickerFilters({});setTeamPickerSearch('');}} style={{...S.btn,fontSize:11,padding:'4px 10px',background:'transparent',color:C.danger,border:`1px solid ${C.danger}`}}>Clear</button>}
+                      {(activeFilterCount>0||teamPickerSearch) && <button onClick={()=>{setTeamPickerFilters({});setTeamPickerSearch('');setTeamPickerSelected([]);}} style={{...S.btn,fontSize:11,padding:'4px 10px',background:'transparent',color:C.danger,border:`1px solid ${C.danger}`}}>Clear</button>}
                     </div>
                     <div style={{maxHeight:'52vh',overflowY:'auto',border:`1px solid ${C.borderLight}`,borderRadius:6}}>
                       {filtered.length===0 ? (
@@ -3640,25 +3647,29 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                       ) : filtered.map(o=>{
                         const isOurSelf = o.id==='self';
                         const isCurrent = o.id===currentId;
-                        const isUsed = !isOurSelf && usedIds.has(o.id);
+                        const isUsed = usedIds.has(o.id);
+                        const isChecked = teamPickerSelected.includes(o.id);
                         const label = isOurSelf ? getDimensionsLabelForValues(ourDV, dimensions) : getOpponentDimensionsLabel(o.id, opponents, dimensions, data);
                         const anyAssigned = isOurSelf ? Object.values(ourDV||{}).some(Boolean) : Object.values(o.dimensionValues||{}).some(Boolean);
+                        const rowBg = isAddMode ? (isChecked?C.accentMuted:(isUsed?C.bg:'transparent')) : (isCurrent?C.accentMuted:(isUsed?C.bg:'transparent'));
                         return (
-                          <div key={o.id} onClick={()=>pick(o.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'8px 12px',borderBottom:`1px solid ${C.borderLight}`,cursor:'pointer',background:isCurrent?C.accentMuted:(isUsed?C.bg:'transparent')}}>
+                          <div key={o.id} onClick={()=>{if(isAddMode) toggleSelected(o.id); else pick(o.id);}} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'8px 12px',borderBottom:`1px solid ${C.borderLight}`,cursor:(isAddMode&&isUsed)?'not-allowed':'pointer',background:rowBg,opacity:(isAddMode&&isUsed)?0.55:1}}>
+                            {isAddMode && <input type="checkbox" checked={isChecked} disabled={isUsed} onChange={()=>toggleSelected(o.id)} onClick={e=>e.stopPropagation()} style={{cursor:isUsed?'not-allowed':'pointer'}} />}
                             <div style={{minWidth:0,flex:1}}>
                               <div style={{fontSize:13,fontWeight:isOurSelf?700:600,color:isOurSelf?C.accent:C.text}}>{o.name}{isUsed&&<span style={{fontSize:10,color:C.textMuted,marginLeft:6,fontWeight:500}}>(already used)</span>}</div>
-                              <div style={{fontSize:11,color:anyAssigned?C.textMuted:C.textMuted,marginTop:2,fontStyle:anyAssigned?'normal':'italic'}}>{anyAssigned?label:'(no categories)'}</div>
+                              <div style={{fontSize:11,color:C.textMuted,marginTop:2,fontStyle:anyAssigned?'normal':'italic'}}>{anyAssigned?label:'(no categories)'}</div>
                             </div>
-                            {isCurrent && <span style={{fontSize:11,fontWeight:700,color:C.accent}}>Current</span>}
+                            {!isAddMode && isCurrent && <span style={{fontSize:11,fontWeight:700,color:C.accent}}>Current</span>}
                           </div>
                         );
                       })}
                     </div>
                     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:12,gap:8,flexWrap:'wrap'}}>
-                      <div style={{fontSize:11,color:C.textMuted}}>{(activeFilterCount>0||teamPickerSearch)?`Showing ${filtered.length} of ${opponents.length+1}`:`${filtered.length} team${filtered.length===1?'':'s'}`}</div>
+                      <div style={{fontSize:11,color:C.textMuted}}>{isAddMode ? (teamPickerSelected.length>0 ? `${teamPickerSelected.length} selected` : `Tap rows or checkboxes to add teams`) : ((activeFilterCount>0||teamPickerSearch)?`Showing ${filtered.length} of ${opponents.length+1}`:`${filtered.length} team${filtered.length===1?'':'s'}`)}</div>
                       <div style={{display:'flex',gap:6}}>
-                        {currentId && <button style={{...S.btn,fontSize:11,padding:'4px 10px',background:'transparent',color:C.danger,border:`1px solid ${C.danger}`}} onClick={()=>pick('')}>Clear selection</button>}
+                        {!isAddMode && currentId && <button style={{...S.btn,fontSize:11,padding:'4px 10px',background:'transparent',color:C.danger,border:`1px solid ${C.danger}`}} onClick={()=>pick('')}>Clear selection</button>}
                         <button style={{...S.btn,...S.btnSecondary,fontSize:12,padding:'5px 14px'}} onClick={()=>setTeamPickerTarget(null)}>Cancel</button>
+                        {isAddMode && <button style={{...S.btn,...S.btnPrimary,fontSize:12,padding:'5px 14px',opacity:teamPickerSelected.length===0?0.5:1,cursor:teamPickerSelected.length===0?'not-allowed':'pointer'}} disabled={teamPickerSelected.length===0} onClick={addSelected}>Add {teamPickerSelected.length || ''} team{teamPickerSelected.length===1?'':'s'}</button>}
                       </div>
                     </div>
                   </div>

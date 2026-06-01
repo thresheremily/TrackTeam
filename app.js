@@ -114,22 +114,52 @@ const getEventLabel = (evt) => {
   const g = evt.gender === 'Boy' ? '(B)' : evt.gender === 'Girl' ? '(G)' : '(Mixed)';
   return `${evt.name} ${g}`;
 };
-const OPPONENT_CATEGORIES = ['League', 'Non-league', 'Division'];
+const OPPONENT_CATEGORIES = ['League', 'Non-league', 'Division']; // legacy, kept for migration only
+const normalizeOpponent = (o) => {
+  if(!o) return o;
+  if(typeof o.isLeague === 'boolean' || Array.isArray(o.tags)) {
+    return { ...o, isLeague: !!o.isLeague, tags: Array.isArray(o.tags) ? o.tags.filter(Boolean) : [] };
+  }
+  const cat = o.category || 'League';
+  const tags = [];
+  if(o.division && o.division.trim()) tags.push(o.division.trim());
+  if(cat === 'Division' && !tags.includes('Division')) tags.push('Division');
+  return { ...o, isLeague: cat === 'League', tags };
+};
+const getOpponents = (data) => ((data&&data.opponents)||[]).map(normalizeOpponent);
+const collectKnownTags = (data) => {
+  const set = new Set();
+  getOpponents(data).forEach(o => (o.tags||[]).forEach(t => set.add(t)));
+  ((data&&data.meets)||[]).forEach(m => (m.tags||[]).forEach(t => set.add(t)));
+  return Array.from(set).sort((a,b)=>a.localeCompare(b));
+};
 const getOpponentLabel = (opponentId, opponents, team) => {
   if(!opponentId) return '';
   if(opponentId === 'self') return (team && (team.school||team.name)) || 'Our Team';
   const o = (opponents||[]).find(x=>x.id===opponentId);
   return o ? o.name : '(removed)';
 };
-const getOpponentCategory = (opponentId, opponents) => {
+const getOpponentIsLeague = (opponentId, opponents) => {
   if(!opponentId || opponentId === 'self') return null;
   const o = (opponents||[]).find(x=>x.id===opponentId);
-  return o ? (o.category||'League') : null;
+  if(!o) return null;
+  const n = normalizeOpponent(o);
+  return n.isLeague;
+};
+const getOpponentTags = (opponentId, opponents) => {
+  if(!opponentId || opponentId === 'self') return [];
+  const o = (opponents||[]).find(x=>x.id===opponentId);
+  if(!o) return [];
+  return normalizeOpponent(o).tags || [];
+};
+const getOpponentCategory = (opponentId, opponents) => {
+  const lg = getOpponentIsLeague(opponentId, opponents);
+  if(lg === null) return null;
+  return lg ? 'League' : 'Non-league';
 };
 const getOpponentDivision = (opponentId, opponents) => {
-  if(!opponentId || opponentId === 'self') return null;
-  const o = (opponents||[]).find(x=>x.id===opponentId);
-  return o ? (o.division||'') : null;
+  const tags = getOpponentTags(opponentId, opponents);
+  return tags.length ? tags.join(', ') : '';
 };
 const TRACK_DISTANCES = {
   '55m':55,'100m':100,'200m':200,'400m':400,'800m':800,'1000m':1000,
@@ -813,6 +843,35 @@ const ConfirmModal = ({ open, onClose, onConfirm, message }) => (
     </div>
   </Modal>
 );
+const TagInput = ({ value, onChange, suggestions, placeholder }) => {
+  const [draft, setDraft] = useState('');
+  const tags = Array.isArray(value) ? value : [];
+  const add = (raw) => {
+    const t = (raw||'').trim();
+    if(!t) return;
+    if(tags.some(x => x.toLowerCase() === t.toLowerCase())) { setDraft(''); return; }
+    onChange([...tags, t]);
+    setDraft('');
+  };
+  const remove = (i) => onChange(tags.filter((_,idx)=>idx!==i));
+  const sugg = (suggestions||[]).filter(s => !tags.some(t => t.toLowerCase() === s.toLowerCase()) && (!draft || s.toLowerCase().includes(draft.toLowerCase()))).slice(0,6);
+  const listId = 'tagsugg_' + Math.abs((tags.join('|')+(placeholder||'')).split('').reduce((a,c)=>((a<<5)-a+c.charCodeAt(0))|0,0));
+  return (
+    <div style={{display:'flex',flexWrap:'wrap',gap:6,alignItems:'center',padding:'6px 8px',border:`1px solid ${C.border}`,borderRadius:6,background:C.surface,minHeight:36}}>
+      {tags.map((t,i)=>(
+        <span key={t+'_'+i} style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:11,fontWeight:600,padding:'3px 8px',borderRadius:12,background:C.accentMuted,color:C.accent,border:`1px solid ${C.accent}`}}>
+          {t}
+          <button type="button" onClick={()=>remove(i)} style={{background:'none',border:'none',color:C.accent,cursor:'pointer',fontSize:13,padding:0,lineHeight:1}} title="Remove tag">×</button>
+        </span>
+      ))}
+      <input list={listId} value={draft} onChange={e=>setDraft(e.target.value)} onKeyDown={e=>{
+        if(e.key === 'Enter' || e.key === ',') { e.preventDefault(); add(draft); }
+        else if(e.key === 'Backspace' && !draft && tags.length) { onChange(tags.slice(0,-1)); }
+      }} onBlur={()=>{if(draft.trim()) add(draft);}} placeholder={tags.length?'':(placeholder||'Add tag…')} style={{flex:'1 1 100px',minWidth:80,border:'none',outline:'none',fontSize:12,background:'transparent',color:C.text}} />
+      {(suggestions||[]).length>0 && <datalist id={listId}>{sugg.map(s=><option key={s} value={s} />)}</datalist>}
+    </div>
+  );
+};
 const TimeDropdown = ({ min, sec, onMinChange, onSecChange, label, compact }) => (
   <div style={{ display:'flex', gap:4, alignItems:'center' }}>
     {label && <span style={{fontSize:11,color:C.textMuted,marginRight:4}}>{label}</span>}
@@ -1780,7 +1839,7 @@ function AttendancePage({ data, save, nav, season, activeAthletes }) {
     </div>
   );
 }
-function MeetFormModal({ editId, initial, meetTypes, eventOrderTemplates, onSave, onClose }) {
+function MeetFormModal({ editId, initial, meetTypes, knownTags, eventOrderTemplates, onSave, onClose }) {
   const [f, setF] = useState({...initial});
   return (
     <Modal open={true} onClose={onClose} width={500}>
@@ -1849,7 +1908,11 @@ function MeetFormModal({ editId, initial, meetTypes, eventOrderTemplates, onSave
           <label style={{fontSize:12,color:C.textSecondary}}>Meet Notes</label>
           <textarea style={{...S.input,width:'100%',minHeight:60,resize:'vertical',fontFamily:'inherit',fontSize:12,padding:'8px'}} placeholder="Entry minimums, special rules, schedule notes..." value={f.notes||''} onChange={e=>setF({...f,notes:e.target.value})} />
         </div>
-        <button style={{...S.btn,...S.btnPrimary}} onClick={()=>{if(!f.name||!f.startDate)return;onSave({...f,startDate:padDate(f.startDate),endDate:padDate(f.endDate),maxEntriesPerEvent:f.maxEntriesPerEvent||null,maxEventsPerAthlete:f.maxEventsPerAthlete||null});}}>{editId?'Save Changes':'Create Meet'}</button>
+        <div>
+          <label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Tags <span style={{color:C.textMuted,fontWeight:400}}>(optional — e.g. Invitational, Championship, Dual)</span></label>
+          <TagInput value={f.tags||[]} onChange={tags=>setF({...f,tags})} suggestions={knownTags||[]} placeholder="Type a tag and press Enter" />
+        </div>
+        <button style={{...S.btn,...S.btnPrimary}} onClick={()=>{if(!f.name||!f.startDate)return;onSave({...f,startDate:padDate(f.startDate),endDate:padDate(f.endDate),maxEntriesPerEvent:f.maxEntriesPerEvent||null,maxEventsPerAthlete:f.maxEventsPerAthlete||null,tags:(f.tags||[]).filter(Boolean)});}}>{editId?'Save Changes':'Create Meet'}</button>
       </div>
     </Modal>
   );
@@ -1975,8 +2038,9 @@ function MeetsPage({ data, save, nav, events }) {
       {showAdd && <MeetFormModal
         key={openCount}
         editId={(editMeet||{}).id}
-        initial={editMeet ? {name:editMeet.name||'',startDate:(editMeet.startDate||editMeet.date||'').split('T')[0],endDate:(editMeet.endDate||'').split('T')[0],venue:editMeet.venue||'',city:editMeet.city||'',state:editMeet.state||'',trackType:editMeet.trackType||'Outdoor',timingSystem:editMeet.timingSystem||'FAT',meetTypeId:editMeet.meetTypeId||'',eventOrderTemplateId:editMeet.eventOrderTemplateId||'',maxEntriesPerEvent:editMeet.maxEntriesPerEvent||'',maxEventsPerAthlete:editMeet.maxEventsPerAthlete||'',notes:editMeet.notes||''} : {name:'',startDate:'',endDate:'',venue:'',city:'',state:'',trackType:'Outdoor',timingSystem:'FAT',meetTypeId:'',eventOrderTemplateId:'',maxEntriesPerEvent:'',maxEventsPerAthlete:'',notes:''}}
+        initial={editMeet ? {name:editMeet.name||'',startDate:(editMeet.startDate||editMeet.date||'').split('T')[0],endDate:(editMeet.endDate||'').split('T')[0],venue:editMeet.venue||'',city:editMeet.city||'',state:editMeet.state||'',trackType:editMeet.trackType||'Outdoor',timingSystem:editMeet.timingSystem||'FAT',meetTypeId:editMeet.meetTypeId||'',eventOrderTemplateId:editMeet.eventOrderTemplateId||'',maxEntriesPerEvent:editMeet.maxEntriesPerEvent||'',maxEventsPerAthlete:editMeet.maxEventsPerAthlete||'',notes:editMeet.notes||'',tags:Array.isArray(editMeet.tags)?editMeet.tags:[]} : {name:'',startDate:'',endDate:'',venue:'',city:'',state:'',trackType:'Outdoor',timingSystem:'FAT',meetTypeId:'',eventOrderTemplateId:'',maxEntriesPerEvent:'',maxEventsPerAthlete:'',notes:'',tags:[]}}
         meetTypes={meetTypes}
+        knownTags={collectKnownTags(data)}
         eventOrderTemplates={data.eventOrderTemplates||[]}
         onSave={(f)=>{
           if((editMeet||{}).id) { save({...data, meets:data.meets.map(m=>m.id===editMeet.id?{...m,...f}:m)}); }
@@ -2517,7 +2581,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
   return (
     <div>
       <button style={S.backLink} onClick={()=>nav('meets')}>{"<- "}Back to Meets</button>
-      <h1 style={S.h1}>{meet.name}</h1>
+      <h1 style={S.h1}>{meet.name}{(meet.tags||[]).filter(Boolean).map(t=><span key={t} style={{fontSize:11,fontWeight:700,padding:'2px 9px',borderRadius:11,background:C.surface2,color:C.textSecondary,border:`1px solid ${C.border}`,marginLeft:8,textTransform:'uppercase',letterSpacing:'0.04em',verticalAlign:'middle'}}>{t}</span>)}</h1>
       <p style={S.h3}>
         {meet.startDate}{meet.endDate?` - ${meet.endDate}`:''} - {meet.trackType} - {meet.timingSystem||'FAT'}
         {meet.venue && ` - ${meet.venue}`}{meet.city && `, ${meet.city}`}{meet.state && ` ${meet.state}`}
@@ -3439,7 +3503,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
         </div>);
       })()}
       {meetTab==='scores' && (()=>{
-        const opponents = data.opponents || [];
+        const opponents = getOpponents(data);
         const scores = meet.teamScores || { mode: 'split', boys: [], girls: [], combined: [] };
         const mode = scores.mode || 'split';
         const updateScores = (next) => save({...data, meets:data.meets.map(m=>m.id===meetId?{...m, teamScores:next}:m)});
@@ -3472,7 +3536,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                   <thead>
                     <tr>
                       <th style={{...S.th,textAlign:'left'}}>Team</th>
-                      <th style={{...S.th,textAlign:'left',width:140}}>Category</th>
+                      <th style={{...S.th,textAlign:'left',width:180}}>League / Tags</th>
                       <th style={{...S.th,textAlign:'right',width:90}}>Points</th>
                       <th style={{...S.th,textAlign:'right',width:70}}>Place</th>
                       <th style={{...S.th,width:36}}></th>
@@ -3481,18 +3545,18 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                   <tbody>
                     {rows.map((r,idx)=>{
                       const isSelf = r.opponentId === 'self';
-                      const cat = isSelf ? '' : getOpponentCategory(r.opponentId, opponents);
-                      const div = isSelf ? '' : getOpponentDivision(r.opponentId, opponents);
+                      const isLeague = isSelf ? null : getOpponentIsLeague(r.opponentId, opponents);
+                      const tags = isSelf ? [] : getOpponentTags(r.opponentId, opponents);
                       return (
                         <tr key={r.id||idx} style={{background:isSelf?C.accentMuted:'transparent'}}>
                           <td style={{...S.td,padding:'4px 6px'}}>
                             <select style={{...S.select,fontSize:12,fontWeight:isSelf?700:500,width:'100%'}} value={r.opponentId||''} onChange={e=>updateRow(key,idx,{opponentId:e.target.value})}>
                               <option value="">(pick a team)</option>
                               <option value="self">{(team&&(team.school||team.name))||'Our Team'} (us)</option>
-                              {opponents.map(o=><option key={o.id} value={o.id}>{o.name}{o.category?` — ${o.category}`:''}</option>)}
+                              {opponents.map(o=><option key={o.id} value={o.id}>{o.name}{o.isLeague?' — League':' — Non-league'}</option>)}
                             </select>
                           </td>
-                          <td style={{...S.td,padding:'4px 6px',color:C.textMuted,fontSize:11}}>{cat ? cat + (div?` · ${div}`:'') : (isSelf?'—':'')}</td>
+                          <td style={{...S.td,padding:'4px 6px',color:C.textMuted,fontSize:11}}>{isSelf?'—':(isLeague===null?'':<span style={{display:'inline-flex',flexWrap:'wrap',gap:4,alignItems:'center'}}><span style={{fontWeight:600,color:isLeague?C.accent:C.textSecondary}}>{isLeague?'League':'Non-league'}</span>{tags.map(t=><span key={t} style={{fontSize:10,padding:'1px 6px',borderRadius:8,background:C.surface2,color:C.textSecondary,border:`1px solid ${C.borderLight}`}}>{t}</span>)}</span>)}</td>
                           <td style={{...S.td,padding:'4px 6px',textAlign:'right'}}><input style={{...S.input,fontSize:12,textAlign:'right',padding:'4px 8px'}} type="number" step="0.5" value={r.points==null?'':r.points} onChange={e=>updateRow(key,idx,{points:e.target.value===''?'':parseFloat(e.target.value)})} /></td>
                           <td style={{...S.td,padding:'4px 6px',textAlign:'right'}}><input style={{...S.input,fontSize:12,textAlign:'right',padding:'4px 8px'}} type="number" min="1" value={r.place==null?'':r.place} onChange={e=>updateRow(key,idx,{place:e.target.value===''?'':parseInt(e.target.value)})} /></td>
                           <td style={{...S.td,padding:'4px 6px',textAlign:'center'}}><button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:14}} onClick={()=>removeRow(key,idx)} title="Remove team">✕</button></td>
@@ -3516,7 +3580,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                     <span>{lbl}</span>
                   </label>
                 ))}
-                {opponents.length===0 && <span style={{marginLeft:'auto',fontSize:11,color:C.textMuted,fontStyle:'italic'}}>Tip: add opponent schools in Settings → Opponents for league/division labels.</span>}
+                {opponents.length===0 && <span style={{marginLeft:'auto',fontSize:11,color:C.textMuted,fontStyle:'italic'}}>Tip: add opponent schools in Settings → Opponents to tag league status.</span>}
               </div>
             </div>
             {mode==='split' ? (<>
@@ -7508,6 +7572,7 @@ const buildSeasonReportHTML = (data, events, season, team, athletes, options, fe
     .ts-meet{margin-bottom:12px;border:1px solid #e0e4ea;border-radius:8px;overflow:hidden;page-break-inside:avoid;box-shadow:0 1px 2px rgba(0,0,0,0.03)}
     .ts-meet-h{background:${primary};color:#fff;padding:5px 12px;font-size:11px;font-weight:700;display:flex;justify-content:space-between;align-items:center;border-left:5px solid ${secondary}}
     .ts-meet-name{font-weight:800;font-size:12px}
+    .ts-tag{display:inline-block;font-size:9px;font-weight:700;padding:1px 7px;border-radius:9px;background:rgba(255,255,255,0.22);color:#fff;border:1px solid rgba(255,255,255,0.4);margin-left:6px;text-transform:uppercase;letter-spacing:0.04em;vertical-align:middle}
     .ts-meet-date{font-size:10px;opacity:0.85}
     .ts-side{padding:0}
     .ts-side + .ts-side{border-top:1px solid #e0e4ea}
@@ -7682,24 +7747,24 @@ const buildSeasonReportHTML = (data, events, season, team, athletes, options, fe
       return true;
     });
     if(!meetsAll.length) return;
-    const opponents = data.opponents || [];
+    const opponents = getOpponents(data);
     const oppLabel = (id) => {
       if(id === 'self') return (team && (team.school||team.name)) || 'Our Team';
       const o = opponents.find(x=>x.id===id);
       return o ? o.name : '(removed)';
     };
-    const oppCat = (id) => {
-      if(id === 'self' || !id) return null;
-      const o = opponents.find(x=>x.id===id);
-      return o ? (o.category||'League') : null;
-    };
     const ordinal = (n) => { if(!n||isNaN(n)) return ''; const s=['th','st','nd','rd'],v=n%100; return n+(s[(v-20)%10]||s[v]||s[0]); };
-    const meetCategory = (m) => {
-      const rows = [...((m.teamScores||{}).boys||[]),...((m.teamScores||{}).girls||[]),...((m.teamScores||{}).combined||[])];
-      const counts = {};
-      rows.forEach(r => { const c = oppCat(r.opponentId); if(c) counts[c]=(counts[c]||0)+1; });
-      const sorted = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
-      return sorted.length ? sorted[0][0] : 'Other';
+    const meetAllRows = (m) => [...((m.teamScores||{}).boys||[]),...((m.teamScores||{}).girls||[]),...((m.teamScores||{}).combined||[])];
+    const meetLeagueGroup = (m) => {
+      const counts = { League:0, 'Non-league':0 };
+      meetAllRows(m).forEach(r => { const lg = getOpponentIsLeague(r.opponentId, opponents); if(lg===true) counts.League++; else if(lg===false) counts['Non-league']++; });
+      if(!counts.League && !counts['Non-league']) return 'Other';
+      return counts.League >= counts['Non-league'] ? 'League' : 'Non-league';
+    };
+    const meetGroupsByTag = (m) => {
+      const tagSet = new Set((m.tags||[]).filter(Boolean));
+      meetAllRows(m).forEach(r => getOpponentTags(r.opponentId, opponents).forEach(t => tagSet.add(t)));
+      return Array.from(tagSet);
     };
     const renderMeetBlock = (m) => {
       const ts = m.teamScores || {};
@@ -7713,7 +7778,8 @@ const buildSeasonReportHTML = (data, events, season, team, athletes, options, fe
       }
       if(!sides.length) return '';
       let html = '<div class="ts-meet">';
-      html += `<div class="ts-meet-h"><span class="ts-meet-name">${esc(m.name||'(unnamed meet)')}</span><span class="ts-meet-date">${esc(m.startDate||m.date||'')}</span></div>`;
+      const tagsHtml = (m.tags||[]).filter(Boolean).map(t=>`<span class="ts-tag">${esc(t)}</span>`).join('');
+      html += `<div class="ts-meet-h"><span class="ts-meet-name">${esc(m.name||'(unnamed meet)')}${tagsHtml?` ${tagsHtml}`:''}</span><span class="ts-meet-date">${esc(m.startDate||m.date||'')}</span></div>`;
       sides.forEach(({label, rows}) => {
         const sorted = [...rows].sort((a,b)=>{const pa=parseInt(a.place)||999,pb=parseInt(b.place)||999;return pa-pb;});
         const selfRow = sorted.find(r=>r.opponentId==='self');
@@ -7731,17 +7797,36 @@ const buildSeasonReportHTML = (data, events, season, team, athletes, options, fe
       return html;
     };
     body += '<h2>Team Scores</h2>';
-    if(options.teamScoresGroupByCategory) {
-      const groups = {};
-      meetsAll.forEach(m => { const c = meetCategory(m); (groups[c] = groups[c] || []).push(m); });
-      const ordered = [...OPPONENT_CATEGORIES, ...Object.keys(groups).filter(k=>!OPPONENT_CATEGORIES.includes(k))];
-      ordered.filter(k => groups[k] && groups[k].length).forEach(k => {
+    const groupAxis = options.teamScoresGroupByCategory ? (options.teamScoresGroupBy || 'leagueFlag') : null;
+    const byDate = (a,b) => (a.startDate||'').localeCompare(b.startDate||'');
+    if(groupAxis === 'leagueFlag') {
+      const groups = { League:[], 'Non-league':[], Other:[] };
+      meetsAll.forEach(m => { (groups[meetLeagueGroup(m)] = groups[meetLeagueGroup(m)] || []).push(m); });
+      ['League','Non-league','Other'].filter(k => (groups[k]||[]).length).forEach(k => {
         body += `<div class="ts-cat">${esc(k)}</div>`;
-        groups[k].sort((a,b)=>(a.startDate||'').localeCompare(b.startDate||''));
+        groups[k].sort(byDate);
         groups[k].forEach(m => { body += renderMeetBlock(m); });
       });
+    } else if(groupAxis === 'tag') {
+      const groups = {};
+      const untagged = [];
+      meetsAll.forEach(m => {
+        const tags = meetGroupsByTag(m);
+        if(!tags.length) { untagged.push(m); return; }
+        tags.forEach(t => { (groups[t] = groups[t] || []).push(m); });
+      });
+      Object.keys(groups).sort((a,b)=>a.localeCompare(b)).forEach(t => {
+        body += `<div class="ts-cat">${esc(t)}</div>`;
+        groups[t].sort(byDate);
+        groups[t].forEach(m => { body += renderMeetBlock(m); });
+      });
+      if(untagged.length) {
+        body += `<div class="ts-cat">Untagged</div>`;
+        untagged.sort(byDate);
+        untagged.forEach(m => { body += renderMeetBlock(m); });
+      }
     } else {
-      [...meetsAll].sort((a,b)=>(a.startDate||'').localeCompare(b.startDate||'')).forEach(m => { body += renderMeetBlock(m); });
+      [...meetsAll].sort(byDate).forEach(m => { body += renderMeetBlock(m); });
     }
   };
 
@@ -8018,9 +8103,13 @@ function ReportBuilderModal({ open, onClose, data, save, events, season, team, p
           <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,padding:'3px 0',cursor:'pointer'}}>
             <input type="checkbox" checked={!!opts.includeTeamScores} onChange={()=>toggle('includeTeamScores')} />
             <span>Team scores & places by meet</span>
-            <label style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:4,fontSize:11,color:C.textMuted,cursor:'pointer'}} title="Group meets by opponent category (League / Non-league / Division)">
+            <label style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:4,fontSize:11,color:C.textMuted,cursor:'pointer'}} title="Group meets by League / Non-league or by a tag">
               <input type="checkbox" checked={!!opts.teamScoresGroupByCategory} onChange={()=>toggle('teamScoresGroupByCategory')} disabled={!opts.includeTeamScores} />
-              Group by category
+              Group by
+              <select value={opts.teamScoresGroupBy||'leagueFlag'} onChange={e=>{dirtyRef.current=true;setSaveStatus('dirty');setOpts(o=>({...o,teamScoresGroupBy:e.target.value}));}} disabled={!opts.includeTeamScores||!opts.teamScoresGroupByCategory} style={{fontSize:11,padding:'1px 4px',marginLeft:2}}>
+                <option value="leagueFlag">League / Non-league</option>
+                <option value="tag">Tag</option>
+              </select>
             </label>
           </label>
           <div style={{fontSize:10,color:C.textMuted,textTransform:'uppercase',fontWeight:600,marginTop:8,marginBottom:2}}>Per-athlete pages</div>
@@ -8696,7 +8785,7 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
   const [editMTId, setEditMTId] = useState(null);
   const [delMTId, setDelMTId] = useState(null);
   const [showAddOpp, setShowAddOpp] = useState(false);
-  const [oppForm, setOppForm] = useState({ name:'', category:'League', division:'' });
+  const [oppForm, setOppForm] = useState({ name:'', isLeague:true, tags:[] });
   const [editOppId, setEditOppId] = useState(null);
   const [delOppId, setDelOppId] = useState(null);
   useEffect(() => { setTeamName((team||{}).name||''); setSchool((team||{}).school||''); setPrimaryColor(((team||{}).colors||{}).primary||'#c96a1f'); setSecondaryColor(((team||{}).colors||{}).secondary||'#2b6cb0'); }, [team]);
@@ -8872,48 +8961,58 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
       </div>)}
 
       {tab==='opponents' && (()=>{
-        const opponents = data.opponents || [];
+        const opponents = getOpponents(data);
+        const knownTags = collectKnownTags(data);
         const saveOpp = () => {
           if(!oppForm.name.trim()) return;
-          const clean = { name:oppForm.name.trim(), category:oppForm.category||'League', division:(oppForm.division||'').trim() };
-          if(editOppId) save({...data, opponents:opponents.map(o=>o.id===editOppId?{...o,...clean}:o)});
-          else save({...data, opponents:[...opponents,{id:uid(),...clean}]});
-          setShowAddOpp(false); setEditOppId(null); setOppForm({name:'',category:'League',division:''});
+          const clean = { name:oppForm.name.trim(), isLeague:!!oppForm.isLeague, tags:(oppForm.tags||[]).map(t=>t.trim()).filter(Boolean) };
+          const rawOpponents = data.opponents || [];
+          if(editOppId) save({...data, opponents:rawOpponents.map(o=>o.id===editOppId?{...o,...clean,category:undefined,division:undefined}:o)});
+          else save({...data, opponents:[...rawOpponents,{id:uid(),...clean}]});
+          setShowAddOpp(false); setEditOppId(null); setOppForm({name:'',isLeague:true,tags:[]});
         };
-        const deleteOpp = () => { save({...data, opponents:opponents.filter(o=>o.id!==delOppId)}); setDelOppId(null); };
-        const grouped = {};
-        opponents.forEach(o=>{const k=o.category||'League';(grouped[k]=grouped[k]||[]).push(o);});
-        const groupOrder = [...OPPONENT_CATEGORIES, ...Object.keys(grouped).filter(k=>!OPPONENT_CATEGORIES.includes(k))];
+        const deleteOpp = () => { save({...data, opponents:(data.opponents||[]).filter(o=>o.id!==delOppId)}); setDelOppId(null); };
+        const league = opponents.filter(o=>o.isLeague).sort((a,b)=>a.name.localeCompare(b.name));
+        const nonLeague = opponents.filter(o=>!o.isLeague).sort((a,b)=>a.name.localeCompare(b.name));
+        const renderOpp = (o) => (
+          <div key={o.id} style={{...S.card,display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 14px',marginBottom:6}}>
+            <div style={{minWidth:0,flex:1}}>
+              <div style={{fontWeight:600,fontSize:13}}>{o.name}</div>
+              {(o.tags||[]).length>0 && <div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:4}}>{o.tags.map(t=><span key={t} style={{fontSize:10,fontWeight:600,padding:'2px 7px',borderRadius:10,background:C.surface2,color:C.textSecondary,border:`1px solid ${C.borderLight}`}}>{t}</span>)}</div>}
+            </div>
+            <div style={{display:'flex',gap:6,marginLeft:8}}>
+              <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'3px 10px'}} onClick={()=>{setOppForm({name:o.name,isLeague:!!o.isLeague,tags:[...(o.tags||[])]});setEditOppId(o.id);setShowAddOpp(true);}}>Edit</button>
+              <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12}} onClick={()=>setDelOppId(o.id)}>✕</button>
+            </div>
+          </div>
+        );
         return (<div>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
             <h2 style={{...S.h2,margin:0}}>Opponents</h2>
-            <button style={{...S.btn,...S.btnPrimary}} onClick={()=>{setOppForm({name:'',category:'League',division:''});setEditOppId(null);setShowAddOpp(true);}}>+ Add Opponent</button>
+            <button style={{...S.btn,...S.btnPrimary}} onClick={()=>{setOppForm({name:'',isLeague:true,tags:[]});setEditOppId(null);setShowAddOpp(true);}}>+ Add Opponent</button>
           </div>
-          <p style={{fontSize:12,color:C.textMuted,marginBottom:12}}>Schools you compete against. Tag each as League, Non-league, or Division so the End-of-Season report can group team scores by category.</p>
+          <p style={{fontSize:12,color:C.textMuted,marginBottom:12}}>Schools you compete against. Mark whether each is in your league and add free-form tags (Conference name, Division, Class, etc.) — the End-of-Season report can group team scores by League / Non-league or by any tag.</p>
           {opponents.length===0 && <div style={{...S.card,textAlign:'center',color:C.textMuted,padding:20}}>No opponents yet. Add the schools your team competes against to enable team scoring on each meet.</div>}
-          {groupOrder.filter(k=>(grouped[k]||[]).length>0).map(cat=>(
-            <div key={cat} style={{marginBottom:14}}>
-              <div style={{fontSize:11,fontWeight:700,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:4}}>{cat}</div>
-              {(grouped[cat]||[]).slice().sort((a,b)=>a.name.localeCompare(b.name)).map(o=>(
-                <div key={o.id} style={{...S.card,display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 14px',marginBottom:6}}>
-                  <div>
-                    <div style={{fontWeight:600,fontSize:13}}>{o.name}</div>
-                    {o.division && <div style={{fontSize:11,color:C.textMuted,marginTop:2}}>{o.division}</div>}
-                  </div>
-                  <div style={{display:'flex',gap:6}}>
-                    <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'3px 10px'}} onClick={()=>{setOppForm({name:o.name,category:o.category||'League',division:o.division||''});setEditOppId(o.id);setShowAddOpp(true);}}>Edit</button>
-                    <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12}} onClick={()=>setDelOppId(o.id)}>✕</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ))}
-          <Modal open={showAddOpp} onClose={()=>{setShowAddOpp(false);setEditOppId(null);}} width={420}>
+          {league.length>0 && <div style={{marginBottom:14}}>
+            <div style={{fontSize:11,fontWeight:700,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:4}}>League</div>
+            {league.map(renderOpp)}
+          </div>}
+          {nonLeague.length>0 && <div style={{marginBottom:14}}>
+            <div style={{fontSize:11,fontWeight:700,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:4}}>Non-league</div>
+            {nonLeague.map(renderOpp)}
+          </div>}
+          <Modal open={showAddOpp} onClose={()=>{setShowAddOpp(false);setEditOppId(null);}} width={440}>
             <h2 style={S.h2}>{editOppId?'Edit':'Add'} Opponent</h2>
             <div style={{display:'flex',flexDirection:'column',gap:12,marginTop:16}}>
               <div><label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>School Name</label><input style={S.input} placeholder="e.g. Lincoln High School" value={oppForm.name} onChange={e=>setOppForm({...oppForm,name:e.target.value})} /></div>
-              <div><label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Category</label><select style={{...S.select,width:'100%'}} value={oppForm.category} onChange={e=>setOppForm({...oppForm,category:e.target.value})}>{OPPONENT_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}</select></div>
-              <div><label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Division (optional)</label><input style={S.input} placeholder="e.g. Division III, Class A" value={oppForm.division} onChange={e=>setOppForm({...oppForm,division:e.target.value})} /></div>
+              <label style={{display:'flex',alignItems:'center',gap:8,fontSize:13,color:C.text,cursor:'pointer',padding:'8px 12px',background:C.bg,borderRadius:6,border:`1px solid ${C.borderLight}`}}>
+                <input type="checkbox" checked={!!oppForm.isLeague} onChange={e=>setOppForm({...oppForm,isLeague:e.target.checked})} />
+                In our league
+              </label>
+              <div>
+                <label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Tags <span style={{color:C.textMuted,fontWeight:400}}>(optional — e.g. Division III, MAC Conference, Rival)</span></label>
+                <TagInput value={oppForm.tags} onChange={tags=>setOppForm({...oppForm,tags})} suggestions={knownTags} placeholder="Type a tag and press Enter" />
+              </div>
               <button style={{...S.btn,...S.btnPrimary}} onClick={saveOpp}>{editOppId?'Save':'Add Opponent'}</button>
             </div>
           </Modal>

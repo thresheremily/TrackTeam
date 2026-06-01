@@ -129,15 +129,20 @@ const getOpponentValueName = (opponent, dimensionId, dimensions) => {
   const v = (dim.values||[]).find(x=>x.id===opponent.dimensionValues[dimensionId]);
   return v ? v.name : '';
 };
-const getOpponentDimensionsLabel = (opponentId, opponents, dimensions) => {
-  if(!opponentId || opponentId === 'self') return '';
+const getOurTeamDimensionValues = (data) => (data && data.ourTeamDimensionValues) || {};
+const getDimensionsLabelForValues = (dimensionValues, dimensions) => {
+  if(!dimensions.length) return '';
+  return dimensions.map(d => {
+    const v = (d.values||[]).find(x=>x.id===(dimensionValues||{})[d.id]);
+    return v ? v.name : '—';
+  }).join(' · ');
+};
+const getOpponentDimensionsLabel = (opponentId, opponents, dimensions, data) => {
+  if(!opponentId) return '';
+  if(opponentId === 'self') return getDimensionsLabelForValues(getOurTeamDimensionValues(data), dimensions);
   const o = opponents.find(x=>x.id===opponentId);
   if(!o) return '';
-  const parts = dimensions.map(d => {
-    const name = getOpponentValueName(o, d.id, dimensions);
-    return name ? name : '—';
-  });
-  return parts.length ? parts.join(' · ') : '';
+  return getDimensionsLabelForValues(o.dimensionValues||{}, dimensions);
 };
 const collectKnownTags = (data) => {
   const set = new Set();
@@ -3535,7 +3540,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                   <tbody>
                     {rows.map((r,idx)=>{
                       const isSelf = r.opponentId === 'self';
-                      const dimLabel = isSelf ? '' : getOpponentDimensionsLabel(r.opponentId, opponents, dimensions);
+                      const dimLabel = getOpponentDimensionsLabel(r.opponentId, opponents, dimensions, data);
                       return (
                         <tr key={r.id||idx} style={{background:isSelf?C.accentMuted:'transparent'}}>
                           <td style={{...S.td,padding:'4px 6px'}}>
@@ -3545,7 +3550,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                               {opponents.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}
                             </select>
                           </td>
-                          <td style={{...S.td,padding:'4px 6px',color:C.textMuted,fontSize:11}}>{isSelf?'—':(dimLabel||<span style={{fontStyle:'italic',color:C.textMuted}}>(no categories)</span>)}</td>
+                          <td style={{...S.td,padding:'4px 6px',color:C.textMuted,fontSize:11}}>{dimLabel||<span style={{fontStyle:'italic',color:C.textMuted}}>{isSelf?'(set under Settings → Opponents)':'(no categories)'}</span>}</td>
                           <td style={{...S.td,padding:'4px 6px',textAlign:'right'}}><input style={{...S.input,fontSize:12,textAlign:'right',padding:'4px 8px'}} type="number" step="0.5" value={r.points==null?'':r.points} onChange={e=>updateRow(key,idx,{points:e.target.value===''?'':parseFloat(e.target.value)})} /></td>
                           <td style={{...S.td,padding:'4px 6px',textAlign:'right'}}><input style={{...S.input,fontSize:12,textAlign:'right',padding:'4px 8px'}} type="number" min="1" value={r.place==null?'':r.place} onChange={e=>updateRow(key,idx,{place:e.target.value===''?'':parseInt(e.target.value)})} /></td>
                           <td style={{...S.td,padding:'4px 6px',textAlign:'center'}}><button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:14}} onClick={()=>removeRow(key,idx)} title="Remove team">✕</button></td>
@@ -9009,7 +9014,8 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
             const dv = {...o.dimensionValues}; delete dv[delDimensionId];
             return {...o, dimensionValues:dv};
           });
-          save({...data, opponentDimensions:nextDims, opponents:nextOpp});
+          const nextOurDV = {...(data.ourTeamDimensionValues||{})}; delete nextOurDV[delDimensionId];
+          save({...data, opponentDimensions:nextDims, opponents:nextOpp, ourTeamDimensionValues:nextOurDV});
           setDelDimensionId(null);
         };
 
@@ -9036,7 +9042,9 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
             const dv = {...o.dimensionValues}; delete dv[delValueKey.dimId];
             return {...o, dimensionValues:dv};
           });
-          save({...data, opponentDimensions:dimensions.map(d=>d.id===dim.id?nextDim:d), opponents:nextOpp});
+          const ourDV = data.ourTeamDimensionValues||{};
+          const nextOurDV = ourDV[delValueKey.dimId] === delValueKey.valueId ? (()=>{const x={...ourDV}; delete x[delValueKey.dimId]; return x;})() : ourDV;
+          save({...data, opponentDimensions:dimensions.map(d=>d.id===dim.id?nextDim:d), opponents:nextOpp, ourTeamDimensionValues:nextOurDV});
           setDelValueKey(null);
         };
 
@@ -9068,6 +9076,38 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
             <button style={{...S.btn,...S.btnPrimary}} onClick={()=>{setOppForm({name:'',dimensionValues:{}});setEditOppId(null);setShowAddOpp(true);}}>+ Add Opponent</button>
           </div>
           <p style={{fontSize:12,color:C.textMuted,marginBottom:14}}>Set up the categories your state uses (Section, Class, League, Division — name them whatever you want). Each one is independent, so a school can be in any combination. The End-of-Season report can group team scores by any dimension.</p>
+
+          {/* Our team's dimension values */}
+          {dimensions.length>0 && (()=>{
+            const ourDV = getOurTeamDimensionValues(data);
+            const setOurDV = (dimId, valueId) => {
+              const next = {...ourDV};
+              if(valueId) next[dimId] = valueId; else delete next[dimId];
+              save({...data, ourTeamDimensionValues:next});
+            };
+            const teamLabel = (team && (team.school||team.name)) || 'Our Team';
+            return (
+              <div style={{...S.card,padding:'12px 14px',marginBottom:14,borderLeft:`4px solid ${C.accent}`}}>
+                <div style={{fontSize:12,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:4}}>Our Team</div>
+                <div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:10}}>{teamLabel}</div>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:10}}>
+                  {dimensions.map(d=>{
+                    const values = getDimensionValues(d);
+                    return (
+                      <div key={d.id}>
+                        <label style={{fontSize:11,color:C.textSecondary,display:'block',marginBottom:3}}>{d.name}</label>
+                        <select style={{...S.select,width:'100%',fontSize:12}} value={ourDV[d.id]||''} onChange={e=>setOurDV(d.id, e.target.value)}>
+                          <option value="">— (none)</option>
+                          {values.map(v=><option key={v.id} value={v.id}>{v.name}</option>)}
+                        </select>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{fontSize:10,color:C.textMuted,marginTop:8,fontStyle:'italic'}}>Records which categories your own team belongs to. Shown on the team-scores rows for "us" and used wherever the report compares to opponents.</div>
+              </div>
+            );
+          })()}
 
           {/* Dimensions editor */}
           <div style={{...S.card,padding:'12px 14px',marginBottom:14}}>
@@ -9125,7 +9165,7 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
             ) : (
               <div>
                 {[...opponents].sort((a,b)=>a.name.localeCompare(b.name)).map(o=>{
-                  const label = getOpponentDimensionsLabel(o.id, opponents, dimensions);
+                  const label = getOpponentDimensionsLabel(o.id, opponents, dimensions, data);
                   const anyAssigned = Object.values(o.dimensionValues||{}).some(Boolean);
                   return (
                     <div key={o.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'8px 10px',borderBottom:`1px solid ${C.borderLight}`}}>

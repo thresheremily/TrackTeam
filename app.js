@@ -2100,6 +2100,7 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
   const [teamPickerSelected, setTeamPickerSelected] = useState([]);
   const [pickerNewName, setPickerNewName] = useState('');
   const [pickerAdding, setPickerAdding] = useState(false);
+  const [pickerMirror, setPickerMirror] = useState(true);
   const saveEditResult = () => {
     if(!editResultId) return;
     const r = (data.results||[]).find(x=>x.id===editResultId);
@@ -3625,7 +3626,15 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                 const addSelected = () => {
                   if(!tgt.key || !teamPickerSelected.length) return;
                   const newRows = teamPickerSelected.map(opponentId => ({id:uid(), opponentId, points:'', place:''}));
-                  setRows(tgt.key, [...(scores[tgt.key]||[]), ...newRows]);
+                  const otherKey = mode==='split' && (tgt.key==='boys'||tgt.key==='girls') ? (tgt.key==='boys'?'girls':'boys') : null;
+                  if(otherKey && pickerMirror) {
+                    const existingOther = new Set((scores[otherKey]||[]).map(r=>r.opponentId).filter(Boolean));
+                    const mirrorRows = teamPickerSelected.filter(id => !existingOther.has(id)).map(opponentId => ({id:uid(), opponentId, points:'', place:''}));
+                    const nextScores = {...scores, [tgt.key]: [...(scores[tgt.key]||[]), ...newRows], [otherKey]: [...(scores[otherKey]||[]), ...mirrorRows]};
+                    updateScores(nextScores);
+                  } else {
+                    setRows(tgt.key, [...(scores[tgt.key]||[]), ...newRows]);
+                  }
                   setTeamPickerTarget(null); setTeamPickerSelected([]);
                 };
                 const selectableIds = filtered.filter(o => !usedIds.has(o.id)).map(o=>o.id);
@@ -3703,6 +3712,12 @@ function MeetSubPage({ data, save, nav, meetId, events, getAthletePR, checkQuali
                         );
                       })}
                     </div>
+                    {isAddMode && mode==='split' && (tgt.key==='boys'||tgt.key==='girls') && (
+                      <label style={{display:'flex',alignItems:'center',gap:6,fontSize:11,color:C.textSecondary,marginTop:8,padding:'6px 10px',background:C.bg,borderRadius:5,cursor:'pointer'}}>
+                        <input type="checkbox" checked={pickerMirror} onChange={e=>setPickerMirror(e.target.checked)} />
+                        Also add to {tgt.key==='boys'?'Girls':'Boys'} <span style={{color:C.textMuted,fontStyle:'italic'}}>(skip teams already there)</span>
+                      </label>
+                    )}
                     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:12,gap:8,flexWrap:'wrap'}}>
                       <div style={{fontSize:11,color:C.textMuted}}>{isAddMode ? (teamPickerSelected.length>0 ? `${teamPickerSelected.length} selected` : `Tap rows or checkboxes to add teams`) : ((activeFilterCount>0||teamPickerSearch)?`Showing ${filtered.length} of ${opponents.length+1}`:`${filtered.length} team${filtered.length===1?'':'s'}`)}</div>
                       <div style={{display:'flex',gap:6}}>

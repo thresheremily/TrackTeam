@@ -7378,6 +7378,7 @@ const DEFAULT_REPORT_OPTIONS = {
   rankingsTopN: 5,
   includeTeamScores: false,
   teamScoresGroupByCategory: true,
+  teamScoresSelfOnly: false,
   includeAthletePages: true,
   includeAthleteSummary: true,
   includeEventTable: true,
@@ -7737,6 +7738,10 @@ const buildSeasonReportHTML = (data, events, season, team, athletes, options, fe
     .ts-side-h{padding:5px 12px;background:#f4f6fa;font-size:10px;font-weight:700;color:#2a3242;text-transform:uppercase;letter-spacing:0.05em;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
     .ts-self{font-size:10px;font-weight:700;color:${primary};text-transform:none;letter-spacing:0}
     .ts-self-row td{background:#fff8e0!important;font-weight:700}
+    .ts-meet-compact{margin-bottom:8px;border:1px solid #e0e4ea;border-radius:8px;overflow:hidden;page-break-inside:avoid}
+    .ts-meet-compact .ts-self-row-compact{padding:6px 12px;font-size:11px;font-weight:600;color:#1a1f2b;background:#fff8e0;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+    .ts-self-line{display:inline-flex;align-items:center;gap:6px}
+    .ts-side-pill{display:inline-block;font-size:9px;font-weight:700;padding:1px 7px;border-radius:9px;background:${primary};color:#fff;text-transform:uppercase;letter-spacing:0.04em}
     @media print{body{margin:0}}
   </style>`;
 
@@ -7940,14 +7945,33 @@ const buildSeasonReportHTML = (data, events, season, team, athletes, options, fe
         if((ts.combined||[]).length) sides.push({label:'Combined', rows:ts.combined});
       }
       if(!sides.length) return '';
-      let html = '<div class="ts-meet">';
+      const selfOnly = !!options.teamScoresSelfOnly;
       const tagsHtml = (m.tags||[]).filter(Boolean).map(t=>`<span class="ts-tag">${esc(t)}</span>`).join('');
+      const selfName = (team&&(team.school||team.name))||'Our Team';
+      if(selfOnly) {
+        const sideSummaries = sides.map(({label, rows}) => {
+          const sorted = [...rows].sort((a,b)=>{const pa=parseInt(a.place)||999,pb=parseInt(b.place)||999;return pa-pb;});
+          const selfRow = sorted.find(r=>r.opponentId==='self');
+          if(!selfRow) return null;
+          const total = sorted.length;
+          const place = selfRow.place ? ordinal(parseInt(selfRow.place)) : '—';
+          const pts = (selfRow.points!==''&&selfRow.points!=null) ? ` (${selfRow.points} pts)` : '';
+          return `<span class="ts-self-line"><span class="ts-side-pill">${esc(label)}</span> ${place} of ${total}${pts}</span>`;
+        }).filter(Boolean);
+        if(!sideSummaries.length) return '';
+        let html = '<div class="ts-meet-compact">';
+        html += `<div class="ts-meet-h"><span class="ts-meet-name">${esc(m.name||'(unnamed meet)')}${tagsHtml?` ${tagsHtml}`:''}</span><span class="ts-meet-date">${esc(m.startDate||m.date||'')}</span></div>`;
+        html += `<div class="ts-self-row-compact">${sideSummaries.join(' &nbsp;·&nbsp; ')}</div>`;
+        html += '</div>';
+        return html;
+      }
+      let html = '<div class="ts-meet">';
       html += `<div class="ts-meet-h"><span class="ts-meet-name">${esc(m.name||'(unnamed meet)')}${tagsHtml?` ${tagsHtml}`:''}</span><span class="ts-meet-date">${esc(m.startDate||m.date||'')}</span></div>`;
       sides.forEach(({label, rows}) => {
         const sorted = [...rows].sort((a,b)=>{const pa=parseInt(a.place)||999,pb=parseInt(b.place)||999;return pa-pb;});
         const selfRow = sorted.find(r=>r.opponentId==='self');
         const total = sorted.length;
-        const selfSummary = selfRow && selfRow.place ? `<span class="ts-self">${esc((team&&(team.school||team.name))||'Our Team')}: ${ordinal(parseInt(selfRow.place))} of ${total}${selfRow.points!==''&&selfRow.points!=null?` (${selfRow.points} pts)`:''}</span>` : '';
+        const selfSummary = selfRow && selfRow.place ? `<span class="ts-self">${esc(selfName)}: ${ordinal(parseInt(selfRow.place))} of ${total}${selfRow.points!==''&&selfRow.points!=null?` (${selfRow.points} pts)`:''}</span>` : '';
         html += `<div class="ts-side"><div class="ts-side-h"><span>${esc(label)}</span>${selfSummary}</div>`;
         html += '<table><thead><tr><th class="rk" style="width:30px;text-align:center">#</th><th>Team</th><th style="text-align:right;width:80px">Points</th></tr></thead><tbody>';
         sorted.forEach(r => {
@@ -7963,24 +7987,33 @@ const buildSeasonReportHTML = (data, events, season, team, athletes, options, fe
     const groupAxis = options.teamScoresGroupByCategory ? (options.teamScoresGroupBy || 'tag') : null;
     const byDate = (a,b) => (a.startDate||'').localeCompare(b.startDate||'');
     const dimById = (did) => dimensions.find(d=>d.id===did);
+    const ourDV = getOurTeamDimensionValues(data);
     if(groupAxis && groupAxis !== 'tag' && dimById(groupAxis)) {
       const dim = dimById(groupAxis);
-      const groups = {};
-      const ungrouped = [];
+      const ourValueId = ourDV[dim.id] || null;
+      const ourValue = ourValueId ? (dim.values||[]).find(v=>v.id===ourValueId) : null;
+      const inOurGroup = [];
+      const outsideOurGroup = [];
       meetsAll.forEach(m => {
-        const vs = meetValuesInDimension(m, dim);
-        if(!vs.length) { ungrouped.push(m); return; }
-        vs.forEach(v => { (groups[v.id] = groups[v.id] || {value:v, meets:[]}).meets.push(m); });
+        const oppValueIds = new Set();
+        meetAllRows(m).forEach(r => {
+          if(!r.opponentId || r.opponentId === 'self') return;
+          const o = opponents.find(x=>x.id===r.opponentId);
+          const vid = o && o.dimensionValues ? o.dimensionValues[dim.id] : null;
+          if(vid) oppValueIds.add(vid);
+        });
+        const hasMatch = ourValueId ? oppValueIds.has(ourValueId) : false;
+        if(hasMatch) inOurGroup.push(m); else outsideOurGroup.push(m);
       });
-      Object.values(groups).sort((a,b)=>a.value.name.localeCompare(b.value.name)).forEach(({value, meets}) => {
-        body += `<div class="ts-cat">${esc(dim.name)}: ${esc(value.name)}</div>`;
-        meets.sort(byDate);
-        meets.forEach(m => { body += renderMeetBlock(m); });
-      });
-      if(ungrouped.length) {
-        body += `<div class="ts-cat">No ${esc(dim.name)}</div>`;
-        ungrouped.sort(byDate);
-        ungrouped.forEach(m => { body += renderMeetBlock(m); });
+      const inLabel = ourValue ? `In our ${dim.name} (${ourValue.name})` : `${dim.name} not set for our team`;
+      const outLabel = ourValue ? `Outside our ${dim.name}` : `All meets`;
+      if(inOurGroup.length) {
+        body += `<div class="ts-cat">${esc(inLabel)}</div>`;
+        inOurGroup.sort(byDate).forEach(m => { body += renderMeetBlock(m); });
+      }
+      if(outsideOurGroup.length) {
+        body += `<div class="ts-cat">${esc(outLabel)}</div>`;
+        outsideOurGroup.sort(byDate).forEach(m => { body += renderMeetBlock(m); });
       }
     } else if(groupAxis === 'tag') {
       const groups = {};
@@ -8278,15 +8311,21 @@ function ReportBuilderModal({ open, onClose, data, save, events, season, team, p
           <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,padding:'3px 0',cursor:'pointer'}}>
             <input type="checkbox" checked={!!opts.includeTeamScores} onChange={()=>toggle('includeTeamScores')} />
             <span>Team scores & places by meet</span>
-            <label style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:4,fontSize:11,color:C.textMuted,cursor:'pointer'}} title="Group meets by a hierarchy level or by tag">
-              <input type="checkbox" checked={!!opts.teamScoresGroupByCategory} onChange={()=>toggle('teamScoresGroupByCategory')} disabled={!opts.includeTeamScores} />
-              Group by
-              <select value={opts.teamScoresGroupBy||'tag'} onChange={e=>{dirtyRef.current=true;setSaveStatus('dirty');setOpts(o=>({...o,teamScoresGroupBy:e.target.value}));}} disabled={!opts.includeTeamScores||!opts.teamScoresGroupByCategory} style={{fontSize:11,padding:'1px 4px',marginLeft:2}}>
-                {getOpponentDimensions(data).map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
+          </label>
+          {opts.includeTeamScores && <div style={{marginLeft:22,marginBottom:6,padding:'6px 8px',background:C.bg,borderRadius:5,display:'flex',flexDirection:'column',gap:4}}>
+            <label style={{display:'flex',alignItems:'center',gap:6,fontSize:11,color:C.textSecondary,cursor:'pointer'}}>
+              <input type="checkbox" checked={!!opts.teamScoresSelfOnly} onChange={()=>toggle('teamScoresSelfOnly')} />
+              Show only our team's finish <span style={{color:C.textMuted,fontStyle:'italic'}}>(compact line per side; hides the full standings table)</span>
+            </label>
+            <label style={{display:'flex',alignItems:'center',gap:6,fontSize:11,color:C.textSecondary,cursor:'pointer'}} title="Split meets into 'In our [dim]' (faced at least one opponent with our team's value) and 'Outside our [dim]'">
+              <input type="checkbox" checked={!!opts.teamScoresGroupByCategory} onChange={()=>toggle('teamScoresGroupByCategory')} />
+              Split by
+              <select value={opts.teamScoresGroupBy||'tag'} onChange={e=>{dirtyRef.current=true;setSaveStatus('dirty');setOpts(o=>({...o,teamScoresGroupBy:e.target.value}));}} disabled={!opts.teamScoresGroupByCategory} style={{fontSize:11,padding:'1px 4px',marginLeft:2}}>
+                {getOpponentDimensions(data).map(d=><option key={d.id} value={d.id}>In our {d.name} vs Outside</option>)}
                 <option value="tag">Meet tag</option>
               </select>
             </label>
-          </label>
+          </div>}
           <div style={{fontSize:10,color:C.textMuted,textTransform:'uppercase',fontWeight:600,marginTop:8,marginBottom:2}}>Per-athlete pages</div>
           {sectionToggle('includeAthletePages','Per-athlete pages')}
           {sectionToggle('includeAthleteSummary','Athlete summary tiles')}

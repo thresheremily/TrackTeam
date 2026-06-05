@@ -7378,6 +7378,9 @@ const DEFAULT_REPORT_OPTIONS = {
   rankingsTopN: 5,
   includeTeamScores: false,
   teamScoresGroupByCategory: true,
+  teamScoresSelfOnly: false,
+  includeTeamAwards: true,
+  includeTeamTop6: true,
   includeAthletePages: true,
   includeAthleteSummary: true,
   includeEventTable: true,
@@ -7385,9 +7388,55 @@ const DEFAULT_REPORT_OPTIONS = {
   includeProgression: true,
   includeHighlights: true,
   includeFeedback: true,
+  includeAthleteAwards: true,
+  includeAthleteTop6: true,
   highlights: { mostImproved:true, prCount:true, eventCount:true, qualStds:true, bestPlace:true, meetCount:true },
   enabledStandards: null,
   genderMode: 'all',
+};
+const awardCriteriaMatches = (data, events, award, result) => {
+  if(!award || !award.criteria) return false;
+  const c = award.criteria;
+  if(c.type === 'place') {
+    const place = parseInt(result.place);
+    if(!place || !(c.places||[]).includes(place)) return false;
+    if((c.meetTagFilter||[]).length) {
+      const meet = (data.meets||[]).find(m=>m.id===result.meetId);
+      const tags = (meet&&meet.tags)||[];
+      if(!c.meetTagFilter.some(t=>tags.includes(t))) return false;
+    }
+    if((c.meetTypeIds||[]).length) {
+      const meet = (data.meets||[]).find(m=>m.id===result.meetId);
+      if(!meet || !c.meetTypeIds.includes(meet.meetTypeId)) return false;
+    }
+    return true;
+  }
+  if(c.type === 'standard') {
+    if(!c.standardName) return false;
+    const quals = getAllQualifyingForResult(data, events, result);
+    return quals.some(q => (q.name||'').trim().toLowerCase() === (c.standardName||'').trim().toLowerCase());
+  }
+  return false;
+};
+const computeAthleteAwards = (data, events, athleteId, startDate, endDate) => {
+  const inRange = (d) => (!startDate || d>=startDate) && (!endDate || d<=endDate);
+  const myResults = (data.results||[]).filter(r => !r.isPractice && inRange(r.date) && !r.isRelaySplit && (r.athleteId===athleteId || (r.isRelay && (r.relayAthletes||[]).includes(athleteId))));
+  const out = [];
+  (data.awards||[]).forEach(award => {
+    const hits = myResults.filter(r => awardCriteriaMatches(data, events, award, r));
+    if(hits.length) out.push({ award, count:hits.length, results:hits });
+  });
+  return out;
+};
+const computeAthleteTop6 = (data, athleteId, startDate, endDate, maxPlace) => {
+  const inRange = (d) => (!startDate || d>=startDate) && (!endDate || d<=endDate);
+  const cap = maxPlace || 6;
+  const myResults = (data.results||[]).filter(r => !r.isPractice && inRange(r.date) && !r.isRelaySplit && (r.athleteId===athleteId || (r.isRelay && (r.relayAthletes||[]).includes(athleteId))));
+  const tally = {};
+  for(let i=1;i<=cap;i++) tally[i]=0;
+  let total = 0;
+  myResults.forEach(r => { const p = parseInt(r.place); if(p>=1 && p<=cap) { tally[p]++; total++; } });
+  return { tally, total };
 };
 const getReportStdLabels = (data) => {
   const set = new Set();
@@ -7737,6 +7786,10 @@ const buildSeasonReportHTML = (data, events, season, team, athletes, options, fe
     .ts-side-h{padding:5px 12px;background:#f4f6fa;font-size:10px;font-weight:700;color:#2a3242;text-transform:uppercase;letter-spacing:0.05em;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
     .ts-self{font-size:10px;font-weight:700;color:${primary};text-transform:none;letter-spacing:0}
     .ts-self-row td{background:#fff8e0!important;font-weight:700}
+    .ts-meet-compact{margin-bottom:8px;border:1px solid #e0e4ea;border-radius:8px;overflow:hidden;page-break-inside:avoid}
+    .ts-meet-compact .ts-self-row-compact{padding:6px 12px;font-size:11px;font-weight:600;color:#1a1f2b;background:#fff8e0;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+    .ts-self-line{display:inline-flex;align-items:center;gap:6px}
+    .ts-side-pill{display:inline-block;font-size:9px;font-weight:700;padding:1px 7px;border-radius:9px;background:${primary};color:#fff;text-transform:uppercase;letter-spacing:0.04em}
     @media print{body{margin:0}}
   </style>`;
 
@@ -7891,6 +7944,53 @@ const buildSeasonReportHTML = (data, events, season, team, athletes, options, fe
         });
       }
     }
+
+    if(options.includeTeamTop6) {
+      const ord = (n) => { if(!n||isNaN(n)) return ''; const s=['th','st','nd','rd'],v=n%100; return n+(s[(v-20)%10]||s[v]||s[0]); };
+      const tallies = subset.map(a => ({ athlete:a, top6: computeAthleteTop6(data, a.id, start, end) }))
+        .filter(x => x.top6.total>0)
+        .sort((x,y)=>{
+          const ax=x.top6.tally[1]||0, ay=y.top6.tally[1]||0;
+          if(ax!==ay) return ay-ax;
+          return y.top6.total-x.top6.total;
+        });
+      if(tallies.length) {
+        body += heading('Top 6 Finishes');
+        body += '<table><thead><tr><th>Athlete</th>';
+        for(let p=1;p<=6;p++) body += `<th style="text-align:center;width:40px">${ord(p)}</th>`;
+        body += '<th style="text-align:center;width:50px">Total</th></tr></thead><tbody>';
+        tallies.forEach(({athlete, top6}) => {
+          body += `<tr><td><strong>${esc(athDisplay(athlete))}</strong>${athlete.gradYear?` <span style="color:#888;font-weight:500;font-size:10px">'${(athlete.gradYear+'').slice(-2)}</span>`:''}</td>`;
+          for(let p=1;p<=6;p++) body += `<td style="text-align:center;${top6.tally[p]>0?'font-weight:700':''}">${top6.tally[p]||'·'}</td>`;
+          body += `<td style="text-align:center;font-weight:700;color:${primary}">${top6.total}</td></tr>`;
+        });
+        body += '</tbody></table>';
+      }
+    }
+    if(options.includeTeamAwards) {
+      const awards = data.awards||[];
+      const earned = awards.map(award => {
+        const recipients = subset.map(a => {
+          const aw = computeAthleteAwards(data, events, a.id, start, end);
+          const hit = aw.find(x=>x.award.id===award.id);
+          return hit ? { athlete:a, count:hit.count } : null;
+        }).filter(Boolean).sort((x,y)=>{
+          if(x.count!==y.count) return y.count-x.count;
+          return athLast(x.athlete).localeCompare(athLast(y.athlete));
+        });
+        return { award, recipients };
+      }).filter(x => x.recipients.length>0);
+      if(earned.length) {
+        body += heading('Awards');
+        earned.forEach(({award, recipients}) => {
+          body += `<div class="award-block" style="border-left:4px solid ${award.color||'#c9a830'};padding:6px 10px;margin-bottom:8px;background:#fafbfd;border-radius:4px;page-break-inside:avoid">`;
+          body += `<div style="font-size:12px;font-weight:800;color:${award.color||'#c9a830'};margin-bottom:3px">${esc(award.name)}</div>`;
+          if(award.description) body += `<div style="font-size:10px;color:#666;margin-bottom:4px;font-style:italic">${esc(award.description)}</div>`;
+          body += `<div style="font-size:11px;color:#1a1f2b">${recipients.map(r=>`${esc(athDisplay(r.athlete))}${r.count>1?` <span style="color:#666">×${r.count}</span>`:''}`).join(', ')}</div>`;
+          body += '</div>';
+        });
+      }
+    }
   };
 
   const renderTeamScoresSection = () => {
@@ -7940,14 +8040,33 @@ const buildSeasonReportHTML = (data, events, season, team, athletes, options, fe
         if((ts.combined||[]).length) sides.push({label:'Combined', rows:ts.combined});
       }
       if(!sides.length) return '';
-      let html = '<div class="ts-meet">';
+      const selfOnly = !!options.teamScoresSelfOnly;
       const tagsHtml = (m.tags||[]).filter(Boolean).map(t=>`<span class="ts-tag">${esc(t)}</span>`).join('');
+      const selfName = (team&&(team.school||team.name))||'Our Team';
+      if(selfOnly) {
+        const sideSummaries = sides.map(({label, rows}) => {
+          const sorted = [...rows].sort((a,b)=>{const pa=parseInt(a.place)||999,pb=parseInt(b.place)||999;return pa-pb;});
+          const selfRow = sorted.find(r=>r.opponentId==='self');
+          if(!selfRow) return null;
+          const total = sorted.length;
+          const place = selfRow.place ? ordinal(parseInt(selfRow.place)) : '—';
+          const pts = (selfRow.points!==''&&selfRow.points!=null) ? ` (${selfRow.points} pts)` : '';
+          return `<span class="ts-self-line"><span class="ts-side-pill">${esc(label)}</span> ${place} of ${total}${pts}</span>`;
+        }).filter(Boolean);
+        if(!sideSummaries.length) return '';
+        let html = '<div class="ts-meet-compact">';
+        html += `<div class="ts-meet-h"><span class="ts-meet-name">${esc(m.name||'(unnamed meet)')}${tagsHtml?` ${tagsHtml}`:''}</span><span class="ts-meet-date">${esc(m.startDate||m.date||'')}</span></div>`;
+        html += `<div class="ts-self-row-compact">${sideSummaries.join(' &nbsp;·&nbsp; ')}</div>`;
+        html += '</div>';
+        return html;
+      }
+      let html = '<div class="ts-meet">';
       html += `<div class="ts-meet-h"><span class="ts-meet-name">${esc(m.name||'(unnamed meet)')}${tagsHtml?` ${tagsHtml}`:''}</span><span class="ts-meet-date">${esc(m.startDate||m.date||'')}</span></div>`;
       sides.forEach(({label, rows}) => {
         const sorted = [...rows].sort((a,b)=>{const pa=parseInt(a.place)||999,pb=parseInt(b.place)||999;return pa-pb;});
         const selfRow = sorted.find(r=>r.opponentId==='self');
         const total = sorted.length;
-        const selfSummary = selfRow && selfRow.place ? `<span class="ts-self">${esc((team&&(team.school||team.name))||'Our Team')}: ${ordinal(parseInt(selfRow.place))} of ${total}${selfRow.points!==''&&selfRow.points!=null?` (${selfRow.points} pts)`:''}</span>` : '';
+        const selfSummary = selfRow && selfRow.place ? `<span class="ts-self">${esc(selfName)}: ${ordinal(parseInt(selfRow.place))} of ${total}${selfRow.points!==''&&selfRow.points!=null?` (${selfRow.points} pts)`:''}</span>` : '';
         html += `<div class="ts-side"><div class="ts-side-h"><span>${esc(label)}</span>${selfSummary}</div>`;
         html += '<table><thead><tr><th class="rk" style="width:30px;text-align:center">#</th><th>Team</th><th style="text-align:right;width:80px">Points</th></tr></thead><tbody>';
         sorted.forEach(r => {
@@ -7963,24 +8082,33 @@ const buildSeasonReportHTML = (data, events, season, team, athletes, options, fe
     const groupAxis = options.teamScoresGroupByCategory ? (options.teamScoresGroupBy || 'tag') : null;
     const byDate = (a,b) => (a.startDate||'').localeCompare(b.startDate||'');
     const dimById = (did) => dimensions.find(d=>d.id===did);
+    const ourDV = getOurTeamDimensionValues(data);
     if(groupAxis && groupAxis !== 'tag' && dimById(groupAxis)) {
       const dim = dimById(groupAxis);
-      const groups = {};
-      const ungrouped = [];
+      const ourValueId = ourDV[dim.id] || null;
+      const ourValue = ourValueId ? (dim.values||[]).find(v=>v.id===ourValueId) : null;
+      const inOurGroup = [];
+      const outsideOurGroup = [];
       meetsAll.forEach(m => {
-        const vs = meetValuesInDimension(m, dim);
-        if(!vs.length) { ungrouped.push(m); return; }
-        vs.forEach(v => { (groups[v.id] = groups[v.id] || {value:v, meets:[]}).meets.push(m); });
+        const oppValueIds = new Set();
+        meetAllRows(m).forEach(r => {
+          if(!r.opponentId || r.opponentId === 'self') return;
+          const o = opponents.find(x=>x.id===r.opponentId);
+          const vid = o && o.dimensionValues ? o.dimensionValues[dim.id] : null;
+          if(vid) oppValueIds.add(vid);
+        });
+        const hasMatch = ourValueId ? oppValueIds.has(ourValueId) : false;
+        if(hasMatch) inOurGroup.push(m); else outsideOurGroup.push(m);
       });
-      Object.values(groups).sort((a,b)=>a.value.name.localeCompare(b.value.name)).forEach(({value, meets}) => {
-        body += `<div class="ts-cat">${esc(dim.name)}: ${esc(value.name)}</div>`;
-        meets.sort(byDate);
-        meets.forEach(m => { body += renderMeetBlock(m); });
-      });
-      if(ungrouped.length) {
-        body += `<div class="ts-cat">No ${esc(dim.name)}</div>`;
-        ungrouped.sort(byDate);
-        ungrouped.forEach(m => { body += renderMeetBlock(m); });
+      const inLabel = ourValue ? `In our ${dim.name} (${ourValue.name})` : `${dim.name} not set for our team`;
+      const outLabel = ourValue ? `Outside our ${dim.name}` : `All meets`;
+      if(inOurGroup.length) {
+        body += `<div class="ts-cat">${esc(inLabel)}</div>`;
+        inOurGroup.sort(byDate).forEach(m => { body += renderMeetBlock(m); });
+      }
+      if(outsideOurGroup.length) {
+        body += `<div class="ts-cat">${esc(outLabel)}</div>`;
+        outsideOurGroup.sort(byDate).forEach(m => { body += renderMeetBlock(m); });
       }
     } else if(groupAxis === 'tag') {
       const groups = {};
@@ -8005,7 +8133,7 @@ const buildSeasonReportHTML = (data, events, season, team, athletes, options, fe
     }
   };
 
-  const hasTeamSection = options.includeTeamSummary||options.includeTeamQualifiers||options.includeTopPRs||options.includeTeamRankings||options.includeTeamScores;
+  const hasTeamSection = options.includeTeamSummary||options.includeTeamQualifiers||options.includeTopPRs||options.includeTeamRankings||options.includeTeamScores||options.includeTeamAwards||options.includeTeamTop6;
   if(hasTeamSection) {
     body += '<div class="team-page">';
     const gm = options.genderMode || 'all';
@@ -8102,6 +8230,32 @@ const buildSeasonReportHTML = (data, events, season, team, athletes, options, fe
             const svg = makeProgressionSVG(r.points, { width:540, height:140, formatY:fmt });
             body += `<div class="chart-row"><div class="chart-label">${esc(getEventLabel(r.evt))}</div>${svg}</div>`;
           });
+        }
+      }
+
+      if(options.includeAthleteAwards) {
+        const aw = computeAthleteAwards(data, events, a.id, start, end);
+        if(aw.length) {
+          body += '<h3>Awards</h3>';
+          body += '<div style="display:flex;flex-wrap:wrap;gap:6;margin-bottom:8px">';
+          aw.forEach(({award, count}) => {
+            const bg = safeHexToRgba(award.color||'#c9a830', 0.14);
+            body += `<span style="display:inline-block;font-size:10px;font-weight:700;padding:3px 10px;border-radius:11px;background:${bg};color:${award.color||'#c9a830'};border:1px solid ${award.color||'#c9a830'}" title="${esc(award.description||'')}">${esc(award.name)}${count>1?` ×${count}`:''}</span>`;
+          });
+          body += '</div>';
+        }
+      }
+
+      if(options.includeAthleteTop6) {
+        const top6 = computeAthleteTop6(data, a.id, start, end);
+        if(top6.total>0) {
+          const ord = (n) => { if(!n||isNaN(n)) return ''; const s=['th','st','nd','rd'],v=n%100; return n+(s[(v-20)%10]||s[v]||s[0]); };
+          body += '<h3>Top 6 Finishes</h3>';
+          body += '<table style="margin-bottom:8px"><thead><tr>';
+          for(let p=1;p<=6;p++) body += `<th style="text-align:center;width:40px">${ord(p)}</th>`;
+          body += '<th style="text-align:center;width:50px">Total</th></tr></thead><tbody><tr>';
+          for(let p=1;p<=6;p++) body += `<td style="text-align:center;${top6.tally[p]>0?'font-weight:700':''}">${top6.tally[p]||'·'}</td>`;
+          body += `<td style="text-align:center;font-weight:700;color:${primary}">${top6.total}</td></tr></tbody></table>`;
         }
       }
 
@@ -8278,18 +8432,28 @@ function ReportBuilderModal({ open, onClose, data, save, events, season, team, p
           <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,padding:'3px 0',cursor:'pointer'}}>
             <input type="checkbox" checked={!!opts.includeTeamScores} onChange={()=>toggle('includeTeamScores')} />
             <span>Team scores & places by meet</span>
-            <label style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:4,fontSize:11,color:C.textMuted,cursor:'pointer'}} title="Group meets by a hierarchy level or by tag">
-              <input type="checkbox" checked={!!opts.teamScoresGroupByCategory} onChange={()=>toggle('teamScoresGroupByCategory')} disabled={!opts.includeTeamScores} />
-              Group by
-              <select value={opts.teamScoresGroupBy||'tag'} onChange={e=>{dirtyRef.current=true;setSaveStatus('dirty');setOpts(o=>({...o,teamScoresGroupBy:e.target.value}));}} disabled={!opts.includeTeamScores||!opts.teamScoresGroupByCategory} style={{fontSize:11,padding:'1px 4px',marginLeft:2}}>
-                {getOpponentDimensions(data).map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
+          </label>
+          {opts.includeTeamScores && <div style={{marginLeft:22,marginBottom:6,padding:'6px 8px',background:C.bg,borderRadius:5,display:'flex',flexDirection:'column',gap:4}}>
+            <label style={{display:'flex',alignItems:'center',gap:6,fontSize:11,color:C.textSecondary,cursor:'pointer'}}>
+              <input type="checkbox" checked={!!opts.teamScoresSelfOnly} onChange={()=>toggle('teamScoresSelfOnly')} />
+              Show only our team's finish <span style={{color:C.textMuted,fontStyle:'italic'}}>(compact line per side; hides the full standings table)</span>
+            </label>
+            <label style={{display:'flex',alignItems:'center',gap:6,fontSize:11,color:C.textSecondary,cursor:'pointer'}} title="Split meets into 'In our [dim]' (faced at least one opponent with our team's value) and 'Outside our [dim]'">
+              <input type="checkbox" checked={!!opts.teamScoresGroupByCategory} onChange={()=>toggle('teamScoresGroupByCategory')} />
+              Split by
+              <select value={opts.teamScoresGroupBy||'tag'} onChange={e=>{dirtyRef.current=true;setSaveStatus('dirty');setOpts(o=>({...o,teamScoresGroupBy:e.target.value}));}} disabled={!opts.teamScoresGroupByCategory} style={{fontSize:11,padding:'1px 4px',marginLeft:2}}>
+                {getOpponentDimensions(data).map(d=><option key={d.id} value={d.id}>In our {d.name} vs Outside</option>)}
                 <option value="tag">Meet tag</option>
               </select>
             </label>
-          </label>
+          </div>}
+          {sectionToggle('includeTeamAwards','Awards (leaderboard)')}
+          {sectionToggle('includeTeamTop6','Top 6 finishes tally')}
           <div style={{fontSize:10,color:C.textMuted,textTransform:'uppercase',fontWeight:600,marginTop:8,marginBottom:2}}>Per-athlete pages</div>
           {sectionToggle('includeAthletePages','Per-athlete pages')}
           {sectionToggle('includeAthleteSummary','Athlete summary tiles')}
+          {sectionToggle('includeAthleteAwards','Awards earned')}
+          {sectionToggle('includeAthleteTop6','Top 6 tally')}
           {sectionToggle('includeEventTable','By-event table')}
           {sectionToggle('includePerMeetResults','Meet-by-meet results')}
           {sectionToggle('includeProgression','Progression charts w/ trendline')}
@@ -8458,8 +8622,8 @@ function SeasonResultsPage({ data, save, nav, events, getAthletePR, season, team
       </div>
       <ReportBuilderModal open={showReport} onClose={()=>setShowReport(false)} data={data} save={save} events={events} season={season} team={team} presetAthleteIds={null} />
       <div style={{display:'flex',gap:0,marginBottom:12,borderBottom:`2px solid ${C.border}`}}>
-        {['events','athletes','standards'].map(t=>(
-          <button key={t} style={{padding:'10px 20px',fontSize:13,fontWeight:600,border:'none',borderBottom:tab===t?`3px solid ${C.accent}`:'3px solid transparent',background:'none',color:tab===t?C.accent:C.textMuted,cursor:'pointer',textTransform:'uppercase',letterSpacing:'0.04em'}} onClick={()=>setTab(t)}>{t==='events'?'By Event':t==='athletes'?'By Athlete':'By Standard'}</button>
+        {['events','athletes','standards','awards'].map(t=>(
+          <button key={t} style={{padding:'10px 20px',fontSize:13,fontWeight:600,border:'none',borderBottom:tab===t?`3px solid ${C.accent}`:'3px solid transparent',background:'none',color:tab===t?C.accent:C.textMuted,cursor:'pointer',textTransform:'uppercase',letterSpacing:'0.04em'}} onClick={()=>setTab(t)}>{t==='events'?'By Event':t==='athletes'?'By Athlete':t==='standards'?'By Standard':'Awards'}</button>
         ))}
       </div>
       {filterBar}
@@ -8830,6 +8994,58 @@ function SeasonResultsPage({ data, save, nav, events, getAthletePR, season, team
           })}
         </div>);
       })()}
+      {tab==='awards' && (()=>{
+        const startDate = season ? season.startDate : null;
+        const endDate = season ? season.endDate : null;
+        const awards = data.awards||[];
+        const filteredAthletes = activeAthletes.filter(athMatch);
+        const ordinal = (n) => { if(!n||isNaN(n)) return ''; const s=['th','st','nd','rd'],v=n%100; return n+(s[(v-20)%10]||s[v]||s[0]); };
+        const rows = filteredAthletes.map(a => {
+          const aw = computeAthleteAwards(data, events, a.id, startDate, endDate);
+          const top6 = computeAthleteTop6(data, a.id, startDate, endDate);
+          return { athlete:a, awards:aw, top6 };
+        }).filter(r => r.awards.length>0 || r.top6.total>0)
+          .sort((x,y)=>{
+            const ax = x.top6.tally[1]||0, ay = y.top6.tally[1]||0;
+            if(ax!==ay) return ay-ax;
+            if(x.top6.total!==y.top6.total) return y.top6.total - x.top6.total;
+            return athLast(x.athlete).localeCompare(athLast(y.athlete));
+          });
+        return (<div>
+          {awards.length===0 && <div style={{...S.card,padding:16,color:C.textMuted,fontSize:12,marginBottom:12,fontStyle:'italic'}}>No award rules defined yet. Set them up in Settings → Awards. The Top 6 tally below shows automatically.</div>}
+          <div style={{...S.card,padding:'12px 14px',marginBottom:14}}>
+            <div style={{fontSize:13,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:8}}>Top 6 Finishes (Season)</div>
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+              <thead><tr>
+                <th style={{...S.th,textAlign:'left'}}>Athlete</th>
+                {[1,2,3,4,5,6].map(p=><th key={p} style={{...S.th,width:42,textAlign:'center'}}>{ordinal(p)}</th>)}
+                <th style={{...S.th,width:50,textAlign:'center'}}>Total</th>
+                <th style={{...S.th,textAlign:'left'}}>Awards</th>
+              </tr></thead>
+              <tbody>
+                {rows.length===0 ? (
+                  <tr><td colSpan={9} style={{...S.td,textAlign:'center',color:C.textMuted,fontStyle:'italic',padding:12}}>No top-6 finishes or awards recorded this season yet.</td></tr>
+                ) : rows.map(({athlete, awards:aw, top6})=>(
+                  <tr key={athlete.id} style={{cursor:'pointer'}} onClick={()=>nav('athleteSub',{athleteId:athlete.id})}>
+                    <td style={{...S.td,fontWeight:600}}>{athDisplay(athlete)}{athlete.gradYear?<span style={{color:C.textMuted,fontWeight:400,marginLeft:4,fontSize:10}}>'{(athlete.gradYear+'').slice(-2)}</span>:''}</td>
+                    {[1,2,3,4,5,6].map(p=>(
+                      <td key={p} style={{...S.td,textAlign:'center',color:top6.tally[p]>0?C.text:C.borderLight,fontWeight:top6.tally[p]>0?700:400}}>{top6.tally[p]||'·'}</td>
+                    ))}
+                    <td style={{...S.td,textAlign:'center',fontWeight:700,color:C.accent}}>{top6.total}</td>
+                    <td style={S.td}>
+                      <div style={{display:'flex',flexWrap:'wrap',gap:3}}>
+                        {aw.map(({award, count})=>(
+                          <span key={award.id} style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:9,background:safeHexToRgba(award.color||'#c9a830',0.15),color:award.color||'#c9a830',border:`1px solid ${award.color||'#c9a830'}`}} title={award.description||''}>{award.name}{count>1?` ×${count}`:''}</span>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>);
+      })()}
     </div>
   );
 }
@@ -8972,6 +9188,10 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
   const [collapsedDimensions, setCollapsedDimensions] = useState({});
   const [collapsedOppSections, setCollapsedOppSections] = useState({});
   const [collapsedStdTypeIds, setCollapsedStdTypeIds] = useState({});
+  const [showAddAward, setShowAddAward] = useState(false);
+  const [editAwardId, setEditAwardId] = useState(null);
+  const [delAwardId, setDelAwardId] = useState(null);
+  const [awardForm, setAwardForm] = useState({ name:'', color:'#c9a830', description:'', criteria:{ type:'place', places:[1], meetTagFilter:[], meetTypeIds:[], standardName:'' } });
   const [oppSearch, setOppSearch] = useState('');
   const [oppFilters, setOppFilters] = useState({});
   const [oppSortDir, setOppSortDir] = useState('asc');
@@ -9016,7 +9236,7 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
   return (
     <div>
       <div style={{display:'flex',gap:4,marginBottom:16,flexWrap:'wrap'}}>
-        {[['seasons','Seasons'],['branding','Branding'],['meetTypes','Meet Types'],['opponents','Opponents'],['eventOrder','Event Order'],['standards','Standards'],['records','Records'],['team','Team'],['data','Data']].map(([k,l])=>(
+        {[['seasons','Seasons'],['branding','Branding'],['meetTypes','Meet Types'],['opponents','Opponents'],['eventOrder','Event Order'],['standards','Standards'],['awards','Awards'],['records','Records'],['team','Team'],['data','Data']].map(([k,l])=>(
           <button key={k} style={S.pill(tab===k)} onClick={()=>setTab(k)}>{l}</button>
         ))}
       </div>
@@ -9702,6 +9922,124 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
         </div>);
       })()}
       
+      {tab==='awards' && (()=>{
+        const awards = data.awards||[];
+        const knownTags = collectKnownTags(data);
+        const meetTypes = data.meetTypes||[];
+        const stdLabels = getReportStdLabels(data);
+        const saveAward = () => {
+          if(!awardForm.name.trim()) return;
+          const c = awardForm.criteria || {};
+          const cleanCrit = c.type === 'standard'
+            ? { type:'standard', standardName:(c.standardName||'').trim() }
+            : { type:'place', places:(c.places||[]).filter(p=>p>=1&&p<=20), meetTagFilter:(c.meetTagFilter||[]).filter(Boolean), meetTypeIds:(c.meetTypeIds||[]).filter(Boolean) };
+          const clean = { name:awardForm.name.trim(), color:awardForm.color||'#c9a830', description:(awardForm.description||'').trim(), criteria:cleanCrit };
+          const raw = data.awards||[];
+          if(editAwardId) save({...data, awards:raw.map(a=>a.id===editAwardId?{...a,...clean}:a)});
+          else save({...data, awards:[...raw,{id:uid(),...clean}]});
+          setShowAddAward(false); setEditAwardId(null); setAwardForm({ name:'', color:'#c9a830', description:'', criteria:{ type:'place', places:[1], meetTagFilter:[], meetTypeIds:[], standardName:'' } });
+        };
+        const deleteAward = () => { save({...data, awards:(data.awards||[]).filter(a=>a.id!==delAwardId)}); setDelAwardId(null); };
+        const togglePlace = (p) => {
+          const cur = awardForm.criteria.places||[];
+          const next = cur.includes(p) ? cur.filter(x=>x!==p) : [...cur, p].sort((a,b)=>a-b);
+          setAwardForm({...awardForm, criteria:{...awardForm.criteria, places:next}});
+        };
+        const criterionLabel = (a) => {
+          const c = a.criteria||{};
+          if(c.type === 'place') {
+            const plist = (c.places||[]).sort((x,y)=>x-y).join(', ');
+            const filters = [];
+            if((c.meetTagFilter||[]).length) filters.push(`tag: ${c.meetTagFilter.join(', ')}`);
+            if((c.meetTypeIds||[]).length) filters.push(`type: ${c.meetTypeIds.map(id=>(meetTypes.find(t=>t.id===id)||{}).name||'?').join(', ')}`);
+            return `Place ${plist||'—'}${filters.length?` · ${filters.join(' · ')}`:''}`;
+          }
+          if(c.type === 'standard') return `Qualified: ${c.standardName||'—'}`;
+          return '—';
+        };
+        return (<div>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6,gap:8,flexWrap:'wrap'}}>
+            <h2 style={{...S.h2,margin:0}}>Awards</h2>
+            <button style={{...S.btn,...S.btnPrimary}} onClick={()=>{setAwardForm({ name:'', color:'#c9a830', description:'', criteria:{ type:'place', places:[1], meetTagFilter:[], meetTypeIds:[], standardName:'' } });setEditAwardId(null);setShowAddAward(true);}}>+ Add Award</button>
+          </div>
+          <p style={{fontSize:12,color:C.textMuted,marginBottom:14}}>Define award rules; the app auto-applies them by walking each athlete's season results. Awards (and their tallies) appear on the Season Results → Awards tab and on the End-of-Season report.</p>
+          {awards.length===0 ? (
+            <div style={{...S.card,textAlign:'center',color:C.textMuted,padding:20,fontSize:12}}>No awards yet. Use "+ Add Award" to define your first rule (e.g. "Top 3 at Championship", "Qualified for State").</div>
+          ) : awards.map(a=>(
+            <div key={a.id} style={{...S.card,display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 14px',marginBottom:6,borderLeft:`4px solid ${a.color||'#c9a830'}`}}>
+              <div style={{minWidth:0,flex:1}}>
+                <div style={{fontSize:13,fontWeight:700,color:a.color||'#c9a830'}}>{a.name}</div>
+                <div style={{fontSize:11,color:C.textSecondary,marginTop:2}}>{criterionLabel(a)}</div>
+                {a.description && <div style={{fontSize:11,color:C.textMuted,marginTop:2,fontStyle:'italic'}}>{a.description}</div>}
+              </div>
+              <div style={{display:'flex',gap:4}}>
+                <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'3px 10px'}} onClick={()=>{setAwardForm({...a, criteria:{type:'place',places:[],meetTagFilter:[],meetTypeIds:[],standardName:'',...(a.criteria||{})}});setEditAwardId(a.id);setShowAddAward(true);}}>Edit</button>
+                <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12}} onClick={()=>setDelAwardId(a.id)}>✕</button>
+              </div>
+            </div>
+          ))}
+
+          <Modal open={showAddAward} onClose={()=>{setShowAddAward(false);setEditAwardId(null);}} width={520}>
+            <h2 style={S.h2}>{editAwardId?'Edit':'Add'} Award</h2>
+            <div style={{display:'flex',flexDirection:'column',gap:12,marginTop:16}}>
+              <div><label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Name</label><input style={S.input} placeholder="e.g. League Champion" value={awardForm.name} onChange={e=>setAwardForm({...awardForm,name:e.target.value})} /></div>
+              <div>
+                <label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Color</label>
+                <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>{['#c9a830','#c53030','#2b6cb0','#25763b','#6b46c1','#c96a1f','#d53f8c','#0d9488','#374151'].map(clr=>(
+                  <button key={clr} type="button" style={{width:24,height:24,borderRadius:6,border:awardForm.color===clr?'3px solid #1a1e26':`2px solid ${clr}40`,background:clr,cursor:'pointer',padding:0}} onClick={()=>setAwardForm({...awardForm,color:clr})} />
+                ))}</div>
+              </div>
+              <div><label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Description <span style={{color:C.textMuted,fontWeight:400}}>(optional)</span></label><input style={S.input} placeholder="e.g. Won the conference championship" value={awardForm.description} onChange={e=>setAwardForm({...awardForm,description:e.target.value})} /></div>
+              <div>
+                <label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Criteria type</label>
+                <select style={{...S.select,width:'100%'}} value={awardForm.criteria.type} onChange={e=>setAwardForm({...awardForm,criteria:{...awardForm.criteria,type:e.target.value}})}>
+                  <option value="place">Place at meet</option>
+                  <option value="standard">Qualified for a standard</option>
+                </select>
+              </div>
+              {awardForm.criteria.type==='place' && (<>
+                <div>
+                  <label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Places that qualify</label>
+                  <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>{[1,2,3,4,5,6,7,8].map(p=>{
+                    const on = (awardForm.criteria.places||[]).includes(p);
+                    return <button key={p} type="button" onClick={()=>togglePlace(p)} style={{...S.btn,fontSize:12,padding:'4px 12px',background:on?C.accent:'transparent',color:on?'#fff':C.textSecondary,border:`1px solid ${on?C.accent:C.border}`,minWidth:36}}>{p}</button>;
+                  })}</div>
+                </div>
+                {knownTags.length>0 && (
+                  <div>
+                    <label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Only at meets with these tags <span style={{color:C.textMuted,fontWeight:400}}>(empty = any)</span></label>
+                    <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>{knownTags.map(t=>{
+                      const on = (awardForm.criteria.meetTagFilter||[]).includes(t);
+                      return <button key={t} type="button" onClick={()=>{const cur=awardForm.criteria.meetTagFilter||[];const next=on?cur.filter(x=>x!==t):[...cur,t];setAwardForm({...awardForm,criteria:{...awardForm.criteria,meetTagFilter:next}});}} style={{...S.btn,fontSize:11,padding:'3px 9px',background:on?C.accent:'transparent',color:on?'#fff':C.textSecondary,border:`1px solid ${on?C.accent:C.border}`}}>{t}</button>;
+                    })}</div>
+                  </div>
+                )}
+                {meetTypes.length>0 && (
+                  <div>
+                    <label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Only at meet types <span style={{color:C.textMuted,fontWeight:400}}>(empty = any)</span></label>
+                    <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>{meetTypes.map(t=>{
+                      const on = (awardForm.criteria.meetTypeIds||[]).includes(t.id);
+                      return <button key={t.id} type="button" onClick={()=>{const cur=awardForm.criteria.meetTypeIds||[];const next=on?cur.filter(x=>x!==t.id):[...cur,t.id];setAwardForm({...awardForm,criteria:{...awardForm.criteria,meetTypeIds:next}});}} style={{...S.btn,fontSize:11,padding:'3px 9px',background:on?C.accent:'transparent',color:on?'#fff':C.textSecondary,border:`1px solid ${on?C.accent:C.border}`}}>{t.name}</button>;
+                    })}</div>
+                  </div>
+                )}
+              </>)}
+              {awardForm.criteria.type==='standard' && (
+                <div>
+                  <label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Standard</label>
+                  <select style={{...S.select,width:'100%'}} value={awardForm.criteria.standardName||''} onChange={e=>setAwardForm({...awardForm,criteria:{...awardForm.criteria,standardName:e.target.value}})}>
+                    <option value="">— pick a standard</option>
+                    {stdLabels.map(l=><option key={l} value={l}>{l}</option>)}
+                  </select>
+                </div>
+              )}
+              <button style={{...S.btn,...S.btnPrimary}} onClick={saveAward} disabled={!awardForm.name.trim()}>{editAwardId?'Save':'Add Award'}</button>
+            </div>
+          </Modal>
+          <ConfirmModal open={!!delAwardId} onClose={()=>setDelAwardId(null)} onConfirm={deleteAward} message="Delete this award rule? Any places it auto-marked will no longer be highlighted." />
+        </div>);
+      })()}
+
       {tab==='records' && (<div>
         <h2 style={{...S.h2,marginBottom:12}}>School Records - All Events</h2>
         <div style={S.card}>

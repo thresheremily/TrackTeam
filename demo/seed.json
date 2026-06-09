@@ -1,0 +1,313 @@
+{
+  "_team": {
+    "name": "Lincoln Track & Field",
+    "school": "Lincoln High School",
+    "colors": { "primary": "#c96a1f", "secondary": "#1a1e26" }
+  },
+  "seasons": [
+    { "id": "seas_spring2026", "name": "Spring 2026", "startDate": "2026-03-01", "endDate": "2026-06-15", "isActive": true }
+  ],
+  "meetTypes": [
+    { "id": "mt_league", "name": "League", "qualifying": false },
+    { "id": "mt_invite", "name": "Invitational", "qualifying": false },
+    { "id": "mt_champ", "name": "Championship", "qualifying": false },
+    { "id": "mt_sect", "name": "Sectionals", "qualifying": true }
+  ],
+  "events": [
+    { "id": "ev_100b", "name": "100m", "eventType": "Track", "entryType": "Individual", "gender": "Boy", "trackType": "Outdoor", "measurableType": "Time", "qualifyingStandards": [{"id":"std_100b_state","name":"State Qualifier - FAT","timeMs":11200},{"id":"std_100b_league","name":"League Qualifier","timeMs":11600}], "schoolRecords": [] },
+    { "id": "ev_100g", "name": "100m", "eventType": "Track", "entryType": "Individual", "gender": "Girl", "trackType": "Outdoor", "measurableType": "Time", "qualifyingStandards": [{"id":"std_100g_state","name":"State Qualifier - FAT","timeMs":12700},{"id":"std_100g_league","name":"League Qualifier","timeMs":13200}], "schoolRecords": [] },
+    { "id": "ev_200b", "name": "200m", "eventType": "Track", "entryType": "Individual", "gender": "Boy", "trackType": "Outdoor", "measurableType": "Time", "qualifyingStandards": [{"id":"std_200b_state","name":"State Qualifier - FAT","timeMs":22800}], "schoolRecords": [] },
+    { "id": "ev_200g", "name": "200m", "eventType": "Track", "entryType": "Individual", "gender": "Girl", "trackType": "Outdoor", "measurableType": "Time", "qualifyingStandards": [{"id":"std_200g_state","name":"State Qualifier - FAT","timeMs":26500}], "schoolRecords": [] },
+    { "id": "ev_400b", "name": "400m", "eventType": "Track", "entryType": "Individual", "gender": "Boy", "trackType": "Outdoor", "measurableType": "Time", "qualifyingStandards": [{"id":"std_400b_state","name":"State Qualifier - FAT","timeMs":51500}], "schoolRecords": [] },
+    { "id": "ev_400g", "name": "400m", "eventType": "Track", "entryType": "Individual", "gender": "Girl", "trackType": "Outdoor", "measurableType": "Time", "qualifyingStandards": [], "schoolRecords": [] },
+    { "id": "ev_800b", "name": "800m", "eventType": "Track", "entryType": "Individual", "gender": "Boy", "trackType": "Outdoor", "measurableType": "Time", "qualifyingStandards": [{"id":"std_800b_state","name":"State Qualifier - FAT","timeMs":120000},{"id":"std_800b_section","name":"Section Qualifier","timeMs":124000}], "schoolRecords": [] },
+    { "id": "ev_800g", "name": "800m", "eventType": "Track", "entryType": "Individual", "gender": "Girl", "trackType": "Outdoor", "measurableType": "Time", "qualifyingStandards": [{"id":"std_800g_state","name":"State Qualifier - FAT","timeMs":141000}], "schoolRecords": [] },
+    { "id": "ev_1600b", "name": "1600m", "eventType": "Track", "entryType": "Individual", "gender": "Boy", "trackType": "Outdoor", "measurableType": "Time", "qualifyingStandards": [{"id":"std_1600b_state","name":"State Qualifier - FAT","timeMs":260000}], "schoolRecords": [] },
+    { "id": "ev_1600g", "name": "1600m", "eventType": "Track", "entryType": "Individual", "gender": "Girl", "trackType": "Outdoor", "measurableType": "Time", "qualifyingStandards": [{"id":"std_1600g_state","name":"State Qualifier - FAT","timeMs":305000}], "schoolRecords": [] },
+    { "id": "ev_3200b", "name": "3200m", "eventType": "Track", "entryType": "Individual", "gender": "Boy", "trackType": "Outdoor", "measurableType": "Time", "qualifyingStandards": [{"id":"std_3200b_state","name":"State Qualifier - FAT","timeMs":580000}], "schoolRecords": [] },
+    { "id": "ev_3200g", "name": "3200m", "eventType": "Track", "entryType": "Individual", "gender": "Girl", "trackType": "Outdoor", "measurableType": "Time", "qualifyingStandards": [], "schoolRecords": [] },
+    { "id": "ev_110hb", "name": "110m Hurdles", "eventType": "Track", "entryType": "Individual", "gender": "Boy", "trackType": "Outdoor", "measurableType": "Time", "qualifyingStandards": [{"id":"std_110hb_state","name":"State Qualifier - FAT","timeMs":15600}], "schoolRecords": [] },
+    { "id": "ev_100hg", "name": "100m Hurdles", "eventType": "Track", "entryType": "Individual", "gender": "Girl", "trackType": "Outdoor", "measurableType": "Time", "qualifyingStandards": [{"id":"std_100hg_state","name":"State Qualifier - FAT","timeMs":16200}], "schoolRecords": [] },
+    { "id": "ev_400hb", "name": "400m Hurdles", "eventType": "Track", "entryType": "Individual", "gender": "Boy", "trackType": "Outdoor", "measurableType": "Time", "qualifyingStandards": [], "schoolRecords": [] },
+    { "id": "ev_400hg", "name": "400m Hurdles", "eventType": "Track", "entryType": "Individual", "gender": "Girl", "trackType": "Outdoor", "measurableType": "Time", "qualifyingStandards": [], "schoolRecords": [] },
+    { "id": "ev_ljb", "name": "Long Jump", "eventType": "Field", "entryType": "Individual", "gender": "Boy", "trackType": "Outdoor", "measurableType": "Length", "qualifyingStandards": [{"id":"std_ljb_state","name":"State Qualifier - FAT","ft":21,"inch":6,"qtr":0}], "schoolRecords": [] },
+    { "id": "ev_ljg", "name": "Long Jump", "eventType": "Field", "entryType": "Individual", "gender": "Girl", "trackType": "Outdoor", "measurableType": "Length", "qualifyingStandards": [{"id":"std_ljg_state","name":"State Qualifier - FAT","ft":17,"inch":0,"qtr":0}], "schoolRecords": [] },
+    { "id": "ev_tjb", "name": "Triple Jump", "eventType": "Field", "entryType": "Individual", "gender": "Boy", "trackType": "Outdoor", "measurableType": "Length", "qualifyingStandards": [], "schoolRecords": [] },
+    { "id": "ev_hjg", "name": "High Jump", "eventType": "Field", "entryType": "Individual", "gender": "Girl", "trackType": "Outdoor", "measurableType": "Length", "qualifyingStandards": [{"id":"std_hjg_state","name":"State Qualifier - FAT","ft":5,"inch":0,"qtr":0}], "schoolRecords": [] },
+    { "id": "ev_spb", "name": "Shot Put", "eventType": "Field", "entryType": "Individual", "gender": "Boy", "trackType": "Outdoor", "measurableType": "Length", "qualifyingStandards": [{"id":"std_spb_state","name":"State Qualifier - FAT","ft":48,"inch":0,"qtr":0}], "schoolRecords": [] },
+    { "id": "ev_spg", "name": "Shot Put", "eventType": "Field", "entryType": "Individual", "gender": "Girl", "trackType": "Outdoor", "measurableType": "Length", "qualifyingStandards": [{"id":"std_spg_state","name":"State Qualifier - FAT","ft":36,"inch":0,"qtr":0}], "schoolRecords": [] },
+    { "id": "ev_dscb", "name": "Discus", "eventType": "Field", "entryType": "Individual", "gender": "Boy", "trackType": "Outdoor", "measurableType": "Length", "qualifyingStandards": [], "schoolRecords": [] },
+    { "id": "ev_dscg", "name": "Discus", "eventType": "Field", "entryType": "Individual", "gender": "Girl", "trackType": "Outdoor", "measurableType": "Length", "qualifyingStandards": [], "schoolRecords": [] },
+    { "id": "ev_4x100b", "name": "4x100m", "eventType": "Track", "entryType": "Relay", "gender": "Boy", "trackType": "Outdoor", "measurableType": "Time", "qualifyingStandards": [{"id":"std_4x100b_state","name":"State Qualifier - FAT","timeMs":44800}], "schoolRecords": [] },
+    { "id": "ev_4x100g", "name": "4x100m", "eventType": "Track", "entryType": "Relay", "gender": "Girl", "trackType": "Outdoor", "measurableType": "Time", "qualifyingStandards": [{"id":"std_4x100g_state","name":"State Qualifier - FAT","timeMs":51500}], "schoolRecords": [] },
+    { "id": "ev_4x400b", "name": "4x400m", "eventType": "Track", "entryType": "Relay", "gender": "Boy", "trackType": "Outdoor", "measurableType": "Time", "qualifyingStandards": [], "schoolRecords": [] },
+    { "id": "ev_4x400g", "name": "4x400m", "eventType": "Track", "entryType": "Relay", "gender": "Girl", "trackType": "Outdoor", "measurableType": "Time", "qualifyingStandards": [], "schoolRecords": [] }
+  ],
+  "athletes": [
+    { "id": "ath_carter",    "name": "Alex Carter",     "preferredName": "Alex",    "gender": "M", "gradYear": 2026, "active": true, "groups": [{"groupId":"grp_sprint","level":"Level 1"}] },
+    { "id": "ath_patel",     "name": "Maya Patel",      "preferredName": "Maya",    "gender": "F", "gradYear": 2027, "active": true, "groups": [{"groupId":"grp_sprint","level":"Level 1"}] },
+    { "id": "ath_lee",       "name": "Jordan Lee",      "preferredName": "Jordan",  "gender": "M", "gradYear": 2026, "active": true, "groups": [{"groupId":"grp_mid","level":"Level 1"}] },
+    { "id": "ath_williams",  "name": "Sam Williams",    "preferredName": "Sam",     "gender": "M", "gradYear": 2027, "active": true, "groups": [{"groupId":"grp_dist","level":"Level 1"}] },
+    { "id": "ath_chen",      "name": "Olivia Chen",     "preferredName": "Olivia",  "gender": "F", "gradYear": 2026, "active": true, "groups": [{"groupId":"grp_dist","level":"Level 1"}] },
+    { "id": "ath_brooks",    "name": "Devon Brooks",    "preferredName": "Devon",   "gender": "M", "gradYear": 2028, "active": true, "groups": [{"groupId":"grp_sprint","level":"Level 1"}] },
+    { "id": "ath_nguyen",    "name": "Riley Nguyen",    "preferredName": "Riley",   "gender": "F", "gradYear": 2027, "active": true, "groups": [{"groupId":"grp_sprint","level":"Level 1"}] },
+    { "id": "ath_martinez",  "name": "Noah Martinez",   "preferredName": "Noah",    "gender": "M", "gradYear": 2026, "active": true, "groups": [{"groupId":"grp_jump","level":"Level 1"}] },
+    { "id": "ath_thompson",  "name": "Ava Thompson",    "preferredName": "Ava",     "gender": "F", "gradYear": 2026, "active": true, "groups": [{"groupId":"grp_jump","level":"Level 1"}] },
+    { "id": "ath_garcia",    "name": "Ethan Garcia",    "preferredName": "Ethan",   "gender": "M", "gradYear": 2027, "active": true, "groups": [{"groupId":"grp_throw","level":"Level 1"}] },
+    { "id": "ath_kim",       "name": "Sophia Kim",      "preferredName": "Sophia",  "gender": "F", "gradYear": 2028, "active": true, "groups": [{"groupId":"grp_throw","level":"Level 1"}] },
+    { "id": "ath_robinson",  "name": "Tyler Robinson",  "preferredName": "Tyler",   "gender": "M", "gradYear": 2026, "active": true, "groups": [{"groupId":"grp_mid","level":"Level 1"}] }
+  ],
+  "opponentDimensions": [
+    { "id": "dim_section",  "name": "Section",  "order": 0, "values": [{"id":"val_sec1","name":"Section 1"},{"id":"val_sec2","name":"Section 2"}] },
+    { "id": "dim_class",    "name": "Class",    "order": 1, "values": [{"id":"val_aaa","name":"Class AAA"},{"id":"val_aa","name":"Class AA"}] },
+    { "id": "dim_league",   "name": "League",   "order": 2, "values": [{"id":"val_north","name":"Northern League"},{"id":"val_south","name":"Southern League"}] },
+    { "id": "dim_division", "name": "Division", "order": 3, "values": [{"id":"val_d1","name":"Division I"},{"id":"val_d2","name":"Division II"}] }
+  ],
+  "ourTeamDimensionValues": {
+    "dim_section": "val_sec1",
+    "dim_class": "val_aaa",
+    "dim_league": "val_north",
+    "dim_division": "val_d1"
+  },
+  "opponents": [
+    { "id": "op_roosevelt",  "name": "Roosevelt HS",  "dimensionValues": {"dim_section":"val_sec1","dim_class":"val_aaa","dim_league":"val_north","dim_division":"val_d1"} },
+    { "id": "op_madison",    "name": "Madison HS",    "dimensionValues": {"dim_section":"val_sec1","dim_class":"val_aaa","dim_league":"val_north","dim_division":"val_d2"} },
+    { "id": "op_jefferson",  "name": "Jefferson HS",  "dimensionValues": {"dim_section":"val_sec1","dim_class":"val_aaa","dim_league":"val_south","dim_division":"val_d1"} },
+    { "id": "op_washington", "name": "Washington HS", "dimensionValues": {"dim_section":"val_sec1","dim_class":"val_aa","dim_league":"val_north","dim_division":"val_d1"} },
+    { "id": "op_adams",      "name": "Adams HS",      "dimensionValues": {"dim_section":"val_sec1","dim_class":"val_aa","dim_league":"val_south","dim_division":"val_d2"} },
+    { "id": "op_hamilton",   "name": "Hamilton HS",   "dimensionValues": {"dim_section":"val_sec1","dim_class":"val_aaa","dim_league":"val_north","dim_division":"val_d1"} }
+  ],
+  "qualifyingStandardTypes": [
+    { "id": "stp_state",   "name": "State Qualifier",   "abbrev": "STATE",   "color": "#c53030", "subtypes": ["FAT","Hand"], "subtypeTimingTypes": {"FAT":"FAT","Hand":"Hand"}, "subtypeMinQualifiers": {"FAT":1,"Hand":1}, "minQualifiers": 1, "notes": "Top performers advance to state finals." },
+    { "id": "stp_section", "name": "Section Qualifier", "abbrev": "SECT",    "color": "#c96a1f", "subtypes": [], "timingType": "Both", "minQualifiers": 1, "notes": "" },
+    { "id": "stp_league",  "name": "League Qualifier",  "abbrev": "LEAGUE",  "color": "#2b6cb0", "subtypes": [], "timingType": "Both", "minQualifiers": 1, "notes": "" }
+  ],
+  "awards": [
+    { "id": "aw_state",    "name": "State Qualifier",    "color": "#c53030", "description": "Met a State Qualifier standard during the season.",         "criteria": { "type": "standard", "standardName": "State Qualifier - FAT" } },
+    { "id": "aw_lgchamp",  "name": "League Champion",    "color": "#c9a830", "description": "Won an event at a League Championship meet.",                 "criteria": { "type": "place", "places": [1], "meetTagFilter": ["Championship","League"], "meetTypeIds": [] } },
+    { "id": "aw_allleague","name": "All-League",         "color": "#2b6cb0", "description": "Placed in the top 3 at a League meet.",                       "criteria": { "type": "place", "places": [1,2,3], "meetTagFilter": ["League"], "meetTypeIds": [] } },
+    { "id": "aw_sect3",    "name": "Section Top 3",      "color": "#6b46c1", "description": "Top 3 finish at the Section Championship.",                   "criteria": { "type": "place", "places": [1,2,3], "meetTagFilter": [], "meetTypeIds": ["mt_sect"] } }
+  ],
+  "meets": [
+    {
+      "id": "meet_opener",
+      "name": "Spring Opener Dual",
+      "startDate": "2026-03-21",
+      "venue": "Lincoln HS Track",
+      "city": "Centerville",
+      "state": "NY",
+      "trackType": "Outdoor",
+      "timingSystem": "FAT",
+      "meetTypeId": "mt_league",
+      "tags": ["Dual"],
+      "events": [],
+      "teamScores": {
+        "mode": "split",
+        "boys": [
+          { "id": "ts_o_b1", "opponentId": "self",         "points": 95, "place": 1 },
+          { "id": "ts_o_b2", "opponentId": "op_roosevelt", "points": 78, "place": 2 }
+        ],
+        "girls": [
+          { "id": "ts_o_g1", "opponentId": "self",         "points": 88, "place": 1 },
+          { "id": "ts_o_g2", "opponentId": "op_roosevelt", "points": 85, "place": 2 }
+        ]
+      }
+    },
+    {
+      "id": "meet_trimeet",
+      "name": "Northern League Tri-Meet",
+      "startDate": "2026-04-04",
+      "venue": "Roosevelt HS Track",
+      "city": "Centerville",
+      "state": "NY",
+      "trackType": "Outdoor",
+      "timingSystem": "FAT",
+      "meetTypeId": "mt_league",
+      "tags": ["League","Dual"],
+      "events": [],
+      "teamScores": {
+        "mode": "split",
+        "boys": [
+          { "id": "ts_t_b1", "opponentId": "op_roosevelt", "points": 112, "place": 1 },
+          { "id": "ts_t_b2", "opponentId": "self",         "points": 108, "place": 2 },
+          { "id": "ts_t_b3", "opponentId": "op_madison",   "points": 86,  "place": 3 }
+        ],
+        "girls": [
+          { "id": "ts_t_g1", "opponentId": "self",         "points": 121, "place": 1 },
+          { "id": "ts_t_g2", "opponentId": "op_roosevelt", "points": 98,  "place": 2 },
+          { "id": "ts_t_g3", "opponentId": "op_madison",   "points": 89,  "place": 3 }
+        ]
+      }
+    },
+    {
+      "id": "meet_invite",
+      "name": "Bear Invitational",
+      "startDate": "2026-04-18",
+      "venue": "Washington HS Track",
+      "city": "Westfield",
+      "state": "NY",
+      "trackType": "Outdoor",
+      "timingSystem": "FAT",
+      "meetTypeId": "mt_invite",
+      "tags": ["Invitational"],
+      "events": [],
+      "teamScores": {
+        "mode": "split",
+        "boys": [
+          { "id": "ts_i_b1", "opponentId": "op_jefferson",  "points": 92, "place": 1 },
+          { "id": "ts_i_b2", "opponentId": "op_washington", "points": 78, "place": 2 },
+          { "id": "ts_i_b3", "opponentId": "self",          "points": 71, "place": 3 },
+          { "id": "ts_i_b4", "opponentId": "op_hamilton",   "points": 64, "place": 4 }
+        ],
+        "girls": [
+          { "id": "ts_i_g1", "opponentId": "self",          "points": 96, "place": 1 },
+          { "id": "ts_i_g2", "opponentId": "op_jefferson",  "points": 84, "place": 2 },
+          { "id": "ts_i_g3", "opponentId": "op_washington", "points": 75, "place": 3 },
+          { "id": "ts_i_g4", "opponentId": "op_hamilton",   "points": 62, "place": 4 }
+        ]
+      }
+    },
+    {
+      "id": "meet_lgchamp",
+      "name": "Northern League Championship",
+      "startDate": "2026-05-09",
+      "venue": "Lincoln HS Track",
+      "city": "Centerville",
+      "state": "NY",
+      "trackType": "Outdoor",
+      "timingSystem": "FAT",
+      "meetTypeId": "mt_champ",
+      "tags": ["Championship","League"],
+      "events": [],
+      "teamScores": {
+        "mode": "split",
+        "boys": [
+          { "id": "ts_l_b1", "opponentId": "op_roosevelt", "points": 138, "place": 1 },
+          { "id": "ts_l_b2", "opponentId": "self",         "points": 124, "place": 2 },
+          { "id": "ts_l_b3", "opponentId": "op_hamilton",  "points": 92,  "place": 3 },
+          { "id": "ts_l_b4", "opponentId": "op_madison",   "points": 78,  "place": 4 }
+        ],
+        "girls": [
+          { "id": "ts_l_g1", "opponentId": "self",         "points": 145, "place": 1 },
+          { "id": "ts_l_g2", "opponentId": "op_roosevelt", "points": 121, "place": 2 },
+          { "id": "ts_l_g3", "opponentId": "op_hamilton",  "points": 88,  "place": 3 },
+          { "id": "ts_l_g4", "opponentId": "op_madison",   "points": 76,  "place": 4 }
+        ]
+      }
+    },
+    {
+      "id": "meet_sect",
+      "name": "Section 1 Championship",
+      "startDate": "2026-05-23",
+      "endDate": "2026-05-24",
+      "venue": "Regional Sports Complex",
+      "city": "Capital City",
+      "state": "NY",
+      "trackType": "Outdoor",
+      "timingSystem": "FAT",
+      "meetTypeId": "mt_sect",
+      "tags": ["Championship"],
+      "events": [],
+      "teamScores": {
+        "mode": "split",
+        "boys": [
+          { "id": "ts_s_b1", "opponentId": "op_jefferson",  "points": 84, "place": 1 },
+          { "id": "ts_s_b2", "opponentId": "op_roosevelt",  "points": 72, "place": 2 },
+          { "id": "ts_s_b3", "opponentId": "self",          "points": 56, "place": 3 },
+          { "id": "ts_s_b4", "opponentId": "op_washington", "points": 41, "place": 4 },
+          { "id": "ts_s_b5", "opponentId": "op_adams",      "points": 28, "place": 5 }
+        ],
+        "girls": [
+          { "id": "ts_s_g1", "opponentId": "self",          "points": 78, "place": 1 },
+          { "id": "ts_s_g2", "opponentId": "op_jefferson",  "points": 71, "place": 2 },
+          { "id": "ts_s_g3", "opponentId": "op_roosevelt",  "points": 64, "place": 3 },
+          { "id": "ts_s_g4", "opponentId": "op_washington", "points": 39, "place": 4 },
+          { "id": "ts_s_g5", "opponentId": "op_adams",      "points": 25, "place": 5 }
+        ]
+      }
+    }
+  ],
+  "results": [
+    { "id":"r1",  "athleteId":"ath_carter",   "eventId":"ev_100b",  "meetId":"meet_opener",  "date":"2026-03-21", "timeMs":11420, "place":1 },
+    { "id":"r2",  "athleteId":"ath_carter",   "eventId":"ev_200b",  "meetId":"meet_opener",  "date":"2026-03-21", "timeMs":23200, "place":1 },
+    { "id":"r3",  "athleteId":"ath_patel",    "eventId":"ev_100g",  "meetId":"meet_opener",  "date":"2026-03-21", "timeMs":13050, "place":1 },
+    { "id":"r4",  "athleteId":"ath_patel",    "eventId":"ev_200g",  "meetId":"meet_opener",  "date":"2026-03-21", "timeMs":27100, "place":2 },
+    { "id":"r5",  "athleteId":"ath_lee",      "eventId":"ev_800b",  "meetId":"meet_opener",  "date":"2026-03-21", "timeMs":122500, "place":1 },
+    { "id":"r6",  "athleteId":"ath_williams", "eventId":"ev_1600b", "meetId":"meet_opener",  "date":"2026-03-21", "timeMs":268000, "place":2 },
+    { "id":"r7",  "athleteId":"ath_chen",     "eventId":"ev_1600g", "meetId":"meet_opener",  "date":"2026-03-21", "timeMs":312000, "place":1 },
+    { "id":"r8",  "athleteId":"ath_brooks",   "eventId":"ev_110hb", "meetId":"meet_opener",  "date":"2026-03-21", "timeMs":16100, "place":1 },
+    { "id":"r9",  "athleteId":"ath_nguyen",   "eventId":"ev_100hg", "meetId":"meet_opener",  "date":"2026-03-21", "timeMs":16800, "place":1 },
+    { "id":"r10", "athleteId":"ath_martinez", "eventId":"ev_ljb",   "meetId":"meet_opener",  "date":"2026-03-21", "ft":20, "inch":4, "qtr":0, "place":1 },
+    { "id":"r11", "athleteId":"ath_thompson", "eventId":"ev_hjg",   "meetId":"meet_opener",  "date":"2026-03-21", "ft":4,  "inch":10,"qtr":0, "place":1 },
+    { "id":"r12", "athleteId":"ath_garcia",   "eventId":"ev_spb",   "meetId":"meet_opener",  "date":"2026-03-21", "ft":42, "inch":6, "qtr":0, "place":1 },
+    { "id":"r13", "athleteId":"ath_kim",      "eventId":"ev_spg",   "meetId":"meet_opener",  "date":"2026-03-21", "ft":34, "inch":2, "qtr":0, "place":2 },
+    { "id":"r14", "athleteId":"ath_robinson", "eventId":"ev_400b",  "meetId":"meet_opener",  "date":"2026-03-21", "timeMs":53200, "place":2 },
+
+    { "id":"r15", "athleteId":"ath_carter",   "eventId":"ev_100b",  "meetId":"meet_trimeet", "date":"2026-04-04", "timeMs":11280, "place":1 },
+    { "id":"r16", "athleteId":"ath_patel",    "eventId":"ev_100g",  "meetId":"meet_trimeet", "date":"2026-04-04", "timeMs":12950, "place":1 },
+    { "id":"r17", "athleteId":"ath_patel",    "eventId":"ev_200g",  "meetId":"meet_trimeet", "date":"2026-04-04", "timeMs":26900, "place":1 },
+    { "id":"r18", "athleteId":"ath_lee",      "eventId":"ev_800b",  "meetId":"meet_trimeet", "date":"2026-04-04", "timeMs":121200, "place":2 },
+    { "id":"r19", "athleteId":"ath_chen",     "eventId":"ev_800g",  "meetId":"meet_trimeet", "date":"2026-04-04", "timeMs":146800, "place":2 },
+    { "id":"r20", "athleteId":"ath_chen",     "eventId":"ev_1600g", "meetId":"meet_trimeet", "date":"2026-04-04", "timeMs":308400, "place":1 },
+    { "id":"r21", "athleteId":"ath_williams", "eventId":"ev_3200b", "meetId":"meet_trimeet", "date":"2026-04-04", "timeMs":596000, "place":2 },
+    { "id":"r22", "athleteId":"ath_brooks",   "eventId":"ev_110hb", "meetId":"meet_trimeet", "date":"2026-04-04", "timeMs":15800, "place":1 },
+    { "id":"r23", "athleteId":"ath_nguyen",   "eventId":"ev_100hg", "meetId":"meet_trimeet", "date":"2026-04-04", "timeMs":16450, "place":1 },
+    { "id":"r24", "athleteId":"ath_thompson", "eventId":"ev_ljg",   "meetId":"meet_trimeet", "date":"2026-04-04", "ft":16, "inch":8, "qtr":0, "place":3 },
+    { "id":"r25", "athleteId":"ath_martinez", "eventId":"ev_ljb",   "meetId":"meet_trimeet", "date":"2026-04-04", "ft":21, "inch":2, "qtr":0, "place":1 },
+    { "id":"r26", "athleteId":"ath_garcia",   "eventId":"ev_spb",   "meetId":"meet_trimeet", "date":"2026-04-04", "ft":44, "inch":3, "qtr":0, "place":2 },
+    { "id":"r27", "athleteId":"ath_robinson", "eventId":"ev_400b",  "meetId":"meet_trimeet", "date":"2026-04-04", "timeMs":52400, "place":3 },
+
+    { "id":"r28", "isRelay":true, "eventId":"ev_4x100g", "relayAthletes":["ath_patel","ath_nguyen","ath_thompson","ath_chen"], "meetId":"meet_trimeet", "date":"2026-04-04", "timeMs":52800, "place":1, "verified":true },
+
+    { "id":"r29", "athleteId":"ath_carter",   "eventId":"ev_100b",  "meetId":"meet_invite",  "date":"2026-04-18", "timeMs":11180, "place":2 },
+    { "id":"r30", "athleteId":"ath_carter",   "eventId":"ev_200b",  "meetId":"meet_invite",  "date":"2026-04-18", "timeMs":22950, "place":3 },
+    { "id":"r31", "athleteId":"ath_patel",    "eventId":"ev_100g",  "meetId":"meet_invite",  "date":"2026-04-18", "timeMs":12780, "place":2 },
+    { "id":"r32", "athleteId":"ath_lee",      "eventId":"ev_800b",  "meetId":"meet_invite",  "date":"2026-04-18", "timeMs":120400, "place":3 },
+    { "id":"r33", "athleteId":"ath_chen",     "eventId":"ev_3200g", "meetId":"meet_invite",  "date":"2026-04-18", "timeMs":680000, "place":4 },
+    { "id":"r34", "athleteId":"ath_brooks",   "eventId":"ev_110hb", "meetId":"meet_invite",  "date":"2026-04-18", "timeMs":15500, "place":3 },
+    { "id":"r35", "athleteId":"ath_martinez", "eventId":"ev_tjb",   "meetId":"meet_invite",  "date":"2026-04-18", "ft":42, "inch":3, "qtr":0, "place":5 },
+    { "id":"r36", "athleteId":"ath_thompson", "eventId":"ev_hjg",   "meetId":"meet_invite",  "date":"2026-04-18", "ft":5,  "inch":2, "qtr":0, "place":3 },
+    { "id":"r37", "athleteId":"ath_kim",      "eventId":"ev_spg",   "meetId":"meet_invite",  "date":"2026-04-18", "ft":36, "inch":4, "qtr":0, "place":4 },
+
+    { "id":"r38", "athleteId":"ath_carter",   "eventId":"ev_100b",  "meetId":"meet_lgchamp", "date":"2026-05-09", "timeMs":11150, "place":1 },
+    { "id":"r39", "athleteId":"ath_carter",   "eventId":"ev_200b",  "meetId":"meet_lgchamp", "date":"2026-05-09", "timeMs":22650, "place":1 },
+    { "id":"r40", "athleteId":"ath_patel",    "eventId":"ev_100g",  "meetId":"meet_lgchamp", "date":"2026-05-09", "timeMs":12680, "place":1 },
+    { "id":"r41", "athleteId":"ath_patel",    "eventId":"ev_200g",  "meetId":"meet_lgchamp", "date":"2026-05-09", "timeMs":26350, "place":1 },
+    { "id":"r42", "athleteId":"ath_lee",      "eventId":"ev_800b",  "meetId":"meet_lgchamp", "date":"2026-05-09", "timeMs":119800, "place":1 },
+    { "id":"r43", "athleteId":"ath_williams", "eventId":"ev_1600b", "meetId":"meet_lgchamp", "date":"2026-05-09", "timeMs":259200, "place":1 },
+    { "id":"r44", "athleteId":"ath_williams", "eventId":"ev_3200b", "meetId":"meet_lgchamp", "date":"2026-05-09", "timeMs":579500, "place":1 },
+    { "id":"r45", "athleteId":"ath_chen",     "eventId":"ev_1600g", "meetId":"meet_lgchamp", "date":"2026-05-09", "timeMs":304500, "place":1 },
+    { "id":"r46", "athleteId":"ath_chen",     "eventId":"ev_800g",  "meetId":"meet_lgchamp", "date":"2026-05-09", "timeMs":140600, "place":1 },
+    { "id":"r47", "athleteId":"ath_brooks",   "eventId":"ev_110hb", "meetId":"meet_lgchamp", "date":"2026-05-09", "timeMs":15400, "place":1 },
+    { "id":"r48", "athleteId":"ath_nguyen",   "eventId":"ev_100hg", "meetId":"meet_lgchamp", "date":"2026-05-09", "timeMs":16100, "place":1 },
+    { "id":"r49", "athleteId":"ath_martinez", "eventId":"ev_ljb",   "meetId":"meet_lgchamp", "date":"2026-05-09", "ft":22, "inch":1, "qtr":0, "place":1 },
+    { "id":"r50", "athleteId":"ath_thompson", "eventId":"ev_hjg",   "meetId":"meet_lgchamp", "date":"2026-05-09", "ft":5,  "inch":4, "qtr":0, "place":1 },
+    { "id":"r51", "athleteId":"ath_thompson", "eventId":"ev_ljg",   "meetId":"meet_lgchamp", "date":"2026-05-09", "ft":17, "inch":2, "qtr":0, "place":2 },
+    { "id":"r52", "athleteId":"ath_garcia",   "eventId":"ev_spb",   "meetId":"meet_lgchamp", "date":"2026-05-09", "ft":48, "inch":2, "qtr":0, "place":1 },
+    { "id":"r53", "athleteId":"ath_kim",      "eventId":"ev_spg",   "meetId":"meet_lgchamp", "date":"2026-05-09", "ft":37, "inch":1, "qtr":0, "place":2 },
+    { "id":"r54", "athleteId":"ath_robinson", "eventId":"ev_400b",  "meetId":"meet_lgchamp", "date":"2026-05-09", "timeMs":51800, "place":2 },
+
+    { "id":"r55", "isRelay":true, "eventId":"ev_4x100b", "relayAthletes":["ath_carter","ath_brooks","ath_lee","ath_robinson"],  "meetId":"meet_lgchamp", "date":"2026-05-09", "timeMs":44600, "place":1, "verified":true },
+    { "id":"r56", "isRelay":true, "eventId":"ev_4x100g", "relayAthletes":["ath_patel","ath_nguyen","ath_thompson","ath_chen"],  "meetId":"meet_lgchamp", "date":"2026-05-09", "timeMs":51200, "place":1, "verified":true },
+    { "id":"r57", "isRelay":true, "eventId":"ev_4x400b", "relayAthletes":["ath_robinson","ath_lee","ath_brooks","ath_carter"],  "meetId":"meet_lgchamp", "date":"2026-05-09", "timeMs":210400, "place":1, "verified":true },
+
+    { "id":"r58", "athleteId":"ath_carter",   "eventId":"ev_100b",  "meetId":"meet_sect",    "date":"2026-05-23", "timeMs":11090, "place":2 },
+    { "id":"r59", "athleteId":"ath_carter",   "eventId":"ev_200b",  "meetId":"meet_sect",    "date":"2026-05-23", "timeMs":22480, "place":3 },
+    { "id":"r60", "athleteId":"ath_patel",    "eventId":"ev_100g",  "meetId":"meet_sect",    "date":"2026-05-23", "timeMs":12620, "place":2 },
+    { "id":"r61", "athleteId":"ath_chen",     "eventId":"ev_1600g", "meetId":"meet_sect",    "date":"2026-05-23", "timeMs":302400, "place":2 },
+    { "id":"r62", "athleteId":"ath_williams", "eventId":"ev_3200b", "meetId":"meet_sect",    "date":"2026-05-23", "timeMs":574800, "place":2 },
+    { "id":"r63", "athleteId":"ath_thompson", "eventId":"ev_hjg",   "meetId":"meet_sect",    "date":"2026-05-23", "ft":5,  "inch":6, "qtr":0, "place":1 },
+    { "id":"r64", "athleteId":"ath_garcia",   "eventId":"ev_spb",   "meetId":"meet_sect",    "date":"2026-05-23", "ft":49, "inch":5, "qtr":0, "place":1 }
+  ],
+  "attendance": [],
+  "workoutGroups": [
+    { "id": "grp_dist",   "name": "Distance",            "levels": ["Level 1"] },
+    { "id": "grp_mid",    "name": "Mid-Distance",        "levels": ["Level 1"] },
+    { "id": "grp_sprint", "name": "Sprinting",           "levels": ["Level 1"] },
+    { "id": "grp_jump",   "name": "Jumping",             "levels": ["Level 1"] },
+    { "id": "grp_throw",  "name": "Throwing",            "levels": ["Level 1"] }
+  ],
+  "workoutLibrary": [],
+  "workoutPlans": [],
+  "nearMissPct": 95
+}

@@ -212,5 +212,80 @@
     setTimeout(injectDemoButton, 500);
     // ─────────────────────────────────────────────────────────────────────────
   </script>
+
+  <script>
+    // ── Demo data seeder ─────────────────────────────────────────────────────
+    // After auth, if the demo team's data is empty, fetches seed.json and
+    // writes it directly into Firestore so the demo always boots with the
+    // full sample dataset (opponents/dimensions, awards, team scores, etc.).
+    // The user can wipe + re-seed any time via the toolbar button below.
+
+    let seedBannerEl = null;
+    function showSeedBanner(text, kind) {
+      if(!seedBannerEl) {
+        seedBannerEl = document.createElement('div');
+        seedBannerEl.style.cssText = 'position:fixed;top:44px;right:16px;z-index:10000;background:#1a1e26;color:#fff;padding:8px 14px;border-radius:6px;font-size:12px;font-family:Rubik,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,0.2);max-width:280px';
+        document.body.appendChild(seedBannerEl);
+      }
+      seedBannerEl.style.background = kind==='error' ? '#c53030' : kind==='success' ? '#25763b' : '#1a1e26';
+      seedBannerEl.textContent = text;
+      if(kind==='success') setTimeout(()=>{ if(seedBannerEl){ seedBannerEl.remove(); seedBannerEl=null; } }, 4000);
+    }
+
+    function injectReseedButton() {
+      if(document.getElementById('demo-reseed-btn')) return;
+      const banner = document.getElementById('demo-banner');
+      if(!banner) return;
+      const btn = document.createElement('button');
+      btn.id = 'demo-reseed-btn';
+      btn.textContent = '⟲ Reset demo data';
+      btn.style.cssText = 'background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:#fff;font-size:11px;font-family:Rubik,sans-serif;padding:4px 10px;border-radius:4px;cursor:pointer;margin-left:auto';
+      btn.onclick = async function(){
+        if(!confirm('Wipe the demo team and reload all sample data?')) return;
+        btn.disabled = true; btn.textContent = 'Reseeding…';
+        try { await seedDemoData(true); btn.textContent = '✓ Reseeded'; setTimeout(()=>{ btn.textContent='⟲ Reset demo data'; btn.disabled=false; location.reload(); }, 1200); }
+        catch(e){ btn.textContent = 'Error'; alert(e.message||String(e)); btn.disabled=false; }
+      };
+      banner.appendChild(btn);
+    }
+
+    async function seedDemoData(force) {
+      const user = firebase.auth().currentUser;
+      if(!user) return;
+      const db = firebase.firestore();
+      const userDoc = await db.doc('users/' + user.uid).get();
+      if(!userDoc.exists) return;
+      const teamId = (userDoc.data() || {}).teamId;
+      if(!teamId) return;
+      const dataRef = db.doc('teams/' + teamId + '/data/main');
+      if(!force) {
+        const snap = await dataRef.get();
+        if(snap.exists) {
+          const existing = snap.data() || {};
+          const athleteCount = (existing.athletes||[]).length;
+          if(athleteCount > 0) return;
+        }
+      }
+      showSeedBanner('Loading sample data…');
+      const r = await fetch('seed.json?v=' + Date.now());
+      if(!r.ok) throw new Error('Could not fetch seed.json');
+      const seed = await r.json();
+      const { _team, ...payload } = seed;
+      await dataRef.set(payload);
+      if(_team && teamId) {
+        await db.doc('teams/' + teamId).set({ name: _team.name, school: _team.school, colors: _team.colors }, { merge: true });
+      }
+      showSeedBanner('Sample data loaded ✓', 'success');
+    }
+
+    // Wait for auth then attempt one-time seed
+    firebase.auth().onAuthStateChanged(function(user){
+      if(!user) return;
+      injectReseedButton();
+      // Give the React app a moment to settle on first sign-in
+      setTimeout(() => seedDemoData(false).catch(e => showSeedBanner('Seed failed: ' + (e.message||e), 'error')), 1500);
+    });
+    // ─────────────────────────────────────────────────────────────────────────
+  </script>
 </body>
 </html>

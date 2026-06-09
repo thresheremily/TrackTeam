@@ -249,41 +249,73 @@
       banner.appendChild(btn);
     }
 
+    function makeJoinCode() {
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let code = 'TF-';
+      for(let i=0;i<5;i++) code += chars[Math.floor(Math.random()*chars.length)];
+      return code;
+    }
+
+    async function ensureDemoTeam(user, seedTeam) {
+      const db = firebase.firestore();
+      const userRef = db.doc('users/' + user.uid);
+      const userSnap = await userRef.get();
+      const existing = userSnap.exists ? userSnap.data() : null;
+      if(existing && existing.teamId) {
+        // Verify the team doc still exists; if missing (e.g. wiped manually), recreate
+        const teamSnap = await db.doc('teams/' + existing.teamId).get();
+        if(teamSnap.exists) return existing.teamId;
+      }
+      // Create a fresh team for this demo user
+      const name = (seedTeam && seedTeam.name) || 'Demo Team';
+      const school = (seedTeam && seedTeam.school) || '';
+      const colors = (seedTeam && seedTeam.colors) || { primary:'#c96a1f', secondary:'#2b6cb0' };
+      const teamRef = await db.collection('teams').add({
+        name, school, joinCode: makeJoinCode(),
+        createdBy: user.uid, createdAt: new Date().toISOString(),
+        colors, logo: '',
+        members: { [user.uid]: { email: user.email||'demo@trackteam.app', name: user.displayName||'Demo Coach', role: 'coach' } }
+      });
+      await userRef.set({ teamId: teamRef.id, email: user.email||'demo@trackteam.app', name: user.displayName||'Demo Coach' }, { merge: true });
+      return teamRef.id;
+    }
+
     async function seedDemoData(force) {
       const user = firebase.auth().currentUser;
       if(!user) return;
       const db = firebase.firestore();
-      const userDoc = await db.doc('users/' + user.uid).get();
-      if(!userDoc.exists) return;
-      const teamId = (userDoc.data() || {}).teamId;
-      if(!teamId) return;
+      const r = await fetch('seed.json?v=' + Date.now());
+      if(!r.ok) throw new Error('Could not fetch seed.json');
+      const seed = await r.json();
+      const { _team, ...payload } = seed;
+      const teamId = await ensureDemoTeam(user, _team);
       const dataRef = db.doc('teams/' + teamId + '/data/main');
       if(!force) {
         const snap = await dataRef.get();
         if(snap.exists) {
           const existing = snap.data() || {};
-          const athleteCount = (existing.athletes||[]).length;
-          if(athleteCount > 0) return;
+          if((existing.athletes||[]).length > 0) return;
         }
       }
       showSeedBanner('Loading sample data…');
-      const r = await fetch('seed.json?v=' + Date.now());
-      if(!r.ok) throw new Error('Could not fetch seed.json');
-      const seed = await r.json();
-      const { _team, ...payload } = seed;
       await dataRef.set(payload);
-      if(_team && teamId) {
+      if(_team) {
         await db.doc('teams/' + teamId).set({ name: _team.name, school: _team.school, colors: _team.colors }, { merge: true });
       }
       showSeedBanner('Sample data loaded ✓', 'success');
     }
 
-    // Wait for auth then attempt one-time seed
+    // Wait for auth then attempt one-time seed.
+    // Fire immediately — any delay lets the React Create/Join screen flash.
+    let seedRunning = false;
     firebase.auth().onAuthStateChanged(function(user){
       if(!user) return;
       injectReseedButton();
-      // Give the React app a moment to settle on first sign-in
-      setTimeout(() => seedDemoData(false).catch(e => showSeedBanner('Seed failed: ' + (e.message||e), 'error')), 1500);
+      if(seedRunning) return;
+      seedRunning = true;
+      seedDemoData(false)
+        .catch(e => { console.error('[demo seed]', e); showSeedBanner('Seed failed: ' + (e && e.message ? e.message : e), 'error'); })
+        .finally(() => { seedRunning = false; });
     });
     // ─────────────────────────────────────────────────────────────────────────
   </script>

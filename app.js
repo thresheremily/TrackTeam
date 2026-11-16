@@ -4238,6 +4238,32 @@ function AthletesPage({ data, save, nav }) {
   const [form, setForm] = useState({ firstName:'', lastName:'', preferredName:'', gradYear:'', gender:'', name:'' });
   const [delId, setDelId] = useState(null);
   const [showImport, setShowImport] = useState(false);
+  const [showRollover, setShowRollover] = useState(false);
+  const [rolloverKeep, setRolloverKeep] = useState({});
+  const [rolloverAddDraft, setRolloverAddDraft] = useState({ firstName:'', lastName:'', preferredName:'', gradYear:'', gender:'' });
+  const [rolloverExtras, setRolloverExtras] = useState([]);
+  const openRollover = () => {
+    const seeded = {};
+    (data.athletes||[]).forEach(a => { seeded[a.id] = false; });
+    setRolloverKeep(seeded);
+    setRolloverExtras([]);
+    setRolloverAddDraft({ firstName:'', lastName:'', preferredName:'', gradYear:'', gender:'' });
+    setShowRollover(true);
+  };
+  const activeSeasonForRollover = getActiveSeason(data);
+  const saveRollover = () => {
+    const existing = (data.athletes||[]).map(a => ({...a, active: !!rolloverKeep[a.id] }));
+    const additions = rolloverExtras.map(x => ({ id:uid(), name:`${x.firstName} ${x.lastName}`.trim(), firstName:x.firstName, lastName:x.lastName, preferredName:x.preferredName||'', gradYear:x.gradYear||null, gender:x.gender||'', active:true, groups:[], notes:'' }));
+    save({...data, athletes:[...existing, ...additions]});
+    setShowRollover(false);
+  };
+  const addRolloverExtra = () => {
+    if(!rolloverAddDraft.firstName.trim() && !rolloverAddDraft.lastName.trim()) return;
+    setRolloverExtras(x => [...x, {...rolloverAddDraft}]);
+    setRolloverAddDraft({ firstName:'', lastName:'', preferredName:'', gradYear:'', gender:'' });
+  };
+  const sortedAthletesForRollover = [...(data.athletes||[])].sort((a,b)=>athLast(a).localeCompare(athLast(b)));
+  const rolloverSelectedCount = Object.values(rolloverKeep).filter(Boolean).length;
   const groups = data.workoutGroups || [];
   const athletes = data.athletes.filter(a => {
     if(!showInactive && a.active === false) return false;
@@ -4280,7 +4306,8 @@ function AthletesPage({ data, save, nav }) {
           <span style={{color:'#d53f8c'}}>{data.athletes.filter(a=>a.active!==false&&a.gender==='F').length} G</span>
           {showInactive&&<span style={{color:C.textMuted}}>{data.athletes.filter(a=>a.active===false).length} inactive</span>}
         </div>
-        <div style={{display:'flex',gap:6}}>
+        <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+          <button style={{...S.btn,...S.btnSecondary}} onClick={openRollover} title="Mark all athletes inactive, then pick which ones are returning for the current season">↻ Season Rollover</button>
           <button style={{...S.btn,...S.btnSecondary}} onClick={()=>setShowImport(true)}>Import CSV</button>
           <button style={{...S.btn,...S.btnPrimary}} onClick={()=>setShowAdd(true)}>+ Add Athlete</button>
         </div>
@@ -4338,6 +4365,60 @@ function AthletesPage({ data, save, nav }) {
             </div>
           </div>
           <button style={{...S.btn,...S.btnPrimary}} onClick={addAthlete}>Add Athlete</button>
+        </div>
+      </Modal>
+      <Modal open={showRollover} onClose={()=>setShowRollover(false)} width={620}>
+        <h2 style={S.h2}>Season Rollover{activeSeasonForRollover?` — ${activeSeasonForRollover.name}`:''}</h2>
+        <p style={{fontSize:12,color:C.textMuted,marginTop:4,marginBottom:10}}>Everyone starts <strong>inactive</strong>. Check the returners for this season, add any new athletes, then save — every check becomes Active, every uncheck becomes Inactive.</p>
+        <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:8,alignItems:'center'}}>
+          <button style={{...S.btn,fontSize:11,padding:'4px 10px',background:'transparent',color:C.accent,border:`1px solid ${C.accent}`}} onClick={()=>{const next={};(data.athletes||[]).forEach(a=>{next[a.id]=true;});setRolloverKeep(next);}}>Check all</button>
+          <button style={{...S.btn,fontSize:11,padding:'4px 10px',background:'transparent',color:C.textSecondary,border:`1px solid ${C.border}`}} onClick={()=>{const next={};(data.athletes||[]).forEach(a=>{next[a.id]=false;});setRolloverKeep(next);}}>Uncheck all</button>
+          <button style={{...S.btn,fontSize:11,padding:'4px 10px',background:'transparent',color:C.textSecondary,border:`1px solid ${C.border}`}} onClick={()=>{const next={};(data.athletes||[]).forEach(a=>{next[a.id]=a.active!==false;});setRolloverKeep(next);}}>Keep current</button>
+          <span style={{marginLeft:'auto',fontSize:11,color:C.textSecondary,fontWeight:600}}>{rolloverSelectedCount + rolloverExtras.length} returning + {rolloverExtras.length} new</span>
+        </div>
+        <div style={{maxHeight:'40vh',overflowY:'auto',border:`1px solid ${C.borderLight}`,borderRadius:6,marginBottom:12}}>
+          {sortedAthletesForRollover.length===0 ? (
+            <div style={{padding:20,textAlign:'center',color:C.textMuted,fontSize:12,fontStyle:'italic'}}>No athletes on the roster yet.</div>
+          ) : sortedAthletesForRollover.map(a=>{
+            const checked = !!rolloverKeep[a.id];
+            const wasActive = a.active !== false;
+            return (
+              <label key={a.id} style={{display:'flex',alignItems:'center',gap:10,padding:'7px 12px',borderBottom:`1px solid ${C.borderLight}`,cursor:'pointer',background:checked?C.accentMuted:'transparent'}}>
+                <input type="checkbox" checked={checked} onChange={e=>setRolloverKeep(k=>({...k,[a.id]:e.target.checked}))} />
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:600,color:C.text}}>{athDisplay(a)}{a.gradYear?<span style={{color:C.textMuted,marginLeft:4,fontSize:10,fontWeight:500}}>'{(a.gradYear+'').slice(-2)}</span>:''}</div>
+                  <div style={{fontSize:10,color:C.textMuted,marginTop:1}}>{a.gender==='M'?'Boys':a.gender==='F'?'Girls':a.gender||''}{wasActive?' · currently Active':' · currently Inactive'}</div>
+                </div>
+              </label>
+            );
+          })}
+        </div>
+        <div style={{...S.card,padding:'10px 12px',marginBottom:12,background:C.bg}}>
+          <div style={{fontSize:11,fontWeight:700,color:C.textSecondary,textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:6}}>+ Add new athlete</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 70px 80px auto',gap:6,alignItems:'center'}}>
+            <input style={{...S.input,fontSize:12,padding:'5px 8px'}} placeholder="First" value={rolloverAddDraft.firstName} onChange={e=>setRolloverAddDraft(d=>({...d,firstName:e.target.value}))} />
+            <input style={{...S.input,fontSize:12,padding:'5px 8px'}} placeholder="Last" value={rolloverAddDraft.lastName} onChange={e=>setRolloverAddDraft(d=>({...d,lastName:e.target.value}))} />
+            <input style={{...S.input,fontSize:12,padding:'5px 8px'}} placeholder="Preferred (opt)" value={rolloverAddDraft.preferredName} onChange={e=>setRolloverAddDraft(d=>({...d,preferredName:e.target.value}))} />
+            <input style={{...S.input,fontSize:12,padding:'5px 8px',textAlign:'center'}} placeholder="Year" value={rolloverAddDraft.gradYear} onChange={e=>setRolloverAddDraft(d=>({...d,gradYear:e.target.value.replace(/[^0-9]/g,'')}))} />
+            <select style={{...S.select,fontSize:12,padding:'5px 6px'}} value={rolloverAddDraft.gender} onChange={e=>setRolloverAddDraft(d=>({...d,gender:e.target.value}))}>
+              <option value="">—</option><option value="M">Boys</option><option value="F">Girls</option>
+            </select>
+            <button style={{...S.btn,...S.btnPrimary,fontSize:11,padding:'5px 12px'}} onClick={addRolloverExtra} disabled={!rolloverAddDraft.firstName.trim()&&!rolloverAddDraft.lastName.trim()}>Add</button>
+          </div>
+          {rolloverExtras.length>0 && (
+            <div style={{marginTop:8,display:'flex',flexWrap:'wrap',gap:4}}>
+              {rolloverExtras.map((x,i)=>(
+                <span key={i} style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:11,padding:'3px 8px',borderRadius:12,background:C.accentMuted,color:C.accent,border:`1px solid ${C.accent}`}}>
+                  {`${x.firstName} ${x.lastName}`.trim()}{x.gender?` · ${x.gender==='M'?'B':'G'}`:''}{x.gradYear?` · '${(x.gradYear+'').slice(-2)}`:''}
+                  <button type="button" onClick={()=>setRolloverExtras(arr=>arr.filter((_,j)=>j!==i))} style={{background:'none',border:'none',color:C.accent,cursor:'pointer',fontSize:13,padding:0,lineHeight:1}}>×</button>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+        <div style={{display:'flex',justifyContent:'flex-end',gap:8}}>
+          <button style={{...S.btn,...S.btnSecondary}} onClick={()=>setShowRollover(false)}>Cancel</button>
+          <button style={{...S.btn,...S.btnPrimary}} onClick={saveRollover}>Save Roster ({rolloverSelectedCount + rolloverExtras.length} active)</button>
         </div>
       </Modal>
       <ImportModal open={showImport} onClose={()=>setShowImport(false)} type="athletes" onImport={(rows)=>{

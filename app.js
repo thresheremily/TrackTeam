@@ -708,7 +708,9 @@ const useStore = (teamId) => {
   }, [teamId]);
   return { data, save, loading, syncStatus };
 };
-const getActiveSeason = (data) => ((data||{}).seasons||[]).find(s=>s.active);
+const todayDate = () => new Date().toISOString().split('T')[0];
+const isSeasonExpired = (s) => !!(s && s.endDate && s.endDate < todayDate());
+const getActiveSeason = (data) => ((data||{}).seasons||[]).find(s => s.active && !isSeasonExpired(s));
 const isInSeason = (date, season) => {
   if(!season) return true;
   return date >= season.startDate && date <= season.endDate;
@@ -9218,6 +9220,8 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
     setShowAddSeason(false); setSeasonForm({name:'',startDate:'',endDate:'',trackType:'Outdoor',active:false});
   };
   const toggleActiveSeason = (id) => {
+    const target = (data.seasons||[]).find(s=>s.id===id);
+    if(isSeasonExpired(target)) { alert('That season is past its end date. Update the end date first, or add a new season.'); return; }
     save({...data,seasons:(data.seasons||[]).map(s=>({...s,active:s.id===id}))});
   };
   const deleteSeason = () => {
@@ -9246,20 +9250,29 @@ function SettingsPage({ data, save, team, updateTeam, user, signOut, nav }) {
           <h2 style={{...S.h2,margin:0}}>Seasons</h2>
           <button style={{...S.btn,...S.btnPrimary}} onClick={()=>setShowAddSeason(true)}>+ Add Season</button>
         </div>
-        {(data.seasons||[]).sort((a,b)=>(b.startDate||'').localeCompare(a.startDate||'')).map(s=>(
-          <div key={s.id} style={{...S.card,borderLeft:s.active?`4px solid ${C.accent}`:'4px solid transparent'}}>
+        {(data.seasons||[]).sort((a,b)=>(b.startDate||'').localeCompare(a.startDate||'')).map(s=>{
+          const expired = isSeasonExpired(s);
+          const activeNow = s.active && !expired;
+          return (
+          <div key={s.id} style={{...S.card,borderLeft:activeNow?`4px solid ${C.accent}`:expired?`4px solid ${C.borderLight}`:'4px solid transparent',opacity:expired?0.75:1}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
               <div>
-                <div style={{fontWeight:600,fontSize:14}}>{s.name}{s.active&&<span style={{fontSize:10,color:C.accent,marginLeft:8,fontWeight:700}}>ACTIVE</span>}</div>
+                <div style={{fontWeight:600,fontSize:14}}>{s.name}
+                  {activeNow && <span style={{fontSize:10,color:C.accent,marginLeft:8,fontWeight:700}}>ACTIVE</span>}
+                  {expired && <span style={{fontSize:10,color:C.textMuted,marginLeft:8,fontWeight:700}}>EXPIRED</span>}
+                  {s.active && expired && <span style={{fontSize:10,color:C.danger,marginLeft:6,fontWeight:600,fontStyle:'italic'}} title="This season is still flagged active but has passed its end date — auto-ignored.">flag lingering</span>}
+                </div>
                 <div style={{fontSize:12,color:C.textSecondary,marginTop:2}}>{s.startDate} - {s.endDate} - {s.trackType}</div>
               </div>
               <div style={{display:'flex',gap:6}}>
-                {!s.active && <button style={{...S.btn,...S.btnPrimary,fontSize:10,padding:'3px 10px'}} onClick={()=>toggleActiveSeason(s.id)}>Set Active</button>}
+                {!activeNow && !expired && <button style={{...S.btn,...S.btnPrimary,fontSize:10,padding:'3px 10px'}} onClick={()=>toggleActiveSeason(s.id)}>Set Active</button>}
+                {s.active && expired && <button style={{...S.btn,fontSize:10,padding:'3px 10px',background:'transparent',color:C.textSecondary,border:`1px solid ${C.border}`}} onClick={()=>save({...data,seasons:(data.seasons||[]).map(x=>x.id===s.id?{...x,active:false}:x)})}>Clear active flag</button>}
                 <button style={{background:'none',border:'none',color:C.danger,cursor:'pointer',fontSize:12}} onClick={()=>setDelSeasonId(s.id)}>✕</button>
               </div>
             </div>
           </div>
-        ))}
+          );
+        })}
         {!(data.seasons||[]).length && <div style={{...S.card,textAlign:'center',color:C.textMuted,padding:20}}>No seasons defined. Add a season to scope attendance and performance tracking.</div>}
         <Modal open={showAddSeason} onClose={()=>setShowAddSeason(false)} width={420}>
           <h2 style={S.h2}>Add Season</h2>

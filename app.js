@@ -5593,7 +5593,8 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
     }
     if(newWeeks.length > 0) save({...data, workoutPlans:[...(data.workoutPlans||[]), ...newWeeks]});
   }, [(season||{}).id]);
-  const dayCatLib = addItemForm.category ? library.filter(l=>(l.category||(l.categories||[])[0]||"").toLowerCase().includes(addItemForm.category.toLowerCase())) : library;
+  const libCatsOfRaw = (w) => Array.isArray(w.categories) && w.categories.length ? w.categories.filter(Boolean) : (w.category ? [w.category] : []);
+  const dayCatLib = addItemForm.category ? library.filter(l=>libCatsOfRaw(l).some(c=>(c||'').toLowerCase()===addItemForm.category.toLowerCase())) : library;
   const dayTypesInCat = [...new Set(dayCatLib.map(l=>l.type||'').filter(Boolean))].sort();
   const dayTypeLib = addItemForm.type ? dayCatLib.filter(l=>(l.type||"").toLowerCase().includes(addItemForm.type.toLowerCase())) : dayCatLib;
   const daySelW = addItemForm.workoutId ? dayTypeLib.find(l=>l.id===addItemForm.workoutId) : null;
@@ -5753,14 +5754,20 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
   const deleteWeek = () => { save({...data,workoutPlans:(data.workoutPlans||[]).filter(w=>w.id!==delWeekId)}); setDelWeekId(null); if(selectedWeek===delWeekId) setSelectedWeek(null); };
   const curWeek = plans.find(w=>w.id===selectedWeek);
   const curWeekIdx = plans.findIndex(w=>w.id===selectedWeek);
+  const libCats = (w) => {
+    if(!w) return [];
+    if(Array.isArray(w.categories) && w.categories.length) return w.categories.filter(Boolean);
+    if(w.category) return [w.category];
+    return [];
+  };
   const filteredLib = library.filter(l=>{
     if(libSearch){
       const n = libSearch.toLowerCase();
-      const hay = [l.name, l.description, l.type, l.category||(l.categories||[])[0], String(l.mileage||''), String(l.time||'')].filter(Boolean).join(' ').toLowerCase();
+      const hay = [l.name, l.description, l.type, ...libCats(l), String(l.mileage||''), String(l.time||'')].filter(Boolean).join(' ').toLowerCase();
       const exHit = (l.exercises||[]).some(ex=>(ex.exercise||'').toLowerCase().includes(n) || (ex.type||'').toLowerCase().includes(n));
       if(!hay.includes(n) && !exHit) return false;
     }
-    if(libCatFilter&&(l.category||(l.categories||[])[0])!==libCatFilter) return false;
+    if(libCatFilter && !libCats(l).includes(libCatFilter)) return false;
     if(libTypeFilter&&(l.type||'')!==libTypeFilter) return false;
     return true;
   }).sort((a,b)=>{
@@ -5770,16 +5777,17 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
       return toSec(b.time) - toSec(a.time);
     }
     if(libSort==='type') return (a.type||'').localeCompare(b.type||'') || (a.name||'').localeCompare(b.name||'');
-    if(libSort==='catType') return ((a.category||(a.categories||[])[0])||'').localeCompare((b.category||(b.categories||[])[0])||'')||(a.type||'').localeCompare(b.type||'')||(a.name||'').localeCompare(b.name||'');
+    if(libSort==='catType') return (libCats(a)[0]||'').localeCompare(libCats(b)[0]||'')||(a.type||'').localeCompare(b.type||'')||(a.name||'').localeCompare(b.name||'');
     return (a.name||'').localeCompare(b.name||'');
   });
-  const typesForFilter = [...new Set(library.filter(l=>!libCatFilter||(l.category||(l.categories||[])[0])===libCatFilter).map(l=>l.type||'').filter(Boolean))].sort();
-  const startAddLib = () => { setLibForm({ name:'', category:'', type:'', description:'', isDefault:false, exercises:[emptyRow()], mileage:'',time:'',distance:'',sets:'',reps:'',weight:'',effort:'' }); setEditLibId(null); setShowAddLib(true); };
-  const startEditLib = (item) => { setLibForm({ name:item.name, category:item.category||(item.categories||[])[0]||defaultCat, type:item.type||'', description:item.description||'', isDefault:!!item.isDefault, exercises:(item.exercises||[]).length>0?item.exercises.map(e=>({...e})):[emptyRow()], mileage:item.mileage||'',time:item.time||'',distance:item.distance||'',sets:item.sets||'',reps:item.reps||'',weight:item.weight||'',effort:item.effort||'' }); setEditLibId(item.id); setShowAddLib(true); };
+  const typesForFilter = [...new Set(library.filter(l=>!libCatFilter||libCats(l).includes(libCatFilter)).map(l=>l.type||'').filter(Boolean))].sort();
+  const startAddLib = () => { setLibForm({ name:'', categories:[], type:'', description:'', isDefault:false, exercises:[emptyRow()], mileage:'',time:'',distance:'',sets:'',reps:'',weight:'',effort:'' }); setEditLibId(null); setShowAddLib(true); };
+  const startEditLib = (item) => { setLibForm({ name:item.name, categories:libCats(item), type:item.type||'', description:item.description||'', isDefault:!!item.isDefault, exercises:(item.exercises||[]).length>0?item.exercises.map(e=>({...e})):[emptyRow()], mileage:item.mileage||'',time:item.time||'',distance:item.distance||'',sets:item.sets||'',reps:item.reps||'',weight:item.weight||'',effort:item.effort||'' }); setEditLibId(item.id); setShowAddLib(true); };
   const saveLib = () => {
     if(!libForm.name) return;
     const exercises = (libForm.exercises||[]).filter(e=>e.exercise.trim());
-    const item = { id:editLibId||uid(), name:libForm.name, category:libForm.category, type:libForm.type, description:libForm.description||'', isDefault:libForm.isDefault, exercises, mileage:libForm.mileage||'',time:libForm.time||'',distance:libForm.distance||'',sets:libForm.sets||'',reps:libForm.reps||'',weight:libForm.weight||'',effort:libForm.effort||'' };
+    const cats = Array.isArray(libForm.categories) ? libForm.categories.filter(Boolean) : (libForm.category ? [libForm.category] : []);
+    const item = { id:editLibId||uid(), name:libForm.name, categories:cats, type:libForm.type, description:libForm.description||'', isDefault:libForm.isDefault, exercises, mileage:libForm.mileage||'',time:libForm.time||'',distance:libForm.distance||'',sets:libForm.sets||'',reps:libForm.reps||'',weight:libForm.weight||'',effort:libForm.effort||'' };
     save({...data, workoutLibrary:editLibId?(data.workoutLibrary||[]).map(l=>l.id===editLibId?item:l):[...(data.workoutLibrary||[]),item]});
     setShowAddLib(false); setEditLibId(null);
   };
@@ -5826,7 +5834,15 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
   const dayRest = editingDay ? isRestDay(editingDay.weekId, editingDay.groupId, editingDay.level, editingDay.day) : false;
   const dayGroupName = editingDay ? ((groups.find(g=>g.id===editingDay.groupId)||{}).name||'') : '';
   const libGrouped = {};
-  filteredLib.forEach(l=>{const cat=l.category||(l.categories||[])[0]||'Uncategorized';if(!libGrouped[cat])libGrouped[cat]={};const tp=l.type||'General';if(!libGrouped[cat][tp])libGrouped[cat][tp]=[];libGrouped[cat][tp].push(l);});
+  filteredLib.forEach(l=>{
+    const cats = libCats(l).length ? libCats(l) : ['Uncategorized'];
+    cats.forEach(cat => {
+      if(!libGrouped[cat]) libGrouped[cat]={};
+      const tp=l.type||'General';
+      if(!libGrouped[cat][tp]) libGrouped[cat][tp]=[];
+      libGrouped[cat][tp].push(l);
+    });
+  });
   const tabStyle = (active) => ({ padding:'8px 16px', fontSize:13, fontWeight:active?600:400, color:active?C.accent:C.textSecondary, borderBottom:active?`2px solid ${C.accent}`:'2px solid transparent', background:'none', border:'none', cursor:'pointer' });
   return (
     <div>
@@ -6325,13 +6341,20 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
             const allTypesSorted = [...new Set(library.map(l=>l.type||'').filter(Boolean))].sort((a,b)=>a.localeCompare(b));
             return (
           <div style={{display:'flex',flexDirection:'column',gap:12,marginTop:16}}>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
+            <div style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr',gap:8}}>
               <div>
-                <label style={{fontSize:12,color:C.textSecondary}}>Category</label>
-                <select style={{...S.select,width:'100%'}} value={libForm.category||''} onChange={e=>setLibForm({...libForm,category:e.target.value})}>
-                  <option value="">Select category…</option>
-                  {allCats.map(c=><option key={c.id} value={c.name}>{c.name}</option>)}
-                </select>
+                <label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Categories <span style={{color:C.textMuted,fontWeight:400}}>(pick one or more)</span></label>
+                <div style={{display:'flex',flexWrap:'wrap',gap:4,padding:'6px 8px',border:`1px solid ${C.border}`,borderRadius:6,background:C.surface,minHeight:36}}>
+                  {allCats.map(c => {
+                    const on = (libForm.categories||[]).includes(c.name);
+                    return (
+                      <button key={c.id} type="button" onClick={()=>{const cur=libForm.categories||[];const next=on?cur.filter(x=>x!==c.name):[...cur,c.name];setLibForm({...libForm,categories:next});}} style={{...S.btn,fontSize:11,padding:'3px 10px',background:on?(c.color||C.accent):'transparent',color:on?'#fff':(c.color||C.textSecondary),border:`1px solid ${c.color||C.border}`,fontWeight:on?700:500}}>
+                        {on?'✓ ':''}{c.name}
+                      </button>
+                    );
+                  })}
+                  {allCats.length===0 && <span style={{fontSize:11,color:C.textMuted,fontStyle:'italic'}}>No categories defined. Add them in Settings → Workout Categories.</span>}
+                </div>
               </div>
               <div>
                 <label style={{fontSize:12,color:C.textSecondary}}>Type</label>

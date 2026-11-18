@@ -1449,15 +1449,28 @@ function Dashboard({ data, save, nav, season, team, events, activeAthletes, feat
       {(()=>{
         const qualEvents = events.filter(e=>(e.qualifyingStandards||[]).length>0);
         if(!qualEvents.length) return null;
+        if(!season) return null;
         const NMP = data.nearMissPct||90;
         const qualifiedAthletes = new Set();
         const closeAthletes = new Set();
         let totalQualPerfs=0, totalClosePerfs=0;
+        const seasonPR = (athleteId, evt) => {
+          const relay = evt.entryType==='Relay';
+          const field = isFieldEvent(evt);
+          const inRange = (d) => !season || isInSeason(d, season);
+          const results = (data.results||[]).filter(r =>
+            r.eventId===evt.id && !r.isPractice && inRange(r.date) &&
+            (relay ? r.isRelay && (r.relayAthletes||[]).includes(athleteId) : (r.athleteId===athleteId && !r.isRelaySplit))
+          );
+          if(!results.length) return null;
+          if(field) return results.reduce((best,r)=>(!best||fieldToInches(r.ft||0,r.inch||0,r.qtr||0)>fieldToInches(best.ft||0,best.inch||0,best.qtr||0))?r:best, null);
+          return results.reduce((best,r)=>(!best||(r.timeMs||Infinity)<(best.timeMs||Infinity))?r:best, null);
+        };
         qualEvents.forEach(evt=>{
           const stds = evt.qualifyingStandards||[];
           const isField = isFieldEvent(evt);
           const matchingAthletes = activeAthletes.filter(a=>evt.gender==='Mixed'||(a.gender==='M'&&evt.gender==='Boy')||(a.gender==='F'&&evt.gender==='Girl'));
-          const athPRs = matchingAthletes.map(a=>({a,pr:getAthletePR(a.id,evt.id)})).filter(x=>x.pr);
+          const athPRs = matchingAthletes.map(a=>({a,pr:seasonPR(a.id,evt)})).filter(x=>x.pr);
           stds.forEach(std=>{
             const minQ = Math.max(parseInt(std.minQualifiers)||1, getStdMinQualifiers(data, std.name));
             const metIds=[], closeIds=[];

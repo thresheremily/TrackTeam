@@ -5426,7 +5426,7 @@ function DailyPracticeView({ data, nav, date }) {
 const emptyRow = () => ({ exercise:'', type:'', time:'', mileage:'', distance:'', reps:'', weight:'', effort:'' });
 const EXERCISE_TYPE_PRESETS = ['Easy Run','Tempo','Intervals','Hills','Sprint','Drills','Warm-Up','Cool-Down','Strides','Core','Strength','Plyometrics','Stretching','Mobility','Recovery','Cross-train'];
 const EFFORT_PRESETS = ['Easy','Moderate','Hard','Max','50%','60%','70%','75%','80%','85%','90%','95%','100%'];
-function ExerciseTable({ exercises, onChange, readOnly, library }) {
+function ExerciseTable({ exercises, onChange, readOnly, library, hiddenTypes }) {
   const [focusCell, setFocusCell] = useState('');
   const [dragRow, setDragRow] = useState(null);
   const [dragOverRow, setDragOverRow] = useState(null);
@@ -5455,10 +5455,17 @@ function ExerciseTable({ exercises, onChange, readOnly, library }) {
     return Object.values(map).sort((a,b)=>a.exercise.localeCompare(b.exercise));
   }, [library]);
   const typeOptions = useMemo(() => {
-    const seen = new Set(EXERCISE_TYPE_PRESETS);
-    (library||[]).forEach(w => (w.exercises||[]).forEach(ex => { if(ex.type) seen.add(ex.type.trim()); }));
+    const hidden = new Set((hiddenTypes||[]).map(t=>(t||'').trim().toLowerCase()));
+    const seen = new Set();
+    EXERCISE_TYPE_PRESETS.forEach(t => { if(!hidden.has(t.trim().toLowerCase())) seen.add(t); });
+    (library||[]).forEach(w => (w.exercises||[]).forEach(ex => {
+      if(ex.type) {
+        const t = ex.type.trim();
+        if(t && !hidden.has(t.toLowerCase())) seen.add(t);
+      }
+    }));
     return Array.from(seen).filter(Boolean).sort((a,b)=>a.localeCompare(b));
-  }, [library]);
+  }, [library, hiddenTypes]);
   const typeListId = 'ex-type-list';
   const effortListId = 'ex-effort-list';
   const applySuggestion = (i, ex) => {
@@ -5647,6 +5654,7 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
   const [libTypeFilter, setLibTypeFilter] = useState('');
   const [libSort, setLibSort] = useState('name');
   const [showImportLib, setShowImportLib] = useState(false);
+  const [showTypeManager, setShowTypeManager] = useState(false);
   const [importLibText, setImportLibText] = useState('');
   const [showEditGroup, setShowEditGroup] = useState(null);
   const [groupForm, setGroupForm] = useState({ name:'', levels:[] });
@@ -6109,7 +6117,7 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
                       {(editItemForm.exercises||[]).length>0&&(
                         <div style={{marginTop:4}}>
                           <div style={{fontSize:11,fontWeight:600,color:C.textSecondary,marginBottom:4}}>Exercises</div>
-                          <ExerciseTable exercises={editItemForm.exercises} onChange={ex=>setEditItemForm(p=>({...p,exercises:ex}))} library={library} />
+                          <ExerciseTable exercises={editItemForm.exercises} onChange={ex=>setEditItemForm(p=>({...p,exercises:ex}))} library={library} hiddenTypes={data.hiddenExerciseTypes||[]} />
                           <button style={{...S.btn,...S.btnSecondary,fontSize:10,padding:'4px 10px',marginTop:4}} onClick={()=>setEditItemForm(p=>({...p,exercises:[...(p.exercises||[]),{exercise:'',type:'',time:'',mileage:'',distance:'',reps:'',weight:'',effort:''}]}))}>+ Row</button>
                         </div>
                       )}
@@ -6295,7 +6303,7 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
                         <label style={{fontSize:12,color:C.textSecondary,cursor:'pointer'}}>Exercises <span style={{fontWeight:400,fontSize:11}}>({(addItemForm.newExercises||[]).filter(e=>(e.exercise||'').trim()).length} added)</span></label>
                         <span style={{fontSize:11,color:C.accent,fontWeight:600}}>{addItemForm._exOpen?'^ Hide':'v Show'}</span>
                       </div>
-                      {addItemForm._exOpen&&<ExerciseTable exercises={addItemForm.newExercises||[emptyRow()]} onChange={exs=>setAddItemForm({...addItemForm,newExercises:exs})} library={library} />}
+                      {addItemForm._exOpen&&<ExerciseTable exercises={addItemForm.newExercises||[emptyRow()]} onChange={exs=>setAddItemForm({...addItemForm,newExercises:exs})} library={library} hiddenTypes={data.hiddenExerciseTypes||[]} />}
                     </div>
                     <div style={{display:'flex',gap:8}}>
                       <button style={{...S.btn,...S.btnPrimary,fontSize:13,padding:'10px 20px',borderRadius:8}} onClick={()=>{
@@ -6361,6 +6369,7 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
           </select>
           {(libSearch||libCatFilter||libTypeFilter)&&<button style={{...S.btn,fontSize:11,padding:'4px 10px',background:'transparent',color:C.danger,border:`1px solid ${C.danger}`}} onClick={()=>{setLibSearch('');setLibCatFilter('');setLibTypeFilter('');}}>Clear</button>}
           <div style={{marginLeft:'auto',display:'flex',gap:6}}>
+            <button style={{...S.btn,...S.btnSecondary,fontSize:11}} onClick={()=>setShowTypeManager(true)} title="Rename / remove the exercise Types shown in the suggestions list">Manage Types</button>
             <button style={{...S.btn,...S.btnSecondary}} onClick={()=>setShowImportLib(true)}>Import</button>
             <button style={{...S.btn,...S.btnPrimary}} onClick={startAddLib}>+ Add</button>
           </div>
@@ -6516,12 +6525,83 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
                 <label style={{fontSize:12,color:C.textSecondary,cursor:'pointer'}}>Exercises <span style={{fontWeight:400,fontSize:11}}>({(libForm.exercises||[]).filter(e=>(e.exercise||'').trim()).length} added)</span></label>
                 <span style={{fontSize:11,color:C.accent,fontWeight:600}}>{libForm._exOpen?'^ Hide':'v Show'}</span>
               </div>
-              {libForm._exOpen&&<ExerciseTable exercises={libForm.exercises||[emptyRow()]} onChange={exs=>setLibForm({...libForm,exercises:exs})} library={library} />}
+              {libForm._exOpen&&<ExerciseTable exercises={libForm.exercises||[emptyRow()]} onChange={exs=>setLibForm({...libForm,exercises:exs})} library={library} hiddenTypes={data.hiddenExerciseTypes||[]} />}
             </div>
             <label style={{display:'flex',alignItems:'center',gap:8,fontSize:13,cursor:'pointer'}}><input type="checkbox" checked={libForm.isDefault} onChange={e=>setLibForm({...libForm,isDefault:e.target.checked})} /> Default workout</label>
             <button style={{...S.btn,...S.btnPrimary}} onClick={saveLib}>{editLibId?'Save':'Add to Library'}</button>
           </div>
           );})()}
+        </Modal>
+        <Modal open={showTypeManager} onClose={()=>setShowTypeManager(false)} width={560}>
+          <h2 style={S.h2}>Manage Exercise Types</h2>
+          {(()=>{
+            const hidden = new Set((data.hiddenExerciseTypes||[]).map(t=>t.toLowerCase()));
+            const counts = {};
+            (library||[]).forEach(w => (w.exercises||[]).forEach(ex => {
+              const t = (ex.type||'').trim();
+              if(t) counts[t] = (counts[t]||0) + 1;
+            }));
+            const rowObjs = [];
+            const seen = new Set();
+            EXERCISE_TYPE_PRESETS.forEach(t => {
+              const k = t.toLowerCase();
+              if(seen.has(k)) return; seen.add(k);
+              rowObjs.push({ name:t, count:counts[t]||0, isPreset:true, isHidden:hidden.has(k) });
+            });
+            Object.keys(counts).forEach(t => {
+              const k = t.toLowerCase();
+              if(seen.has(k)) return; seen.add(k);
+              rowObjs.push({ name:t, count:counts[t]||0, isPreset:false, isHidden:hidden.has(k) });
+            });
+            rowObjs.sort((a,b)=>a.name.localeCompare(b.name));
+            const renameType = (oldName) => {
+              const newName = window.prompt(`Rename "${oldName}" to:`, oldName);
+              if(!newName || !newName.trim() || newName.trim() === oldName) return;
+              const nn = newName.trim();
+              const newLib = (data.workoutLibrary||[]).map(w => ({...w, exercises:(w.exercises||[]).map(ex => (ex.type||'').trim().toLowerCase()===oldName.toLowerCase() ? {...ex, type:nn} : ex)}));
+              const newPlans = (data.workoutPlans||[]).map(w => ({...w, entries:(w.entries||[]).map(e => ({...e, exercises:(e.exercises||[]).map(ex => (ex.type||'').trim().toLowerCase()===oldName.toLowerCase() ? {...ex, type:nn} : ex)}))}));
+              save({...data, workoutLibrary:newLib, workoutPlans:newPlans});
+            };
+            const clearType = (name) => {
+              if(!window.confirm(`Clear "${name}" from ${counts[name]||0} exercise row(s)? (The type field will be emptied; the rows stay.)`)) return;
+              const newLib = (data.workoutLibrary||[]).map(w => ({...w, exercises:(w.exercises||[]).map(ex => (ex.type||'').trim().toLowerCase()===name.toLowerCase() ? {...ex, type:''} : ex)}));
+              const newPlans = (data.workoutPlans||[]).map(w => ({...w, entries:(w.entries||[]).map(e => ({...e, exercises:(e.exercises||[]).map(ex => (ex.type||'').trim().toLowerCase()===name.toLowerCase() ? {...ex, type:''} : ex)}))}));
+              save({...data, workoutLibrary:newLib, workoutPlans:newPlans});
+            };
+            const togglePresetHidden = (name) => {
+              const cur = data.hiddenExerciseTypes || [];
+              const k = name.toLowerCase();
+              const isCurrentlyHidden = cur.some(x=>x.toLowerCase()===k);
+              const next = isCurrentlyHidden ? cur.filter(x=>x.toLowerCase()!==k) : [...cur, name];
+              save({...data, hiddenExerciseTypes:next});
+            };
+            return (<div>
+              <p style={{fontSize:12,color:C.textMuted,marginBottom:10}}>Shown in the Type suggestions list on every exercise row. Rename updates every library + plan exercise that uses the type. Clear empties the type field on those rows. Hide removes a built-in preset from the suggestions list; your other picks are unaffected.</p>
+              {rowObjs.length===0 ? <div style={{padding:16,textAlign:'center',color:C.textMuted,fontSize:12,fontStyle:'italic'}}>No types defined.</div> : (
+                <div style={{maxHeight:'60vh',overflowY:'auto',border:`1px solid ${C.borderLight}`,borderRadius:6}}>
+                  {rowObjs.map(r => (
+                    <div key={r.name} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',borderBottom:`1px solid ${C.borderLight}`,opacity:r.isHidden?0.55:1}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:600,color:C.text}}>{r.name}{r.isHidden && <span style={{marginLeft:6,fontSize:10,fontWeight:700,color:C.textMuted,background:C.surface2,padding:'1px 6px',borderRadius:8,textTransform:'uppercase',letterSpacing:'0.04em'}}>Hidden</span>}</div>
+                        <div style={{fontSize:11,color:C.textMuted,marginTop:2}}>{r.isPreset?'Built-in preset':'Custom'} · used in {r.count} exercise{r.count===1?'':'s'}</div>
+                      </div>
+                      <div style={{display:'flex',gap:4}}>
+                        {r.count>0 && <button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'3px 10px'}} onClick={()=>renameType(r.name)}>Rename</button>}
+                        {r.isPreset ? (
+                          <button style={{...S.btn,fontSize:11,padding:'3px 10px',background:'transparent',color:r.isHidden?C.accent:C.textSecondary,border:`1px solid ${r.isHidden?C.accent:C.border}`}} onClick={()=>togglePresetHidden(r.name)}>{r.isHidden?'Show':'Hide'}</button>
+                        ) : (
+                          r.count>0 && <button style={{...S.btn,fontSize:11,padding:'3px 10px',background:'transparent',color:C.danger,border:`1px solid ${C.danger}`}} onClick={()=>clearType(r.name)}>Clear</button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{display:'flex',justifyContent:'flex-end',marginTop:14}}>
+                <button style={{...S.btn,...S.btnPrimary}} onClick={()=>setShowTypeManager(false)}>Done</button>
+              </div>
+            </div>);
+          })()}
         </Modal>
         <Modal open={showImportLib} onClose={()=>setShowImportLib(false)} width={550}>
           <h2 style={S.h2}>Import Library</h2>

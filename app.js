@@ -745,16 +745,20 @@ const itemMiles = (e) => {
 const entryTotalMiles = (e) => {
   if(!e) return 0;
   let t = itemMiles(e);
-  (e.exercises||[]).forEach(ex => { t += itemMiles(ex); });
+  const outer = Math.max(1, parseInt(e.sets)||1);
+  (e.exercises||[]).forEach(ex => { t += itemMiles(ex) * outer; });
   return t;
 };
-const exTotals = (exercises) => {
+const exTotals = (exercises, outerSets) => {
+  const outer = Math.max(1, parseInt(outerSets)||1);
   let mi=0, m=0;
   (exercises||[]).forEach(ex=>{ const mult = itemMult(ex); mi+=(parseFloat(ex.mileage)||0)*mult; m+=(parseFloat(ex.distance)||0)*mult; });
+  mi *= outer; m *= outer;
   const parts=[];
+  if(outer>1) parts.push(`×${outer} sets`);
   if(mi>0) parts.push(`${mi.toFixed(1)} mi`);
   if(m>0) parts.push(`${Math.round(m)}m`);
-  return parts.join(' + ');
+  return parts.join(' · ');
 };
 const makeStyles = (C) => ({
   app: { fontFamily:"'Rubik','Inter',system-ui,-apple-system,sans-serif", background:C.bg, minHeight:'100vh', color:C.text, letterSpacing:'-0.01em', },
@@ -5420,10 +5424,18 @@ function DailyPracticeView({ data, nav, date }) {
   );
 }
 const emptyRow = () => ({ exercise:'', type:'', time:'', mileage:'', distance:'', reps:'', weight:'', effort:'' });
+const EXERCISE_TYPE_PRESETS = ['Easy Run','Tempo','Intervals','Hills','Sprint','Drills','Warm-Up','Cool-Down','Strides','Core','Strength','Plyometrics','Stretching','Mobility','Recovery','Cross-train'];
+const EFFORT_PRESETS = ['Easy','Moderate','Hard','Max','50%','60%','70%','75%','80%','85%','90%','95%','100%'];
 function ExerciseTable({ exercises, onChange, readOnly, library }) {
   const [focusCell, setFocusCell] = useState('');
   const [dragRow, setDragRow] = useState(null);
   const [dragOverRow, setDragOverRow] = useState(null);
+  const [isNarrow, setIsNarrow] = useState(typeof window !== 'undefined' && window.innerWidth <= 720);
+  useEffect(() => {
+    const on = () => setIsNarrow(window.innerWidth <= 720);
+    window.addEventListener('resize', on);
+    return () => window.removeEventListener('resize', on);
+  }, []);
   const blurRef = useRef(null);
   const onFocus = (f) => { clearTimeout(blurRef.current); setFocusCell(f); };
   const onBlur = () => { blurRef.current = setTimeout(()=>setFocusCell(''), 200); };
@@ -5442,8 +5454,89 @@ function ExerciseTable({ exercises, onChange, readOnly, library }) {
     });
     return Object.values(map).sort((a,b)=>a.exercise.localeCompare(b.exercise));
   }, [library]);
+  const typeOptions = useMemo(() => {
+    const seen = new Set(EXERCISE_TYPE_PRESETS);
+    (library||[]).forEach(w => (w.exercises||[]).forEach(ex => { if(ex.type) seen.add(ex.type.trim()); }));
+    return Array.from(seen).filter(Boolean).sort((a,b)=>a.localeCompare(b));
+  }, [library]);
+  const typeListId = 'ex-type-list';
+  const effortListId = 'ex-effort-list';
+  const applySuggestion = (i, ex) => {
+    const c = [...exercises];
+    c[i] = {...c[i], exercise:ex.exercise, type:ex.type||c[i].type||'', time:ex.time||c[i].time||'', mileage:ex.mileage||c[i].mileage||'', distance:ex.distance||c[i].distance||'', reps:ex.reps||c[i].reps||'', weight:ex.weight||c[i].weight||'', effort:ex.effort||c[i].effort||''};
+    onChange(c); setFocusCell('');
+  };
+  const dataLists = !readOnly ? (
+    <>
+      <datalist id={typeListId}>{typeOptions.map(t=><option key={t} value={t} />)}</datalist>
+      <datalist id={effortListId}>{EFFORT_PRESETS.map(e=><option key={e} value={e} />)}</datalist>
+    </>
+  ) : null;
+  if(isNarrow) {
+    return (
+      <div style={{marginTop:4,display:'flex',flexDirection:'column',gap:8}}>
+        {dataLists}
+        {exercises.map((row,i)=>{
+          const isDragging = dragRow===i;
+          const isOver = dragOverRow===i && dragRow!==i;
+          return (
+            <div key={i}
+              draggable={!readOnly}
+              onDragStart={readOnly?undefined:()=>setDragRow(i)}
+              onDragOver={readOnly?undefined:e=>{e.preventDefault();setDragOverRow(i);}}
+              onDrop={readOnly?undefined:()=>{if(dragRow!==null&&dragRow!==i)moveRow(dragRow,i);setDragRow(null);setDragOverRow(null);}}
+              onDragEnd={readOnly?undefined:()=>{setDragRow(null);setDragOverRow(null);}}
+              style={{padding:'10px 12px',borderRadius:8,background:isOver?C.accentMuted:C.surface,border:`1px solid ${isOver?C.accent:C.borderLight}`,opacity:isDragging?0.5:1,transition:'background 0.15s, opacity 0.15s'}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+                {!readOnly && <span style={{cursor:'grab',color:C.textMuted,fontSize:14,userSelect:'none'}}>⋮⋮</span>}
+                <span style={{fontSize:11,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:'0.04em'}}>Set {i+1}</span>
+                <div style={{marginLeft:'auto',display:'flex',gap:4}}>
+                  {!readOnly && <button title="Duplicate" style={{background:'none',border:`1px solid ${C.borderLight}`,borderRadius:4,color:C.textSecondary,cursor:'pointer',fontSize:11,padding:'3px 8px',fontWeight:700}} onClick={()=>{const c=[...exercises];c.splice(i+1,0,{...row});onChange(c);}}>++</button>}
+                  {!readOnly && <button title="Remove" style={{background:'none',border:`1px solid ${C.danger}30`,borderRadius:4,color:C.danger,cursor:'pointer',fontSize:11,padding:'3px 8px',fontWeight:700}} onClick={()=>{const c=[...exercises];c.splice(i,1);onChange(c);}}>✕</button>}
+                </div>
+              </div>
+              <div style={{position:'relative',marginBottom:8}}>
+                <label style={{fontSize:10,fontWeight:600,color:C.textMuted,textTransform:'uppercase',display:'block',marginBottom:2}}>Exercise</label>
+                {readOnly ? <div style={{fontSize:14,fontWeight:600,color:row.exercise?C.text:C.textMuted}}>{row.exercise||'-'}</div> :
+                  <input style={{...S.input,padding:'8px 10px',fontSize:14}} value={row.exercise||''} placeholder="e.g. Planks"
+                    onChange={e=>{const c=[...exercises];c[i]={...c[i],exercise:e.target.value};onChange(c);}}
+                    onFocus={()=>onFocus(`ex-${i}`)} onBlur={onBlur} />}
+                {!readOnly && focusCell===`ex-${i}` && (()=>{
+                  const q=(row.exercise||'').toLowerCase();
+                  const opts=exerciseCatalog.filter(ex=>!q||ex.exercise.toLowerCase().includes(q));
+                  return opts.length>0 && (
+                    <div style={{position:'absolute',top:'100%',left:0,right:0,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,0.12)',zIndex:20,maxHeight:200,overflowY:'auto',marginTop:2}}>
+                      {opts.slice(0,8).map(ex=>(
+                        <div key={ex.exercise} style={{padding:'8px 12px',fontSize:13,cursor:'pointer',borderBottom:`1px solid ${C.borderLight}`}} onMouseDown={()=>applySuggestion(i,ex)}>
+                          <div style={{fontWeight:600,color:C.text}}>{ex.exercise}</div>
+                          <div style={{fontSize:11,color:C.textMuted,marginTop:2}}>{[ex.type,ex.time?`T:${ex.time}`:'',ex.reps?`${ex.reps} reps`:'',ex.distance?`${ex.distance}m`:'',ex.mileage?`${ex.mileage}mi`:''].filter(Boolean).join(' · ')}</div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(110px, 1fr))',gap:6}}>
+                {EXERCISE_COLUMNS.filter(c=>c.key!=='exercise').map(col=>(
+                  <div key={col.key}>
+                    <label style={{fontSize:10,fontWeight:600,color:C.textMuted,textTransform:'uppercase',display:'block',marginBottom:2}}>{col.label}</label>
+                    {readOnly ? <div style={{fontSize:13,color:row[col.key]?C.text:C.textMuted,minHeight:20}}>{row[col.key]||'-'}</div> :
+                      <input style={{...S.input,padding:'6px 8px',fontSize:13}} value={row[col.key]||''} placeholder={col.placeholder}
+                        list={col.key==='type'?typeListId:col.key==='effort'?effortListId:undefined}
+                        onChange={e=>{const c=[...exercises];c[i]={...c[i],[col.key]:e.target.value};onChange(c);}} />}
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+        {!readOnly && <button style={{...S.btn,...S.btnSecondary,fontSize:12,marginTop:4,padding:'8px 14px'}} onClick={()=>onChange([...exercises,emptyRow()])}>+ Add Exercise</button>}
+      </div>
+    );
+  }
   return (
     <div style={{overflowX:'auto',marginTop:4}}>
+      {dataLists}
       <table style={{width:'100%',borderCollapse:'collapse',minWidth:580}}>
         <thead><tr>
           {!readOnly && <th style={{...S.th,width:28,padding:'6px 2px'}}></th>}
@@ -5459,12 +5552,13 @@ function ExerciseTable({ exercises, onChange, readOnly, library }) {
               onDrop={readOnly?undefined:()=>{if(dragRow!==null&&dragRow!==i)moveRow(dragRow,i);setDragRow(null);setDragOverRow(null);}}
               onDragEnd={readOnly?undefined:()=>{setDragRow(null);setDragOverRow(null);}}
               style={{opacity:dragRow===i?0.4:1,background:dragOverRow===i&&dragRow!==i?C.accentMuted:'transparent',transition:'background 0.1s'}}>
-              {!readOnly && <td style={{...S.td,padding:'3px 2px',textAlign:'center',cursor:'grab',color:C.textMuted,fontSize:14,userSelect:'none'}}>:::</td>}
+              {!readOnly && <td style={{...S.td,padding:'3px 2px',textAlign:'center',cursor:'grab',color:C.textMuted,fontSize:14,userSelect:'none'}}>⋮⋮</td>}
               <td style={{...S.td,textAlign:'center',padding:'4px 6px',fontSize:13,fontWeight:600,color:C.textMuted}}>{i+1}</td>
               {EXERCISE_COLUMNS.map(col=>(
                 <td key={col.key} style={{...S.td,padding:'3px 4px',position:col.key==='exercise'?'relative':undefined}}>
                   {readOnly ? <span style={{fontSize:13,color:row[col.key]?C.text:C.textMuted}}>{row[col.key]||'-'}</span> :
                   <input style={{...S.input,padding:'6px 8px',fontSize:13,border:`1px solid ${C.borderLight}`,background:C.surface}} value={row[col.key]||''} placeholder={col.placeholder}
+                    list={col.key==='type'?typeListId:col.key==='effort'?effortListId:undefined}
                     onChange={e=>{const c=[...exercises];c[i]={...c[i],[col.key]:e.target.value};onChange(c);}}
                     onFocus={col.key==='exercise'?()=>onFocus(`ex-${i}`):undefined}
                     onBlur={col.key==='exercise'?onBlur:undefined}
@@ -5475,14 +5569,9 @@ function ExerciseTable({ exercises, onChange, readOnly, library }) {
                     return opts.length>0 && (
                       <div style={{position:'absolute',top:'100%',left:0,minWidth:240,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,0.12)',zIndex:20,maxHeight:200,overflowY:'auto'}}>
                         {opts.slice(0,10).map(ex=>(
-                          <div key={ex.exercise} style={{padding:'8px 12px',fontSize:13,cursor:'pointer',borderBottom:`1px solid ${C.borderLight}`}}
-                            onMouseDown={()=>{
-                              const c=[...exercises];
-                              c[i]={...c[i],exercise:ex.exercise,type:ex.type||c[i].type||'',time:ex.time||c[i].time||'',mileage:ex.mileage||c[i].mileage||'',distance:ex.distance||c[i].distance||'',reps:ex.reps||c[i].reps||'',weight:ex.weight||c[i].weight||'',effort:ex.effort||c[i].effort||''};
-                              onChange(c);setFocusCell('');
-                            }}>
+                          <div key={ex.exercise} style={{padding:'8px 12px',fontSize:13,cursor:'pointer',borderBottom:`1px solid ${C.borderLight}`}} onMouseDown={()=>applySuggestion(i,ex)}>
                             <div style={{fontWeight:600,color:C.text}}>{ex.exercise}</div>
-                            <div style={{fontSize:11,color:C.textMuted,marginTop:2}}>{[ex.type,ex.time?`T:${ex.time}`:'',ex.reps?`${ex.reps} reps`:'',ex.distance?`${ex.distance}m`:'',ex.mileage?`${ex.mileage}mi`:''].filter(Boolean).join(' - ')}</div>
+                            <div style={{fontSize:11,color:C.textMuted,marginTop:2}}>{[ex.type,ex.time?`T:${ex.time}`:'',ex.reps?`${ex.reps} reps`:'',ex.distance?`${ex.distance}m`:'',ex.mileage?`${ex.mileage}mi`:''].filter(Boolean).join(' · ')}</div>
                           </div>
                         ))}
                       </div>
@@ -6043,7 +6132,7 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
                       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',padding:'6px 0'}} onClick={e=>{e.stopPropagation();setExpandedItems(prev=>({...prev,[item.id]:!prev[item.id]}));}}>
                         <div style={{fontSize:11,color:C.textSecondary}}>
                           <span style={{fontWeight:600}}>{(item.exercises||[]).length} exercises</span>
-                          {exTotals(item.exercises)&&<span style={{marginLeft:6,color:C.accent,fontWeight:600}}>{exTotals(item.exercises)}</span>}
+                          {exTotals(item.exercises, item.sets)&&<span style={{marginLeft:6,color:C.accent,fontWeight:600}}>{exTotals(item.exercises, item.sets)}</span>}
                           <span style={{marginLeft:8,color:C.textMuted}}>{(item.exercises||[]).map(ex=>ex.exercise).filter(Boolean).join(', ')}</span>
                         </div>
                         <span style={{fontSize:12,color:C.accent,fontWeight:600}}>{expandedItems[item.id]?'^ Hide':'v Show'}</span>
@@ -6104,7 +6193,7 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
                         <input style={{...S.input,padding:'10px 12px',fontSize:14}} placeholder="Start typing to search…" value={addItemForm.workoutSearch||''} onChange={e=>setAddItemForm({...addItemForm,workoutSearch:e.target.value,workoutId:''})} onFocus={()=>handleFocus('dayWork')} onBlur={handleBlur} />
                         {focusField==='dayWork'&&(()=>{const opts=workoutsSorted.filter(w=>matchWorkoutText(w, addItemForm.workoutSearch));return opts.length>0&&(
                           <div style={{position:'absolute',top:'100%',left:0,right:0,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,0.1)',zIndex:20,maxHeight:250,overflowY:'auto'}}>
-                            {opts.map(w=><div key={w.id} style={{padding:'10px 14px',fontSize:14,cursor:'pointer',borderBottom:`1px solid ${C.borderLight}`}} onMouseDown={()=>{setAddItemForm({...addItemForm,workoutId:w.id,workoutSearch:w.name,m_mileage:w.mileage||'',m_time:w.time||'',m_distance:w.distance||'',m_sets:w.sets||'',m_reps:w.reps||'',m_weight:w.weight||'',m_effort:w.effort||''});setFocusField('');}}><div style={{display:'flex',justifyContent:'space-between'}}><span>{w.name}</span><span style={{fontSize:12,color:C.textMuted}}>{[w.type,((w.exercises||[]).length>0?`${(w.exercises||[]).length} ex`:''),exTotals(w.exercises)].filter(Boolean).join(' - ')}</span></div>{w.description&&<div style={{fontSize:11,color:C.textMuted,marginTop:2}}>{w.description}</div>}</div>)}
+                            {opts.map(w=><div key={w.id} style={{padding:'10px 14px',fontSize:14,cursor:'pointer',borderBottom:`1px solid ${C.borderLight}`}} onMouseDown={()=>{setAddItemForm({...addItemForm,workoutId:w.id,workoutSearch:w.name,m_mileage:w.mileage||'',m_time:w.time||'',m_distance:w.distance||'',m_sets:w.sets||'',m_reps:w.reps||'',m_weight:w.weight||'',m_effort:w.effort||''});setFocusField('');}}><div style={{display:'flex',justifyContent:'space-between'}}><span>{w.name}</span><span style={{fontSize:12,color:C.textMuted}}>{[w.type,((w.exercises||[]).length>0?`${(w.exercises||[]).length} ex`:''),exTotals(w.exercises, w.sets)].filter(Boolean).join(' - ')}</span></div>{w.description&&<div style={{fontSize:11,color:C.textMuted,marginTop:2}}>{w.description}</div>}</div>)}
                           </div>);})()}
                       </div>
                     </div>
@@ -6113,7 +6202,7 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
                         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}} onClick={()=>setAddItemForm({...addItemForm,_previewOpen:!addItemForm._previewOpen})}>
                           <div style={{fontSize:12,color:C.textSecondary}}>
                             <span style={{fontWeight:600}}>{(daySelW.exercises||[]).length} exercises:</span>
-                            {exTotals(daySelW.exercises)&&<span style={{marginLeft:6,color:C.accent,fontWeight:600}}>{exTotals(daySelW.exercises)}</span>}
+                            {exTotals(daySelW.exercises, daySelW.sets)&&<span style={{marginLeft:6,color:C.accent,fontWeight:600}}>{exTotals(daySelW.exercises, daySelW.sets)}</span>}
                             <span style={{marginLeft:6,color:C.textMuted}}>{(daySelW.exercises||[]).map(ex=>ex.exercise).filter(Boolean).join(', ')}</span>
                           </div>
                           <span style={{fontSize:11,color:C.accent,fontWeight:600,flexShrink:0,marginLeft:8}}>{addItemForm._previewOpen?'^ Hide':'v Show'}</span>
@@ -6288,7 +6377,7 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
                           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',padding:'4px 0'}} onClick={e=>{e.stopPropagation();setExpandedLib(prev=>({...prev,[l.id]:!prev[l.id]}));}}>
                             <div style={{fontSize:12,color:C.textSecondary}}>
                               <span style={{fontWeight:600}}>{(l.exercises||[]).length} exercises:</span>
-                              {exTotals(l.exercises)&&<span style={{marginLeft:6,color:C.accent,fontWeight:600}}>{exTotals(l.exercises)}</span>}
+                              {exTotals(l.exercises, l.sets)&&<span style={{marginLeft:6,color:C.accent,fontWeight:600}}>{exTotals(l.exercises, l.sets)}</span>}
                               <span style={{marginLeft:6,color:C.textMuted}}>{(l.exercises||[]).map(ex=>ex.exercise).filter(Boolean).join(', ')}</span>
                             </div>
                             <span style={{fontSize:11,color:C.accent,fontWeight:600,flexShrink:0,marginLeft:8}}>{expandedLib[l.id]?'^ Hide':'v Show'}</span>

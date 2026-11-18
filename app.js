@@ -5659,6 +5659,14 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
   const [catForm, setCatForm] = useState({ name:'', color:'#2b6cb0' });
   const [editCatId, setEditCatId] = useState(null);
   const [delCatId, setDelCatId] = useState(null);
+  const [libCatPickerOpen, setLibCatPickerOpen] = useState(false);
+  const libCatPickerRef = useRef(null);
+  useEffect(() => {
+    if(!libCatPickerOpen) return;
+    const onClick = (e) => { if(libCatPickerRef.current && !libCatPickerRef.current.contains(e.target)) setLibCatPickerOpen(false); };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, [libCatPickerOpen]);
   const groups = data.workoutGroups || [];
   const library = data.workoutLibrary || [];
   const categories = data.workoutCategories || [];
@@ -6433,16 +6441,41 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
             <div style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr',gap:8}}>
               <div>
                 <label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Categories <span style={{color:C.textMuted,fontWeight:400}}>(pick one or more)</span></label>
-                <div style={{display:'flex',flexWrap:'wrap',gap:4,padding:'6px 8px',border:`1px solid ${C.border}`,borderRadius:6,background:C.surface,minHeight:36}}>
-                  {allCats.map(c => {
-                    const on = (libForm.categories||[]).includes(c.name);
-                    return (
-                      <button key={c.id} type="button" onClick={()=>{const cur=libForm.categories||[];const next=on?cur.filter(x=>x!==c.name):[...cur,c.name];setLibForm({...libForm,categories:next});}} style={{...S.btn,fontSize:11,padding:'3px 10px',background:on?(c.color||C.accent):'transparent',color:on?'#fff':(c.color||C.textSecondary),border:`1px solid ${c.color||C.border}`,fontWeight:on?700:500}}>
-                        {on?'✓ ':''}{c.name}
-                      </button>
-                    );
-                  })}
-                  {allCats.length===0 && <span style={{fontSize:11,color:C.textMuted,fontStyle:'italic'}}>No categories defined. Add them in Settings → Workout Categories.</span>}
+                <div ref={libCatPickerRef} style={{position:'relative'}}>
+                  <button type="button" onClick={()=>setLibCatPickerOpen(o=>!o)} style={{...S.input,width:'100%',textAlign:'left',cursor:'pointer',display:'flex',alignItems:'center',gap:6,background:C.surface,minHeight:36}}>
+                    <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                      {(libForm.categories||[]).length === 0 ? (
+                        <span style={{color:C.textMuted}}>Select categories…</span>
+                      ) : (
+                        (libForm.categories||[]).join(', ')
+                      )}
+                    </span>
+                    {(libForm.categories||[]).length > 0 && <span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:10,background:C.accentMuted,color:C.accent}}>{(libForm.categories||[]).length}</span>}
+                    <span style={{color:C.textMuted,fontSize:11,marginLeft:4}}>{libCatPickerOpen?'▲':'▼'}</span>
+                  </button>
+                  {libCatPickerOpen && (
+                    <div style={{position:'absolute',top:'calc(100% + 4px)',left:0,right:0,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,boxShadow:'0 4px 16px rgba(0,0,0,0.12)',zIndex:30,maxHeight:260,overflowY:'auto'}}>
+                      {allCats.length === 0 ? (
+                        <div style={{padding:'10px 12px',fontSize:11,color:C.textMuted,fontStyle:'italic'}}>No categories defined. Add them in Settings → Workout Categories.</div>
+                      ) : (<>
+                        {allCats.map(c => {
+                          const on = (libForm.categories||[]).includes(c.name);
+                          return (
+                            <label key={c.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',cursor:'pointer',borderBottom:`1px solid ${C.borderLight}`,background:on?C.accentMuted:'transparent'}}>
+                              <input type="checkbox" checked={on} onChange={()=>{const cur=libForm.categories||[];const next=on?cur.filter(x=>x!==c.name):[...cur,c.name];setLibForm({...libForm,categories:next});}} />
+                              <span style={{width:10,height:10,borderRadius:'50%',background:c.color||C.textMuted,display:'inline-block',flexShrink:0}} />
+                              <span style={{fontSize:13,fontWeight:on?600:500,color:C.text,flex:1}}>{c.name}</span>
+                            </label>
+                          );
+                        })}
+                        {(libForm.categories||[]).length > 0 && (
+                          <div style={{padding:'6px 10px',borderTop:`1px solid ${C.borderLight}`,textAlign:'right'}}>
+                            <button type="button" style={{...S.btn,fontSize:10,padding:'3px 10px',background:'transparent',color:C.danger,border:`1px solid ${C.danger}`}} onClick={()=>setLibForm({...libForm,categories:[]})}>Clear</button>
+                          </div>
+                        )}
+                      </>)}
+                    </div>
+                  )}
                 </div>
               </div>
               <div>

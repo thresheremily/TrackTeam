@@ -5754,13 +5754,24 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
   const curWeek = plans.find(w=>w.id===selectedWeek);
   const curWeekIdx = plans.findIndex(w=>w.id===selectedWeek);
   const filteredLib = library.filter(l=>{
-    if(libSearch&&!l.name.toLowerCase().includes(libSearch.toLowerCase())&&!(l.description||'').toLowerCase().includes(libSearch.toLowerCase())&&!(l.exercises||[]).some(ex=>(ex.exercise||'').toLowerCase().includes(libSearch.toLowerCase()))) return false;
+    if(libSearch){
+      const n = libSearch.toLowerCase();
+      const hay = [l.name, l.description, l.type, l.category||(l.categories||[])[0], String(l.mileage||''), String(l.time||'')].filter(Boolean).join(' ').toLowerCase();
+      const exHit = (l.exercises||[]).some(ex=>(ex.exercise||'').toLowerCase().includes(n) || (ex.type||'').toLowerCase().includes(n));
+      if(!hay.includes(n) && !exHit) return false;
+    }
     if(libCatFilter&&(l.category||(l.categories||[])[0])!==libCatFilter) return false;
     if(libTypeFilter&&(l.type||'')!==libTypeFilter) return false;
     return true;
   }).sort((a,b)=>{
-    if(libSort==='mileage') return (b.mileage||0)-(a.mileage||0);
-    return ((a.category||(a.categories||[])[0])||'').localeCompare((b.category||(b.categories||[])[0])||'')||(a.type||'').localeCompare(b.type||'')||(a.name||'').localeCompare(b.name||'');
+    if(libSort==='mileage') return (parseFloat(b.mileage)||0)-(parseFloat(a.mileage)||0);
+    if(libSort==='time') {
+      const toSec = (s) => { const m=/^(\d+):(\d+(?:\.\d+)?)$/.exec((s||'')); if(m) return parseInt(m[1])*60+parseFloat(m[2]); return parseFloat(s)||0; };
+      return toSec(b.time) - toSec(a.time);
+    }
+    if(libSort==='type') return (a.type||'').localeCompare(b.type||'') || (a.name||'').localeCompare(b.name||'');
+    if(libSort==='catType') return ((a.category||(a.categories||[])[0])||'').localeCompare((b.category||(b.categories||[])[0])||'')||(a.type||'').localeCompare(b.type||'')||(a.name||'').localeCompare(b.name||'');
+    return (a.name||'').localeCompare(b.name||'');
   });
   const typesForFilter = [...new Set(library.filter(l=>!libCatFilter||(l.category||(l.categories||[])[0])===libCatFilter).map(l=>l.type||'').filter(Boolean))].sort();
   const startAddLib = () => { setLibForm({ name:'', category:'', type:'', description:'', isDefault:false, exercises:[emptyRow()], mileage:'',time:'',distance:'',sets:'',reps:'',weight:'',effort:'' }); setEditLibId(null); setShowAddLib(true); };
@@ -6038,30 +6049,44 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
                 </div>))}
                 {items.length===0&&!showAddItem&&<div style={{textAlign:'center',padding:24,color:C.textMuted,fontSize:14}}>No workouts planned.</div>}
                 
-                {showAddItem && !showCreateNew && (
+                {showAddItem && !showCreateNew && (()=>{
+                  const allCats = categories.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+                  const allDayTypes = dayTypesInCat.slice().sort((a,b)=>a.localeCompare(b));
+                  const matchWorkoutText = (w, q) => {
+                    if(!q) return true;
+                    const n = q.toLowerCase();
+                    return (w.name||'').toLowerCase().includes(n) ||
+                      (w.type||'').toLowerCase().includes(n) ||
+                      (w.description||'').toLowerCase().includes(n) ||
+                      (w.exercises||[]).some(ex=>(ex.exercise||'').toLowerCase().includes(n)) ||
+                      String(w.mileage||'').includes(n) ||
+                      String(w.time||'').includes(n);
+                  };
+                  const workoutsSorted = dayTypeLib.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+                  return (
                   <div style={{padding:16,borderRadius:10,border:`2px solid ${C.accent}33`,background:C.bg,marginTop:12}}>
                     <div style={{fontSize:14,fontWeight:600,color:C.accent,marginBottom:12}}>Add from Library</div>
                     <div style={{display:'flex',flexDirection:'column',gap:10,marginBottom:12}}>
-                      <div style={{position:'relative'}}>
-                        <label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Category</label>
-                        <input style={{...S.input,padding:'10px 12px',fontSize:14}} placeholder="All categories" value={addItemForm.category||''} onChange={e=>setAddItemForm({...addItemForm,category:e.target.value,type:'',workoutId:'',workoutSearch:''})} onFocus={()=>handleFocus('dayCat')} onBlur={handleBlur} />
-                        {focusField==='dayCat'&&(()=>{const opts=categories.filter(c=>!addItemForm.category||c.name.toLowerCase().includes((addItemForm.category||'').toLowerCase()));return opts.length>0&&(
-                          <div style={{position:'absolute',top:'100%',left:0,right:0,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,0.1)',zIndex:20,maxHeight:200,overflowY:'auto'}}>
-                            {opts.map(c=><div key={c.id} style={{padding:'10px 14px',fontSize:14,cursor:'pointer',borderBottom:`1px solid ${C.borderLight}`}} onMouseDown={()=>{setAddItemForm({category:c.name,type:'',workoutId:'',workoutSearch:''});setFocusField('');}}>{c.name}</div>)}
-                          </div>);})()}
+                      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                        <div>
+                          <label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Category</label>
+                          <select style={{...S.select,width:'100%',padding:'10px 12px',fontSize:14}} value={addItemForm.category||''} onChange={e=>setAddItemForm({...addItemForm,category:e.target.value,type:'',workoutId:'',workoutSearch:''})}>
+                            <option value="">All categories</option>
+                            {allCats.map(c=><option key={c.id} value={c.name}>{c.name}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Type</label>
+                          <select style={{...S.select,width:'100%',padding:'10px 12px',fontSize:14}} value={addItemForm.type||''} onChange={e=>setAddItemForm({...addItemForm,type:e.target.value,workoutId:'',workoutSearch:''})}>
+                            <option value="">All types</option>
+                            {allDayTypes.map(t=><option key={t} value={t}>{t}</option>)}
+                          </select>
+                        </div>
                       </div>
                       <div style={{position:'relative'}}>
-                        <label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Type</label>
-                        <input style={{...S.input,padding:'10px 12px',fontSize:14}} placeholder="All types" value={addItemForm.type||''} onChange={e=>setAddItemForm({...addItemForm,type:e.target.value,workoutId:'',workoutSearch:''})} onFocus={()=>handleFocus('dayType')} onBlur={handleBlur} />
-                        {focusField==='dayType'&&(()=>{const opts=dayTypesInCat.filter(t=>!addItemForm.type||t.toLowerCase().includes((addItemForm.type||'').toLowerCase()));return opts.length>0&&(
-                          <div style={{position:'absolute',top:'100%',left:0,right:0,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,0.1)',zIndex:20,maxHeight:200,overflowY:'auto'}}>
-                            {opts.map(t=><div key={t} style={{padding:'10px 14px',fontSize:14,cursor:'pointer',borderBottom:`1px solid ${C.borderLight}`}} onMouseDown={()=>{setAddItemForm({...addItemForm,type:t,workoutId:'',workoutSearch:''});setFocusField('');}}>{t}</div>)}
-                          </div>);})()}
-                      </div>
-                      <div style={{position:'relative'}}>
-                        <label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Workout</label>
-                        <input style={{...S.input,padding:'10px 12px',fontSize:14}} placeholder="Search workouts..." value={addItemForm.workoutSearch||''} onChange={e=>setAddItemForm({...addItemForm,workoutSearch:e.target.value,workoutId:''})} onFocus={()=>handleFocus('dayWork')} onBlur={handleBlur} />
-                        {focusField==='dayWork'&&(()=>{const opts=dayTypeLib.filter(w=>!addItemForm.workoutSearch||w.name.toLowerCase().includes((addItemForm.workoutSearch||'').toLowerCase()));return opts.length>0&&(
+                        <label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Workout <span style={{color:C.textMuted,fontWeight:400}}>(search by name, type, mileage, time…)</span></label>
+                        <input style={{...S.input,padding:'10px 12px',fontSize:14}} placeholder="Start typing to search…" value={addItemForm.workoutSearch||''} onChange={e=>setAddItemForm({...addItemForm,workoutSearch:e.target.value,workoutId:''})} onFocus={()=>handleFocus('dayWork')} onBlur={handleBlur} />
+                        {focusField==='dayWork'&&(()=>{const opts=workoutsSorted.filter(w=>matchWorkoutText(w, addItemForm.workoutSearch));return opts.length>0&&(
                           <div style={{position:'absolute',top:'100%',left:0,right:0,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,0.1)',zIndex:20,maxHeight:250,overflowY:'auto'}}>
                             {opts.map(w=><div key={w.id} style={{padding:'10px 14px',fontSize:14,cursor:'pointer',borderBottom:`1px solid ${C.borderLight}`}} onMouseDown={()=>{setAddItemForm({...addItemForm,workoutId:w.id,workoutSearch:w.name,m_mileage:w.mileage||'',m_time:w.time||'',m_distance:w.distance||'',m_sets:w.sets||'',m_reps:w.reps||'',m_weight:w.weight||'',m_effort:w.effort||''});setFocusField('');}}><div style={{display:'flex',justifyContent:'space-between'}}><span>{w.name}</span><span style={{fontSize:12,color:C.textMuted}}>{[w.type,((w.exercises||[]).length>0?`${(w.exercises||[]).length} ex`:''),exTotals(w.exercises)].filter(Boolean).join(' - ')}</span></div>{w.description&&<div style={{fontSize:11,color:C.textMuted,marginTop:2}}>{w.description}</div>}</div>)}
                           </div>);})()}
@@ -6104,28 +6129,32 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
                       <button style={{...S.btn,...S.btnSecondary,fontSize:13,padding:'10px 20px',borderRadius:8}} onClick={()=>setShowAddItem(false)}>Cancel</button>
                     </div>
                   </div>
-                )}
+                  );
+                })()}
                 
-                {showAddItem && showCreateNew && (
+                {showAddItem && showCreateNew && (()=>{
+                  const allCats = categories.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+                  const allTypesSorted = [...new Set(library.map(l=>l.type||'').filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+                  return (
                   <div style={{padding:16,borderRadius:10,border:`2px solid ${C.accent}33`,background:C.bg,marginTop:12}}>
                     <div style={{fontSize:14,fontWeight:600,color:C.accent,marginBottom:12}}>Create New Workout</div>
                     <div style={{display:'flex',flexDirection:'column',gap:10,marginBottom:12}}>
                       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-                        <div style={{position:'relative'}}>
+                        <div>
                           <label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Category</label>
-                          <input style={{...S.input,padding:'10px 12px',fontSize:14}} placeholder="e.g. Conditioning" value={addItemForm.newCat||''} onChange={e=>setAddItemForm({...addItemForm,newCat:e.target.value})} onFocus={()=>handleFocus('newCat')} onBlur={handleBlur} />
-                          {focusField==='newCat'&&(()=>{const opts=categories.filter(c=>!addItemForm.newCat||c.name.toLowerCase().includes((addItemForm.newCat||'').toLowerCase()));return opts.length>0&&(
-                            <div style={{position:'absolute',top:'100%',left:0,right:0,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,0.1)',zIndex:20,maxHeight:200,overflowY:'auto'}}>
-                              {opts.map(c=><div key={c.id} style={{padding:'10px 14px',fontSize:14,cursor:'pointer',borderBottom:`1px solid ${C.borderLight}`}} onMouseDown={()=>{setAddItemForm({...addItemForm,newCat:c.name});setFocusField('');}}>{c.name}</div>)}
-                            </div>);})()}
+                          <select style={{...S.select,width:'100%',padding:'10px 12px',fontSize:14}} value={addItemForm.newCat||''} onChange={e=>setAddItemForm({...addItemForm,newCat:e.target.value})}>
+                            <option value="">Select category…</option>
+                            {allCats.map(c=><option key={c.id} value={c.name}>{c.name}</option>)}
+                          </select>
                         </div>
-                        <div style={{position:'relative'}}>
+                        <div>
                           <label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Type</label>
-                          <input style={{...S.input,padding:'10px 12px',fontSize:14}} placeholder="e.g. Speed" value={addItemForm.newType||''} onChange={e=>setAddItemForm({...addItemForm,newType:e.target.value})} onFocus={()=>handleFocus('newType')} onBlur={handleBlur} />
-                          {focusField==='newType'&&(()=>{const opts=[...new Set(library.map(l=>l.type||'').filter(Boolean))].sort().filter(t=>!addItemForm.newType||t.toLowerCase().includes((addItemForm.newType||'').toLowerCase()));return opts.length>0&&(
-                            <div style={{position:'absolute',top:'100%',left:0,right:0,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,0.1)',zIndex:20,maxHeight:200,overflowY:'auto'}}>
-                              {opts.map(t=><div key={t} style={{padding:'10px 14px',fontSize:14,cursor:'pointer',borderBottom:`1px solid ${C.borderLight}`}} onMouseDown={()=>{setAddItemForm({...addItemForm,newType:t});setFocusField('');}}>{t}</div>)}
-                            </div>);})()}
+                          <select style={{...S.select,width:'100%',padding:'10px 12px',fontSize:14}} value={addItemForm.newType||''} onChange={e=>{const v=e.target.value;if(v==='__new'){const nv=window.prompt('New type name:','');if(nv&&nv.trim())setAddItemForm({...addItemForm,newType:nv.trim()});return;}setAddItemForm({...addItemForm,newType:v});}}>
+                            <option value="">Select type…</option>
+                            {allTypesSorted.map(t=><option key={t} value={t}>{t}</option>)}
+                            {addItemForm.newType && !allTypesSorted.includes(addItemForm.newType) && <option value={addItemForm.newType}>{addItemForm.newType}</option>}
+                            <option value="__new">+ New type…</option>
+                          </select>
                         </div>
                       </div>
                       <div>
@@ -6169,7 +6198,8 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
                       <button style={{...S.btn,...S.btnSecondary,fontSize:13,padding:'10px 20px',borderRadius:8}} onClick={()=>setShowCreateNew(false)}>Back</button>
                     </div>
                   </div>
-                )}
+                  );
+                })()}
                 
                 {!showAddItem && (
                   <div style={{display:'flex',gap:8,marginTop:12}}>
@@ -6202,13 +6232,21 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
         filteredLib.forEach(l=>{const cat=l.category||(l.categories||[])[0]||'Uncategorized';if(!grouped[cat])grouped[cat]={};const tp=l.type||'General';if(!grouped[cat][tp])grouped[cat][tp]=[];grouped[cat][tp].push(l);});
         return (<div>
         <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
-          <input style={{...S.input,maxWidth:180}} placeholder="Search..." value={libSearch} onChange={e=>setLibSearch(e.target.value)} />
+          <input style={{...S.input,maxWidth:220}} placeholder="Search name, type, mileage, time…" value={libSearch} onChange={e=>setLibSearch(e.target.value)} />
           <select style={S.select} value={libCatFilter} onChange={e=>{setLibCatFilter(e.target.value);setLibTypeFilter('');}}>
-            <option value="">All</option>{categories.map(c=><option key={c.id} value={c.name}>{c.name}</option>)}
+            <option value="">All categories</option>{categories.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(c=><option key={c.id} value={c.name}>{c.name}</option>)}
           </select>
           {typesForFilter.length>0&&<select style={S.select} value={libTypeFilter} onChange={e=>setLibTypeFilter(e.target.value)}>
-            <option value="">All Types</option>{typesForFilter.map(t=><option key={t} value={t}>{t}</option>)}
+            <option value="">All types</option>{typesForFilter.map(t=><option key={t} value={t}>{t}</option>)}
           </select>}
+          <select style={S.select} value={libSort} onChange={e=>setLibSort(e.target.value)} title="Sort workouts">
+            <option value="name">Name A→Z</option>
+            <option value="type">Type A→Z</option>
+            <option value="mileage">Mileage ↓</option>
+            <option value="time">Time ↓</option>
+            <option value="catType">Category then Type</option>
+          </select>
+          {(libSearch||libCatFilter||libTypeFilter)&&<button style={{...S.btn,fontSize:11,padding:'4px 10px',background:'transparent',color:C.danger,border:`1px solid ${C.danger}`}} onClick={()=>{setLibSearch('');setLibCatFilter('');setLibTypeFilter('');}}>Clear</button>}
           <div style={{marginLeft:'auto',display:'flex',gap:6}}>
             <button style={{...S.btn,...S.btnSecondary}} onClick={()=>setShowImportLib(true)}>Import</button>
             <button style={{...S.btn,...S.btnPrimary}} onClick={startAddLib}>+ Add</button>
@@ -6282,23 +6320,27 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
         ))}
         <Modal open={showAddLib} onClose={()=>{setShowAddLib(false);setEditLibId(null);}} width={650}>
           <h2 style={S.h2}>{editLibId?'Edit':'Add'} Workout</h2>
+          {(()=>{
+            const allCats = categories.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+            const allTypesSorted = [...new Set(library.map(l=>l.type||'').filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+            return (
           <div style={{display:'flex',flexDirection:'column',gap:12,marginTop:16}}>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
-              <div style={{position:'relative'}}>
+              <div>
                 <label style={{fontSize:12,color:C.textSecondary}}>Category</label>
-                <input style={S.input} placeholder="e.g. Conditioning" value={libForm.category} onChange={e=>setLibForm({...libForm,category:e.target.value})} onFocus={()=>handleFocus('libCat')} onBlur={handleBlur} />
-                {focusField==='libCat'&&(()=>{const opts=categories.filter(c=>!libForm.category||c.name.toLowerCase().includes(libForm.category.toLowerCase()));return opts.length>0&&(
-                  <div style={{position:'absolute',top:'100%',left:0,right:0,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,0.1)',zIndex:20,maxHeight:200,overflowY:'auto'}}>
-                    {opts.map(c=><div key={c.id} style={{padding:'10px 14px',fontSize:13,cursor:'pointer',borderBottom:`1px solid ${C.borderLight}`}} onMouseDown={()=>{setLibForm({...libForm,category:c.name});setFocusField('');}}>{c.name}</div>)}
-                  </div>);})()}
+                <select style={{...S.select,width:'100%'}} value={libForm.category||''} onChange={e=>setLibForm({...libForm,category:e.target.value})}>
+                  <option value="">Select category…</option>
+                  {allCats.map(c=><option key={c.id} value={c.name}>{c.name}</option>)}
+                </select>
               </div>
-              <div style={{position:'relative'}}>
+              <div>
                 <label style={{fontSize:12,color:C.textSecondary}}>Type</label>
-                <input style={S.input} placeholder="e.g. Speed, Core" value={libForm.type} onChange={e=>setLibForm({...libForm,type:e.target.value})} onFocus={()=>handleFocus('libType')} onBlur={handleBlur} />
-                {focusField==='libType'&&(()=>{const opts=[...new Set(library.map(l=>l.type||'').filter(Boolean))].sort().filter(t=>!libForm.type||t.toLowerCase().includes(libForm.type.toLowerCase()));return opts.length>0&&(
-                  <div style={{position:'absolute',top:'100%',left:0,right:0,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,0.1)',zIndex:20,maxHeight:200,overflowY:'auto'}}>
-                    {opts.map(t=><div key={t} style={{padding:'10px 14px',fontSize:13,cursor:'pointer',borderBottom:`1px solid ${C.borderLight}`}} onMouseDown={()=>{setLibForm({...libForm,type:t});setFocusField('');}}>{t}</div>)}
-                  </div>);})()}
+                <select style={{...S.select,width:'100%'}} value={libForm.type||''} onChange={e=>{const v=e.target.value;if(v==='__new'){const nv=window.prompt('New type name:','');if(nv&&nv.trim())setLibForm({...libForm,type:nv.trim()});return;}setLibForm({...libForm,type:v});}}>
+                  <option value="">Select type…</option>
+                  {allTypesSorted.map(t=><option key={t} value={t}>{t}</option>)}
+                  {libForm.type && !allTypesSorted.includes(libForm.type) && <option value={libForm.type}>{libForm.type}</option>}
+                  <option value="__new">+ New type…</option>
+                </select>
               </div>
               <div style={{position:'relative'}}>
                 <label style={{fontSize:12,color:C.textSecondary}}>Workout Name</label>
@@ -6334,6 +6376,7 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
             <label style={{display:'flex',alignItems:'center',gap:8,fontSize:13,cursor:'pointer'}}><input type="checkbox" checked={libForm.isDefault} onChange={e=>setLibForm({...libForm,isDefault:e.target.checked})} /> Default workout</label>
             <button style={{...S.btn,...S.btnPrimary}} onClick={saveLib}>{editLibId?'Save':'Add to Library'}</button>
           </div>
+          );})()}
         </Modal>
         <Modal open={showImportLib} onClose={()=>setShowImportLib(false)} width={550}>
           <h2 style={S.h2}>Import Library</h2>

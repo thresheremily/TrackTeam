@@ -1231,7 +1231,7 @@ function App() {
     dailyAttendance: () => <DailyAttendancePage data={data} save={save} nav={nav} activeAthletes={activeAthletes} />,
     practicePlans: () => <PracticePlansPage data={data} save={save} nav={nav} season={season} initialWeekId={pageParams.weekId} />,
     dailyPractice: () => <DailyPracticeView data={data} nav={nav} date={pageParams.date} />,
-    meets: () => <MeetsPage data={data} save={save} nav={nav} events={events} />,
+    meets: () => <MeetsPage data={data} save={save} nav={nav} events={events} season={season} />,
     seasonResults: () => <SeasonResultsPage data={data} save={save} nav={nav} events={events} getAthletePR={getAthletePR} season={season} team={team} />,
     meetSub: () => <MeetSubPage data={data} save={save} nav={nav} meetId={pageParams.meetId} events={events} getAthletePR={getAthletePR} checkQualifying={checkQualifying} team={team} />,
     athletes: () => <AthletesPage data={data} save={save} nav={nav} />,
@@ -1930,11 +1930,13 @@ function MeetFormModal({ editId, initial, meetTypes, knownTags, eventOrderTempla
     </Modal>
   );
 }
-function MeetsPage({ data, save, nav, events }) {
+function MeetsPage({ data, save, nav, events, season }) {
   const [search, setSearch] = useState('');
   const [showAdd, setShowAdd] = useState(false);
   const [editMeet, setEditMeet] = useState(null);
   const [openCount, setOpenCount] = useState(0);
+  const [meetsTab, setMeetsTab] = useState(season ? 'current' : 'all');
+  const [historySeasonId, setHistorySeasonId] = useState('');
   const startEdit = (m) => {
     setEditMeet(m);
     setOpenCount(c=>c+1);
@@ -1953,7 +1955,19 @@ function MeetsPage({ data, save, nav, events }) {
     if(sortCol===col) setSortDir(d=>d==='asc'?'desc':'asc');
     else { setSortCol(col); setSortDir('asc'); }
   };
+  const meetDate = (m) => padDate(m.startDate || m.date || '');
+  const meetInSeason = (m, s) => s && isInSeason(meetDate(m), s);
+  const seasonsList = [...(data.seasons||[])].sort((a,b)=>(b.startDate||'').localeCompare(a.startDate||''));
   const filtered = data.meets.filter(m => {
+    if(meetsTab === 'current') {
+      if(season && !meetInSeason(m, season)) return false;
+    } else if(meetsTab === 'history') {
+      if(season && meetInSeason(m, season)) return false;
+      if(historySeasonId) {
+        const s = seasonsList.find(x=>x.id===historySeasonId);
+        if(!s || !meetInSeason(m, s)) return false;
+      }
+    }
     if(search) {
       const q = search.toLowerCase();
       if(!m.name.toLowerCase().includes(q) && !(m.venue||'').toLowerCase().includes(q) && !(m.city||'').toLowerCase().includes(q) && !(m.state||'').toLowerCase().includes(q)) return false;
@@ -1993,9 +2007,23 @@ function MeetsPage({ data, save, nav, events }) {
           <button style={{...S.btn,...S.btnSecondary}} onClick={()=>setShowImport(true)}>Import</button>
           <button style={{...S.btn,...S.btnPrimary}} onClick={()=>{setEditMeet(null);setOpenCount(c=>c+1);setShowAdd(true);}}>+ New Meet</button>
       </div>
+
+      {(season || seasonsList.length > 0) && (
+        <div style={{display:'flex',gap:0,marginBottom:12,borderBottom:`2px solid ${C.border}`,flexWrap:'wrap'}}>
+          {season && <button style={{padding:'8px 16px',fontSize:12,fontWeight:700,border:'none',borderBottom:meetsTab==='current'?`3px solid ${C.accent}`:'3px solid transparent',background:'none',color:meetsTab==='current'?C.accent:C.textMuted,cursor:'pointer',textTransform:'uppercase',letterSpacing:'0.04em'}} onClick={()=>setMeetsTab('current')}>{season.name}</button>}
+          <button style={{padding:'8px 16px',fontSize:12,fontWeight:700,border:'none',borderBottom:meetsTab==='history'?`3px solid ${C.accent}`:'3px solid transparent',background:'none',color:meetsTab==='history'?C.accent:C.textMuted,cursor:'pointer',textTransform:'uppercase',letterSpacing:'0.04em'}} onClick={()=>setMeetsTab('history')}>History</button>
+          <button style={{padding:'8px 16px',fontSize:12,fontWeight:700,border:'none',borderBottom:meetsTab==='all'?`3px solid ${C.accent}`:'3px solid transparent',background:'none',color:meetsTab==='all'?C.accent:C.textMuted,cursor:'pointer',textTransform:'uppercase',letterSpacing:'0.04em'}} onClick={()=>setMeetsTab('all')}>All Meets</button>
+        </div>
+      )}
       
       <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
         <input style={{...S.input,maxWidth:200}} placeholder="Search..." value={search} onChange={e=>setSearch(e.target.value)} />
+        {meetsTab==='history' && seasonsList.length>0 && (
+          <select style={S.select} value={historySeasonId} onChange={e=>setHistorySeasonId(e.target.value)}>
+            <option value="">All past seasons</option>
+            {seasonsList.filter(s=>!season||s.id!==season.id).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        )}
         <select style={S.select} value={filterTrack} onChange={e=>setFilterTrack(e.target.value)}>
           <option value="">All Track Types</option><option value="Indoor">Indoor</option><option value="Outdoor">Outdoor</option>
         </select>
@@ -2007,7 +2035,8 @@ function MeetsPage({ data, save, nav, events }) {
           <option value="">All States</option>
           {allStates.map(s=><option key={s} value={s}>{s}</option>)}
         </select>}
-        {(search||filterTrack||filterType||filterState)&&<button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'4px 10px'}} onClick={()=>{setSearch('');setFilterTrack('');setFilterType('');setFilterState('');}}>Clear</button>}
+        {(search||filterTrack||filterType||filterState||historySeasonId)&&<button style={{...S.btn,...S.btnSecondary,fontSize:11,padding:'4px 10px'}} onClick={()=>{setSearch('');setFilterTrack('');setFilterType('');setFilterState('');setHistorySeasonId('');}}>Clear</button>}
+        <span style={{marginLeft:'auto',fontSize:11,color:C.textMuted}}>{filtered.length} meet{filtered.length===1?'':'s'}</span>
       </div>
       
       <div style={{...S.card, overflowX:'auto'}}>

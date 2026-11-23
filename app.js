@@ -5543,7 +5543,7 @@ function ExerciseTable({ exercises, onChange, readOnly, library, hiddenTypes }) 
   ) : null;
   const exTypesArr = (ex) => (ex && ex.type ? String(ex.type).split(',').map(s=>s.trim()).filter(Boolean) : []);
   const setRowTypes = (i, types) => { const c=[...exercises]; c[i]={...c[i], type: types.join(', ')}; onChange(c); };
-  const TypePicker = ({ i, row, compact }) => {
+  const renderTypePicker = (i, row, compact) => {
     const sel = exTypesArr(row);
     const open = typeOpenIdx === i;
     const toggle = (t) => { const next = sel.includes(t) ? sel.filter(x=>x!==t) : [...sel, t]; setRowTypes(i, next); };
@@ -5631,7 +5631,7 @@ function ExerciseTable({ exercises, onChange, readOnly, library, hiddenTypes }) 
                   <div key={col.key}>
                     <label style={{fontSize:10,fontWeight:600,color:C.textMuted,textTransform:'uppercase',display:'block',marginBottom:2}}>{col.label}</label>
                     {readOnly ? <div style={{fontSize:13,color:row[col.key]?C.text:C.textMuted,minHeight:20}}>{row[col.key]||'-'}</div> :
-                      col.key==='type' ? <TypePicker i={i} row={row} compact /> :
+                      col.key===`type` ? renderTypePicker(i, row, true) :
                       <input style={{...S.input,padding:'6px 8px',fontSize:13}} value={row[col.key]||''} placeholder={col.placeholder}
                         list={col.key==='effort'?effortListId:undefined}
                         onChange={e=>{const c=[...exercises];c[i]={...c[i],[col.key]:e.target.value};onChange(c);}} />}
@@ -5668,7 +5668,7 @@ function ExerciseTable({ exercises, onChange, readOnly, library, hiddenTypes }) 
               {EXERCISE_COLUMNS.map(col=>(
                 <td key={col.key} style={{...S.td,padding:'3px 4px',position:(col.key==='exercise'||col.key==='type')?'relative':undefined,overflow:col.key==='type'?'visible':undefined}}>
                   {readOnly ? <span style={{fontSize:13,color:row[col.key]?C.text:C.textMuted}}>{row[col.key]||'-'}</span> :
-                  col.key==='type' ? <TypePicker i={i} row={row} compact /> :
+                  col.key===`type` ? renderTypePicker(i, row, true) :
                   <input style={{...S.input,padding:'6px 8px',fontSize:13,border:`1px solid ${C.borderLight}`,background:C.surface}} value={row[col.key]||''} placeholder={col.placeholder}
                     list={col.key==='effort'?effortListId:undefined}
                     onChange={e=>{const c=[...exercises];c[i]={...c[i],[col.key]:e.target.value};onChange(c);}}

@@ -749,15 +749,40 @@ const entryTotalMiles = (e) => {
   (e.exercises||[]).forEach(ex => { t += itemMiles(ex) * outer; });
   return t;
 };
+const parseExTimeToSec = (s) => {
+  if(!s) return 0;
+  const str = String(s).trim();
+  if(!str) return 0;
+  const m1 = /^(\d+):(\d+(?:\.\d+)?)$/.exec(str);
+  if(m1) return parseInt(m1[1])*60 + parseFloat(m1[2]);
+  const n = parseFloat(str);
+  return isNaN(n) ? 0 : n*60; // bare number treated as minutes
+};
+const fmtDurationSec = (totalSec) => {
+  if(!totalSec||totalSec<=0) return '';
+  const s = Math.round(totalSec);
+  const h = Math.floor(s/3600);
+  const m = Math.floor((s%3600)/60);
+  const sec = s%60;
+  if(h>0) return `${h}h ${m}m${sec?` ${sec}s`:''}`;
+  if(m>0) return sec>0 ? `${m}:${String(sec).padStart(2,'0')}` : `${m} min`;
+  return `${sec}s`;
+};
 const exTotals = (exercises, outerSets) => {
   const outer = Math.max(1, parseInt(outerSets)||1);
-  let mi=0, m=0;
-  (exercises||[]).forEach(ex=>{ const mult = itemMult(ex); mi+=(parseFloat(ex.mileage)||0)*mult; m+=(parseFloat(ex.distance)||0)*mult; });
-  mi *= outer; m *= outer;
+  let mi=0, m=0, timeSec=0;
+  (exercises||[]).forEach(ex=>{
+    const mult = itemMult(ex);
+    mi+=(parseFloat(ex.mileage)||0)*mult;
+    m+=(parseFloat(ex.distance)||0)*mult;
+    timeSec+=parseExTimeToSec(ex.time)*mult;
+  });
+  mi *= outer; m *= outer; timeSec *= outer;
   const parts=[];
   if(outer>1) parts.push(`×${outer} sets`);
   if(mi>0) parts.push(`${mi.toFixed(1)} mi`);
   if(m>0) parts.push(`${Math.round(m)}m`);
+  if(timeSec>0) parts.push(fmtDurationSec(timeSec));
   return parts.join(' · ');
 };
 const makeStyles = (C) => ({

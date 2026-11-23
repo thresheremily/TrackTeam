@@ -749,15 +749,40 @@ const entryTotalMiles = (e) => {
   (e.exercises||[]).forEach(ex => { t += itemMiles(ex) * outer; });
   return t;
 };
+const parseExTimeToSec = (s) => {
+  if(!s) return 0;
+  const str = String(s).trim();
+  if(!str) return 0;
+  const m1 = /^(\d+):(\d+(?:\.\d+)?)$/.exec(str);
+  if(m1) return parseInt(m1[1])*60 + parseFloat(m1[2]);
+  const n = parseFloat(str);
+  return isNaN(n) ? 0 : n*60; // bare number treated as minutes
+};
+const fmtDurationSec = (totalSec) => {
+  if(!totalSec||totalSec<=0) return '';
+  const s = Math.round(totalSec);
+  const h = Math.floor(s/3600);
+  const m = Math.floor((s%3600)/60);
+  const sec = s%60;
+  if(h>0) return `${h}h ${m}m${sec?` ${sec}s`:''}`;
+  if(m>0) return sec>0 ? `${m}:${String(sec).padStart(2,'0')}` : `${m} min`;
+  return `${sec}s`;
+};
 const exTotals = (exercises, outerSets) => {
   const outer = Math.max(1, parseInt(outerSets)||1);
-  let mi=0, m=0;
-  (exercises||[]).forEach(ex=>{ const mult = itemMult(ex); mi+=(parseFloat(ex.mileage)||0)*mult; m+=(parseFloat(ex.distance)||0)*mult; });
-  mi *= outer; m *= outer;
+  let mi=0, m=0, timeSec=0;
+  (exercises||[]).forEach(ex=>{
+    const mult = itemMult(ex);
+    mi+=(parseFloat(ex.mileage)||0)*mult;
+    m+=(parseFloat(ex.distance)||0)*mult;
+    timeSec+=parseExTimeToSec(ex.time)*mult;
+  });
+  mi *= outer; m *= outer; timeSec *= outer;
   const parts=[];
   if(outer>1) parts.push(`×${outer} sets`);
   if(mi>0) parts.push(`${mi.toFixed(1)} mi`);
   if(m>0) parts.push(`${Math.round(m)}m`);
+  if(timeSec>0) parts.push(fmtDurationSec(timeSec));
   return parts.join(' · ');
 };
 const makeStyles = (C) => ({
@@ -5460,11 +5485,19 @@ function ExerciseTable({ exercises, onChange, readOnly, library, hiddenTypes }) 
   const [dragRow, setDragRow] = useState(null);
   const [dragOverRow, setDragOverRow] = useState(null);
   const [isNarrow, setIsNarrow] = useState(typeof window !== 'undefined' && window.innerWidth <= 720);
+  const [typeOpenIdx, setTypeOpenIdx] = useState(null);
+  const typePickerRef = useRef(null);
   useEffect(() => {
     const on = () => setIsNarrow(window.innerWidth <= 720);
     window.addEventListener('resize', on);
     return () => window.removeEventListener('resize', on);
   }, []);
+  useEffect(() => {
+    if(typeOpenIdx === null) return;
+    const onClick = (e) => { if(typePickerRef.current && !typePickerRef.current.contains(e.target)) setTypeOpenIdx(null); };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, [typeOpenIdx]);
   const blurRef = useRef(null);
   const onFocus = (f) => { clearTimeout(blurRef.current); setFocusCell(f); };
   const onBlur = () => { blurRef.current = setTimeout(()=>setFocusCell(''), 200); };
@@ -5488,10 +5521,10 @@ function ExerciseTable({ exercises, onChange, readOnly, library, hiddenTypes }) 
     const seen = new Set();
     EXERCISE_TYPE_PRESETS.forEach(t => { if(!hidden.has(t.trim().toLowerCase())) seen.add(t); });
     (library||[]).forEach(w => (w.exercises||[]).forEach(ex => {
-      if(ex.type) {
-        const t = ex.type.trim();
+      (ex.type||'').split(',').forEach(raw => {
+        const t = raw.trim();
         if(t && !hidden.has(t.toLowerCase())) seen.add(t);
-      }
+      });
     }));
     return Array.from(seen).filter(Boolean).sort((a,b)=>a.localeCompare(b));
   }, [library, hiddenTypes]);
@@ -5508,6 +5541,47 @@ function ExerciseTable({ exercises, onChange, readOnly, library, hiddenTypes }) 
       <datalist id={effortListId}>{EFFORT_PRESETS.map(e=><option key={e} value={e} />)}</datalist>
     </>
   ) : null;
+  const exTypesArr = (ex) => (ex && ex.type ? String(ex.type).split(',').map(s=>s.trim()).filter(Boolean) : []);
+  const setRowTypes = (i, types) => { const c=[...exercises]; c[i]={...c[i], type: types.join(', ')}; onChange(c); };
+  const TypePicker = ({ i, row, compact }) => {
+    const sel = exTypesArr(row);
+    const open = typeOpenIdx === i;
+    const toggle = (t) => { const next = sel.includes(t) ? sel.filter(x=>x!==t) : [...sel, t]; setRowTypes(i, next); };
+    const addCustom = () => { const nv = window.prompt('Add a custom type:', ''); if(nv && nv.trim() && !sel.includes(nv.trim())) setRowTypes(i, [...sel, nv.trim()]); };
+    return (
+      <div ref={open?typePickerRef:null} style={{position:'relative'}}>
+        <button type="button" onClick={()=>setTypeOpenIdx(open?null:i)} style={{...S.input,padding:compact?'6px 8px':'8px 10px',fontSize:13,border:`1px solid ${C.borderLight}`,background:C.surface,textAlign:'left',cursor:'pointer',display:'flex',alignItems:'center',gap:4,width:'100%'}}>
+          <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:sel.length?C.text:C.textMuted}}>{sel.length?sel.join(', '):'Type…'}</span>
+          {sel.length>1 && <span style={{fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:8,background:C.accentMuted,color:C.accent}}>{sel.length}</span>}
+          <span style={{color:C.textMuted,fontSize:10}}>{open?'▲':'▼'}</span>
+        </button>
+        {open && (
+          <div style={{position:'absolute',top:'calc(100% + 4px)',left:0,minWidth:180,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,boxShadow:'0 4px 16px rgba(0,0,0,0.12)',zIndex:30,maxHeight:260,overflowY:'auto'}}>
+            {typeOptions.length===0 && <div style={{padding:'10px 12px',fontSize:11,color:C.textMuted,fontStyle:'italic'}}>No types defined yet.</div>}
+            {typeOptions.map(t => {
+              const on = sel.includes(t);
+              return (
+                <label key={t} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 12px',cursor:'pointer',borderBottom:`1px solid ${C.borderLight}`,background:on?C.accentMuted:'transparent',fontSize:13}}>
+                  <input type="checkbox" checked={on} onChange={()=>toggle(t)} />
+                  <span style={{color:C.text,fontWeight:on?600:500}}>{t}</span>
+                </label>
+              );
+            })}
+            {sel.filter(t=>!typeOptions.includes(t)).map(t => (
+              <label key={'c_'+t} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 12px',cursor:'pointer',borderBottom:`1px solid ${C.borderLight}`,background:C.accentMuted,fontSize:13}}>
+                <input type="checkbox" checked onChange={()=>toggle(t)} />
+                <span style={{color:C.text,fontWeight:600,fontStyle:'italic'}}>{t} <span style={{color:C.textMuted,fontWeight:400,fontSize:10}}>(custom)</span></span>
+              </label>
+            ))}
+            <div style={{display:'flex',justifyContent:'space-between',gap:6,padding:'6px 10px',borderTop:`1px solid ${C.borderLight}`}}>
+              <button type="button" style={{...S.btn,fontSize:10,padding:'3px 10px',background:'transparent',color:C.accent,border:`1px solid ${C.accent}`}} onClick={addCustom}>+ Custom…</button>
+              {sel.length>0 && <button type="button" style={{...S.btn,fontSize:10,padding:'3px 10px',background:'transparent',color:C.danger,border:`1px solid ${C.danger}`}} onClick={()=>setRowTypes(i,[])}>Clear</button>}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
   if(isNarrow) {
     return (
       <div style={{marginTop:4,display:'flex',flexDirection:'column',gap:8}}>
@@ -5557,8 +5631,9 @@ function ExerciseTable({ exercises, onChange, readOnly, library, hiddenTypes }) 
                   <div key={col.key}>
                     <label style={{fontSize:10,fontWeight:600,color:C.textMuted,textTransform:'uppercase',display:'block',marginBottom:2}}>{col.label}</label>
                     {readOnly ? <div style={{fontSize:13,color:row[col.key]?C.text:C.textMuted,minHeight:20}}>{row[col.key]||'-'}</div> :
+                      col.key==='type' ? <TypePicker i={i} row={row} compact /> :
                       <input style={{...S.input,padding:'6px 8px',fontSize:13}} value={row[col.key]||''} placeholder={col.placeholder}
-                        list={col.key==='type'?typeListId:col.key==='effort'?effortListId:undefined}
+                        list={col.key==='effort'?effortListId:undefined}
                         onChange={e=>{const c=[...exercises];c[i]={...c[i],[col.key]:e.target.value};onChange(c);}} />}
                   </div>
                 ))}
@@ -5591,10 +5666,11 @@ function ExerciseTable({ exercises, onChange, readOnly, library, hiddenTypes }) 
               {!readOnly && <td style={{...S.td,padding:'3px 2px',textAlign:'center',cursor:'grab',color:C.textMuted,fontSize:14,userSelect:'none'}}>⋮⋮</td>}
               <td style={{...S.td,textAlign:'center',padding:'4px 6px',fontSize:13,fontWeight:600,color:C.textMuted}}>{i+1}</td>
               {EXERCISE_COLUMNS.map(col=>(
-                <td key={col.key} style={{...S.td,padding:'3px 4px',position:col.key==='exercise'?'relative':undefined}}>
+                <td key={col.key} style={{...S.td,padding:'3px 4px',position:(col.key==='exercise'||col.key==='type')?'relative':undefined,overflow:col.key==='type'?'visible':undefined}}>
                   {readOnly ? <span style={{fontSize:13,color:row[col.key]?C.text:C.textMuted}}>{row[col.key]||'-'}</span> :
+                  col.key==='type' ? <TypePicker i={i} row={row} compact /> :
                   <input style={{...S.input,padding:'6px 8px',fontSize:13,border:`1px solid ${C.borderLight}`,background:C.surface}} value={row[col.key]||''} placeholder={col.placeholder}
-                    list={col.key==='type'?typeListId:col.key==='effort'?effortListId:undefined}
+                    list={col.key==='effort'?effortListId:undefined}
                     onChange={e=>{const c=[...exercises];c[i]={...c[i],[col.key]:e.target.value};onChange(c);}}
                     onFocus={col.key==='exercise'?()=>onFocus(`ex-${i}`):undefined}
                     onBlur={col.key==='exercise'?onBlur:undefined}
@@ -5698,12 +5774,20 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
   const [delCatId, setDelCatId] = useState(null);
   const [libCatPickerOpen, setLibCatPickerOpen] = useState(false);
   const libCatPickerRef = useRef(null);
+  const [newCatPickerOpen, setNewCatPickerOpen] = useState(false);
+  const newCatPickerRef = useRef(null);
   useEffect(() => {
     if(!libCatPickerOpen) return;
     const onClick = (e) => { if(libCatPickerRef.current && !libCatPickerRef.current.contains(e.target)) setLibCatPickerOpen(false); };
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
   }, [libCatPickerOpen]);
+  useEffect(() => {
+    if(!newCatPickerOpen) return;
+    const onClick = (e) => { if(newCatPickerRef.current && !newCatPickerRef.current.contains(e.target)) setNewCatPickerOpen(false); };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, [newCatPickerOpen]);
   const groups = data.workoutGroups || [];
   const library = data.workoutLibrary || [];
   const categories = data.workoutCategories || [];
@@ -6291,11 +6375,39 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
                     <div style={{display:'flex',flexDirection:'column',gap:10,marginBottom:12}}>
                       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
                         <div>
-                          <label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Category</label>
-                          <select style={{...S.select,width:'100%',padding:'10px 12px',fontSize:14}} value={addItemForm.newCat||''} onChange={e=>setAddItemForm({...addItemForm,newCat:e.target.value})}>
-                            <option value="">Select category…</option>
-                            {allCats.map(c=><option key={c.id} value={c.name}>{c.name}</option>)}
-                          </select>
+                          <label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Categories <span style={{color:C.textMuted,fontWeight:400}}>(pick one or more)</span></label>
+                          <div ref={newCatPickerRef} style={{position:'relative'}}>
+                            <button type="button" onClick={()=>setNewCatPickerOpen(o=>!o)} style={{...S.input,width:'100%',textAlign:'left',cursor:'pointer',display:'flex',alignItems:'center',gap:6,background:C.surface,minHeight:42,padding:'10px 12px',fontSize:14}}>
+                              <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                                {(addItemForm.newCats||[]).length===0 ? <span style={{color:C.textMuted}}>Select categories…</span> : (addItemForm.newCats||[]).join(', ')}
+                              </span>
+                              {(addItemForm.newCats||[]).length>0 && <span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:10,background:C.accentMuted,color:C.accent}}>{(addItemForm.newCats||[]).length}</span>}
+                              <span style={{color:C.textMuted,fontSize:11,marginLeft:4}}>{newCatPickerOpen?'▲':'▼'}</span>
+                            </button>
+                            {newCatPickerOpen && (
+                              <div style={{position:'absolute',top:'calc(100% + 4px)',left:0,right:0,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,boxShadow:'0 4px 16px rgba(0,0,0,0.12)',zIndex:30,maxHeight:260,overflowY:'auto'}}>
+                                {allCats.length===0 ? (
+                                  <div style={{padding:'10px 12px',fontSize:11,color:C.textMuted,fontStyle:'italic'}}>No categories defined. Add them in Settings → Workout Categories.</div>
+                                ) : (<>
+                                  {allCats.map(c=>{
+                                    const on=(addItemForm.newCats||[]).includes(c.name);
+                                    return (
+                                      <label key={c.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',cursor:'pointer',borderBottom:`1px solid ${C.borderLight}`,background:on?C.accentMuted:'transparent'}}>
+                                        <input type="checkbox" checked={on} onChange={()=>{const cur=addItemForm.newCats||[];const next=on?cur.filter(x=>x!==c.name):[...cur,c.name];setAddItemForm({...addItemForm,newCats:next});}} />
+                                        <span style={{width:10,height:10,borderRadius:'50%',background:c.color||C.textMuted,display:'inline-block',flexShrink:0}} />
+                                        <span style={{fontSize:13,fontWeight:on?600:500,color:C.text,flex:1}}>{c.name}</span>
+                                      </label>
+                                    );
+                                  })}
+                                  {(addItemForm.newCats||[]).length>0 && (
+                                    <div style={{padding:'6px 10px',borderTop:`1px solid ${C.borderLight}`,textAlign:'right'}}>
+                                      <button type="button" style={{...S.btn,fontSize:10,padding:'3px 10px',background:'transparent',color:C.danger,border:`1px solid ${C.danger}`}} onClick={()=>setAddItemForm({...addItemForm,newCats:[]})}>Clear</button>
+                                    </div>
+                                  )}
+                                </>)}
+                              </div>
+                            )}
+                          </div>
                         </div>
                         <div>
                           <label style={{fontSize:12,color:C.textSecondary,display:'block',marginBottom:4}}>Type</label>
@@ -6337,12 +6449,13 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
                     <div style={{display:'flex',gap:8}}>
                       <button style={{...S.btn,...S.btnPrimary,fontSize:13,padding:'10px 20px',borderRadius:8}} onClick={()=>{
                         if(!(addItemForm.newName||'').trim()) return;
-                        const cat=addItemForm.newCat||addItemForm.category||defaultCat;
+                        const cats = (addItemForm.newCats && addItemForm.newCats.length) ? addItemForm.newCats : (addItemForm.newCat ? [addItemForm.newCat] : (addItemForm.category ? [addItemForm.category] : [defaultCat]));
+                        const cat = cats[0] || defaultCat;
                         const desc=addItemForm.newDesc||'';
                         const exercises=(addItemForm.newExercises||[]).filter(e=>e.exercise.trim());
                         const measurables={mileage:addItemForm.newMileage||'',time:addItemForm.newTime||'',distance:addItemForm.newDistance||'',sets:addItemForm.newSets||'',reps:addItemForm.newReps||'',weight:addItemForm.newWeight||'',effort:addItemForm.newEffort||''};
                         addDayItem(editingDay.weekId,editingDay.groupId,editingDay.level,editingDay.day,{category:cat,type:addItemForm.newType||'',name:addItemForm.newName,description:desc,exercises,...measurables});
-                        save({...data,workoutLibrary:[...(data.workoutLibrary||[]),{id:uid(),name:addItemForm.newName,category:cat,type:addItemForm.newType||'',description:desc,isDefault:false,exercises,...measurables}],workoutPlans:(data.workoutPlans||[]).map(w=>w.id!==editingDay.weekId?w:{...w,entries:[...(w.entries||[]),{id:uid(),groupId:editingDay.groupId,level:editingDay.level,day:editingDay.day,category:cat,type:addItemForm.newType||'',name:addItemForm.newName,description:desc,exercises,...measurables}]})});
+                        save({...data,workoutLibrary:[...(data.workoutLibrary||[]),{id:uid(),name:addItemForm.newName,categories:cats,type:addItemForm.newType||'',description:desc,isDefault:false,exercises,...measurables}],workoutPlans:(data.workoutPlans||[]).map(w=>w.id!==editingDay.weekId?w:{...w,entries:[...(w.entries||[]),{id:uid(),groupId:editingDay.groupId,level:editingDay.level,day:editingDay.day,category:cat,type:addItemForm.newType||'',name:addItemForm.newName,description:desc,exercises,...measurables}]})});
                         setShowCreateNew(false);setAddItemForm({category:'',type:'',workoutId:'',workoutSearch:''});
                       }}>Add & Save to Library</button>
                       <button style={{...S.btn,...S.btnSecondary,fontSize:13,padding:'10px 20px',borderRadius:8}} onClick={()=>setShowCreateNew(false)}>Back</button>
@@ -6353,7 +6466,7 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
                 
                 {!showAddItem && (
                   <div style={{display:'flex',gap:8,marginTop:12}}>
-                    <button style={{...S.btn,...S.btnPrimary,flex:1,fontSize:14,padding:'12px 20px',borderRadius:8}} onClick={()=>{setAddItemForm({category:'',type:'',workoutId:'',workoutSearch:'',newCat:'',newType:'',newName:'',newDesc:'',newExercises:[emptyRow()],newMileage:'',newTime:'',newDistance:'',newSets:'',newReps:'',newWeight:'',newEffort:''});setShowAddItem(true);setShowCreateNew(false);}}>+ Add Workout</button>
+                    <button style={{...S.btn,...S.btnPrimary,flex:1,fontSize:14,padding:'12px 20px',borderRadius:8}} onClick={()=>{setAddItemForm({category:'',type:'',workoutId:'',workoutSearch:'',newCat:'',newCats:[],newType:'',newName:'',newDesc:'',newExercises:[emptyRow()],newMileage:'',newTime:'',newDistance:'',newSets:'',newReps:'',newWeight:'',newEffort:''});setShowAddItem(true);setShowCreateNew(false);}}>+ Add Workout</button>
                     {library.some(l=>l.isDefault)&&items.length===0&&<button style={{...S.btn,...S.btnSecondary,fontSize:14,padding:'12px 20px',borderRadius:8}} onClick={()=>applyDefaults(editingDay.weekId,editingDay.groupId,editingDay.level,editingDay.day)}>Defaults</button>}
                   </div>
                 )}
@@ -6565,10 +6678,10 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
           <h2 style={S.h2}>Manage Exercise Types</h2>
           {(()=>{
             const hidden = new Set((data.hiddenExerciseTypes||[]).map(t=>t.toLowerCase()));
+            const splitTypes = (s) => (s||'').split(',').map(x=>x.trim()).filter(Boolean);
             const counts = {};
             (library||[]).forEach(w => (w.exercises||[]).forEach(ex => {
-              const t = (ex.type||'').trim();
-              if(t) counts[t] = (counts[t]||0) + 1;
+              splitTypes(ex.type).forEach(t => { counts[t] = (counts[t]||0) + 1; });
             }));
             const rowObjs = [];
             const seen = new Set();
@@ -6583,18 +6696,28 @@ function PracticePlansPage({ data, save, nav, season, initialWeekId }) {
               rowObjs.push({ name:t, count:counts[t]||0, isPreset:false, isHidden:hidden.has(k) });
             });
             rowObjs.sort((a,b)=>a.name.localeCompare(b.name));
+            const mapTypeString = (s, mapFn) => {
+              const parts = splitTypes(s);
+              if(!parts.length) return s||'';
+              const out = [];
+              const seenOut = new Set();
+              parts.forEach(p => { const m = mapFn(p); if(m == null) return; const mk = m.toLowerCase(); if(seenOut.has(mk)) return; seenOut.add(mk); out.push(m); });
+              return out.join(', ');
+            };
             const renameType = (oldName) => {
               const newName = window.prompt(`Rename "${oldName}" to:`, oldName);
               if(!newName || !newName.trim() || newName.trim() === oldName) return;
               const nn = newName.trim();
-              const newLib = (data.workoutLibrary||[]).map(w => ({...w, exercises:(w.exercises||[]).map(ex => (ex.type||'').trim().toLowerCase()===oldName.toLowerCase() ? {...ex, type:nn} : ex)}));
-              const newPlans = (data.workoutPlans||[]).map(w => ({...w, entries:(w.entries||[]).map(e => ({...e, exercises:(e.exercises||[]).map(ex => (ex.type||'').trim().toLowerCase()===oldName.toLowerCase() ? {...ex, type:nn} : ex)}))}));
+              const fn = (p) => p.toLowerCase() === oldName.toLowerCase() ? nn : p;
+              const newLib = (data.workoutLibrary||[]).map(w => ({...w, exercises:(w.exercises||[]).map(ex => ({...ex, type:mapTypeString(ex.type, fn)}))}));
+              const newPlans = (data.workoutPlans||[]).map(w => ({...w, entries:(w.entries||[]).map(e => ({...e, exercises:(e.exercises||[]).map(ex => ({...ex, type:mapTypeString(ex.type, fn)}))}))}));
               save({...data, workoutLibrary:newLib, workoutPlans:newPlans});
             };
             const clearType = (name) => {
-              if(!window.confirm(`Clear "${name}" from ${counts[name]||0} exercise row(s)? (The type field will be emptied; the rows stay.)`)) return;
-              const newLib = (data.workoutLibrary||[]).map(w => ({...w, exercises:(w.exercises||[]).map(ex => (ex.type||'').trim().toLowerCase()===name.toLowerCase() ? {...ex, type:''} : ex)}));
-              const newPlans = (data.workoutPlans||[]).map(w => ({...w, entries:(w.entries||[]).map(e => ({...e, exercises:(e.exercises||[]).map(ex => (ex.type||'').trim().toLowerCase()===name.toLowerCase() ? {...ex, type:''} : ex)}))}));
+              if(!window.confirm(`Remove "${name}" from ${counts[name]||0} exercise row(s)? (Other types on those rows stay.)`)) return;
+              const fn = (p) => p.toLowerCase() === name.toLowerCase() ? null : p;
+              const newLib = (data.workoutLibrary||[]).map(w => ({...w, exercises:(w.exercises||[]).map(ex => ({...ex, type:mapTypeString(ex.type, fn)}))}));
+              const newPlans = (data.workoutPlans||[]).map(w => ({...w, entries:(w.entries||[]).map(e => ({...e, exercises:(e.exercises||[]).map(ex => ({...ex, type:mapTypeString(ex.type, fn)}))}))}));
               save({...data, workoutLibrary:newLib, workoutPlans:newPlans});
             };
             const togglePresetHidden = (name) => {
